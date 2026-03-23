@@ -614,8 +614,8 @@ function Step1({data,setData,onNext}){
 }
 
 // ── Step 2 ─────────────────────────────────────────────────
-function Step2({transcript,setTranscript,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack}){
-  const txtRef=useRef(),xlsTplRef=useRef(),xlsDatRef=useRef();
+function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack}){
+  const txtRef=useRef(),docxTplRef=useRef(),xlsTplRef=useRef(),xlsDatRef=useRef();
   const [drag,setDrag]=useState(false);
   const loadTxt=(file)=>{const r=new FileReader();r.onload=e=>setTranscript(e.target.result);r.readAsText(file,'UTF-8');};
   return(
@@ -638,6 +638,17 @@ function Step2({transcript,setTranscript,xlsxTemplateFile,setXlsxTemplateFile,xl
         <textarea value={transcript} onChange={e=>setTranscript(e.target.value)}
           placeholder="文字起こしテキストをここに貼り付け..." style={{minHeight:120,fontSize:12}}/>
       </div>
+
+      <div className="section-divider" style={{marginTop:16}}>📝 議事録テンプレート（.docx・任意）</div>
+      <div className="notice notice-info">テンプレートをアップロードすると、そのフォーマットに合わせてWordを生成します。未アップロードの場合はデフォルト形式で出力します。</div>
+      <div className="upload-area" onClick={()=>docxTplRef.current.click()}>
+        <input ref={docxTplRef} type="file" accept=".docx" onChange={e=>{if(e.target.files[0])setDocxTemplateFile(e.target.files[0]);}}/>
+        <div className="upload-icon">📝</div>
+        <div style={{fontSize:13,color:'#444'}}>議事録テンプレート（.docx）</div>
+        <div className="upload-hint">xxxx_議事録_yyyymmdd_テンプレート_確定.docx など</div>
+      </div>
+      {docxTemplateFile && <div className="file-chip">📝 Word テンプレート: {docxTemplateFile.name}
+        <button onClick={()=>setDocxTemplateFile(null)}>✕</button></div>}
 
       <div className="section-divider" style={{marginTop:16}}>📊 Excel管理台帳テンプレート（任意）</div>
       <div className="notice notice-info">テンプレートをアップロードすると、そのシート構成・カラム構成に合わせて転記します。</div>
@@ -786,7 +797,7 @@ function Step4({result,setResult,onNext,onBack}){
 }
 
 // ── Step 5 ─────────────────────────────────────────────────
-function Step5({basicInfo,result,xlsxTemplateFile,xlsxDataFile,onBack,docVersion,setDocVersion}){
+function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,onBack,docVersion,setDocVersion}){
   const [downloading,setDownloading]=useState('');
   const dlWord=async()=>{
     setDownloading('word');
@@ -828,7 +839,7 @@ function Step5({basicInfo,result,xlsxTemplateFile,xlsxDataFile,onBack,docVersion
       <div className="dl-card">
         <div className="dl-info">
           <div className="dl-name">📄 議事録 .docx</div>
-          <div className="dl-desc">テンプレート準拠。Meiryo UI / Calibri フォント。室長・役員報告は改ページ分離。</div>
+          <div className="dl-desc">{docxTemplateFile?`テンプレート「${docxTemplateFile.name}」の形式で出力。`:'デフォルト形式で出力。'}Meiryo UI / Calibri フォント。室長・役員報告は改ページ分離。</div>
         </div>
         <button className="btn btn-blue" onClick={dlWord} disabled={!!downloading}>{downloading==='word'?'生成中...':'⬇️ Word'}</button>
       </div>
@@ -866,6 +877,7 @@ function App(){
     materials:''
   });
   const [transcript,setTranscript]=useState('');
+  const [docxTemplateFile,setDocxTemplateFile]=useState(null);
   const [xlsxTemplateFile,setXlsxTemplateFile]=useState(null);
   const [xlsxDataFile,setXlsxDataFile]=useState(null);
   const [analyzing,setAnalyzing]=useState(false);
@@ -904,12 +916,14 @@ function App(){
       <StepIndicator step={step} setStep={setStep} maxReached={maxReached}/>
       {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
+        docxTemplateFile={docxTemplateFile} setDocxTemplateFile={setDocxTemplateFile}
         xlsxTemplateFile={xlsxTemplateFile} setXlsxTemplateFile={setXlsxTemplateFile}
         xlsxDataFile={xlsxDataFile} setXlsxDataFile={setXlsxDataFile}
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
       {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
       {step===4&&result&&<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)}/>}
       {step===5&&result&&<Step5 basicInfo={basicInfo} result={result}
+        docxTemplateFile={docxTemplateFile}
         xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
         onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>}
       {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)}/>}
