@@ -11,15 +11,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Hiragino Kaku Gothic Pro','Meiryo',Arial,sans-serif;background:#F0F4F8;color:#1a202c;min-height:100vh}
+body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202c;min-height:100vh}
 .app-wrap{max-width:960px;margin:0 auto;padding:16px}
-/* Header */
 .app-header{background:#1F3864;color:#fff;padding:14px 20px;border-radius:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .app-title{font-size:18px;font-weight:700;letter-spacing:.5px}
 .app-sub{font-size:11px;color:#a0b4cc;margin-top:2px}
-.btn-key{background:#2E75B6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;white-space:nowrap}
+.btn-key{background:#2E75B6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer}
 .btn-key:hover{background:#1a5c9e}
-/* Step indicator */
 .steps{display:flex;margin-bottom:20px;background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .step-item{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;cursor:pointer}
 .step-item:not(:last-child)::after{content:'';position:absolute;top:18px;left:60%;width:80%;height:2px;background:#d0d8e4}
@@ -27,378 +25,272 @@ body{font-family:'Hiragino Kaku Gothic Pro','Meiryo',Arial,sans-serif;background
 .step-circle{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border:2px solid #d0d8e4;background:#fff;color:#999;position:relative;z-index:1;transition:.2s}
 .step-item.active .step-circle{border-color:#2E75B6;background:#2E75B6;color:#fff}
 .step-item.done .step-circle{border-color:#1F7A4D;background:#1F7A4D;color:#fff}
-.step-label{font-size:10px;color:#666;margin-top:4px;text-align:center;line-height:1.2}
+.step-label{font-size:10px;color:#666;margin-top:4px;text-align:center;line-height:1.3}
 .step-item.active .step-label{color:#2E75B6;font-weight:600}
-/* Cards */
 .card{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px}
 .card-title{font-size:16px;font-weight:700;color:#1F3864;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #EBF3FB}
-/* Forms */
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px}
 .form-row-1{margin-bottom:12px}
 label{display:block;font-size:12px;font-weight:600;color:#444;margin-bottom:4px}
-input,textarea,select{width:100%;padding:9px 12px;border:1.5px solid #d0d8e4;border-radius:6px;font-size:13px;font-family:inherit;outline:none;transition:.15s;background:#fafbfc}
+input,textarea,select{width:100%;padding:9px 12px;border:1.5px solid #d0d8e4;border-radius:6px;font-size:13px;font-family:'Meiryo UI','Meiryo',sans-serif;outline:none;transition:.15s;background:#fafbfc}
 input:focus,textarea:focus,select:focus{border-color:#2E75B6;background:#fff}
-textarea{resize:vertical;min-height:80px}
+textarea{resize:vertical;min-height:70px}
 .req{color:#e53e3e;margin-left:2px}
-/* Buttons */
-.btn{padding:10px 24px;border-radius:7px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+.btn{padding:10px 24px;border-radius:7px;border:none;font-size:14px;font-weight:600;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px;font-family:'Meiryo UI',sans-serif}
 .btn-primary{background:#1F3864;color:#fff}.btn-primary:hover{background:#16295a}
 .btn-green{background:#1F7A4D;color:#fff}.btn-green:hover{background:#175e3b}
 .btn-blue{background:#2E75B6;color:#fff}.btn-blue:hover{background:#1d5fa0}
 .btn-gray{background:#e2e8f0;color:#444}.btn-gray:hover{background:#cbd5e0}
-.btn-red{background:#e53e3e;color:#fff}.btn-red:hover{background:#c53030}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-row{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
-/* Upload */
-.upload-area{border:2px dashed #a0aec0;border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:.15s;background:#fafbfc}
+.upload-area{border:2px dashed #a0aec0;border-radius:8px;padding:18px;text-align:center;cursor:pointer;transition:.15s;background:#fafbfc}
 .upload-area:hover,.upload-area.drag{border-color:#2E75B6;background:#EBF3FB}
 .upload-area input{display:none}
-.upload-icon{font-size:32px;margin-bottom:8px}
+.upload-icon{font-size:28px;margin-bottom:6px}
 .upload-hint{font-size:12px;color:#718096;margin-top:4px}
 .file-chip{display:inline-flex;align-items:center;gap:6px;background:#EBF3FB;border:1px solid #bee3f8;padding:5px 12px;border-radius:20px;font-size:12px;color:#2c5282;margin-top:8px}
 .file-chip button{background:none;border:none;cursor:pointer;color:#e53e3e;font-size:14px;line-height:1}
-/* Analysis */
 .analyzing-wrap{text-align:center;padding:40px}
 .spinner{width:48px;height:48px;border:4px solid #EBF3FB;border-top-color:#2E75B6;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 16px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .progress-log{background:#1a202c;color:#68d391;padding:16px;border-radius:8px;font-size:12px;font-family:monospace;max-height:160px;overflow-y:auto;margin-top:16px;text-align:left}
-/* Tabs */
-.tabs{display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap}
-.tab{padding:7px 14px;border-radius:6px 6px 0 0;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid #d0d8e4;border-bottom:none;background:#f0f4f8;color:#555;transition:.15s}
+.tabs{display:flex;gap:4px;margin-bottom:0;flex-wrap:wrap}
+.tab{padding:7px 12px;border-radius:6px 6px 0 0;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid #d0d8e4;border-bottom:none;background:#f0f4f8;color:#555}
 .tab.active{background:#fff;color:#1F3864;border-color:#2E75B6;border-bottom-color:#fff}
 .tab-content{background:#fff;border:1.5px solid #2E75B6;border-radius:0 8px 8px 8px;padding:16px}
-/* Tables in preview */
 .preview-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px}
 .preview-table th{background:#1F3864;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
 .preview-table td{padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top}
 .preview-table tr:nth-child(even) td{background:#f8fafc}
-.preview-table td textarea{border:none;background:transparent;padding:0;resize:none;width:100%;font-size:13px;font-family:inherit;min-height:40px}
+.preview-table td textarea{border:none;background:transparent;padding:0;resize:none;width:100%;font-size:13px;font-family:'Meiryo UI',sans-serif;min-height:36px}
 .preview-table td textarea:focus{outline:1px solid #2E75B6;background:#fff;border-radius:3px;padding:3px}
-/* Badges */
-.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700}
-.badge-urg{background:#FF5252;color:#fff}
-.badge-hi{background:#FFCDD2;color:#7D1A1A}
-.badge-mid{background:#FFF9C4;color:#7D6500}
-.badge-low{background:#C8E6C9;color:#1B5E20}
-.badge-new{background:#C8E6C9;color:#1B5E20;border:1px solid #4CAF50}
-.badge-sim{background:#FFF3CD;color:#7D4E00;border:1px solid #E6A817}
-/* Download */
+.preview-table td select{border:none;background:transparent;padding:0;font-size:13px;font-family:'Meiryo UI',sans-serif}
+.preview-table td select:focus{outline:1px solid #2E75B6;background:#fff;border-radius:3px}
 .dl-card{border:1.5px solid #d0d8e4;border-radius:8px;padding:16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .dl-info .dl-name{font-weight:700;color:#1F3864;font-size:14px}
 .dl-info .dl-desc{font-size:12px;color:#718096;margin-top:2px}
-/* Modal */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:1000}
 .modal{background:#fff;border-radius:12px;padding:28px;width:90%;max-width:440px;box-shadow:0 8px 32px rgba(0,0,0,.2)}
 .modal-title{font-size:16px;font-weight:700;color:#1F3864;margin-bottom:16px}
-/* Notices */
 .notice{padding:10px 14px;border-radius:6px;font-size:12px;margin-bottom:12px}
 .notice-info{background:#EBF3FB;color:#1a4a7a;border-left:3px solid #2E75B6}
 .notice-warn{background:#FFF3CD;color:#7D4E00;border-left:3px solid #E6A817}
 .notice-ok{background:#E8F5E9;color:#1B5E20;border-left:3px solid #4CAF50}
-/* Responsive */
+.section-divider{font-size:12px;font-weight:700;color:#2E75B6;padding:10px 0 6px;border-bottom:1px solid #EBF3FB;margin-bottom:10px}
 @media(max-width:600px){
   .form-row,.form-row-3{grid-template-columns:1fr}
-  .steps{padding:8px}
-  .step-label{display:none}
-  .step-circle{width:30px;height:30px;font-size:12px}
-  .card{padding:16px}
-  .btn{padding:9px 16px;font-size:13px}
+  .steps{padding:8px}.step-label{display:none}
+  .card{padding:16px}.btn{padding:9px 16px;font-size:13px}
 }
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef, useCallback } = React;
+const { useState, useEffect, useRef } = React;
 
-// ── 定数 ─────────────────────────────────────────────────
-const STEPS = [
-  { n:1, label:'基本情報' },
-  { n:2, label:'ファイル\nアップロード' },
-  { n:3, label:'AI解析' },
-  { n:4, label:'プレビュー\n・編集' },
-  { n:5, label:'ダウンロード' },
-];
-
-const IMP_PRI_OPTIONS = ['緊急','高','中','低',''];
-
-const BADGE = { '緊急':'badge badge-urg','高':'badge badge-hi','中':'badge badge-mid','低':'badge badge-low' };
-
-const EMPTY = {
-  agenda_items:[], minutes_by_agenda:[],
-  decisions:[], todos:[], pending:[],
-  risks:[], issues:[],
-  exec_report:[], manager_report:[]
-};
-
-// ── Claude API ────────────────────────────────────────────
-async function callClaude(apiKey, basicInfo, transcript, onLog) {
-  onLog('📡 Claude APIに接続中...');
-  const system = `あなたは日本のPMO（プロジェクト管理室）の議事録・管理台帳作成の専門家です。
-会議の文字起こしを分析し、指定のJSON形式で情報を抽出してください。
-出力は必ずJSON形式のみで、マークダウンやコードブロックは使わないでください。`;
-
-  const prompt = `以下の会議情報と文字起こしを分析し、JSON形式で抽出してください。
-
-【基本情報】
-会議名: ${basicInfo.meetingName}
-回数: ${basicInfo.meetingNo}回
-日時: ${basicInfo.date} ${basicInfo.startTime}〜${basicInfo.endTime}
-場所: ${basicInfo.location}
-出席者: ${basicInfo.attendees}
-作成者: ${basicInfo.author}
-配布資料: ${basicInfo.materials}
-
-【文字起こし】
-${transcript}
-
-【抽出してください】
-重要度・優先度は「緊急」「高」「中」「低」の4段階で判定してください。
-- 緊急: 即日対応必須、役員判断が当日必要、重大リスク
-- 高: 今週中に対応必要、ステコミ・役員で言及
-- 中: 今月中に対応、次回定例までに対応
-- 低: 余裕がある時に対応
-
-以下のJSON構造で出力してください：
-{
-  "agenda_items": ["議題1", "議題2"],
-  "minutes_by_agenda": [
-    {"title":"議題名","content":"発言録（発言者名: 発言内容 の形式で）"}
-  ],
-  "decisions": [
-    {"content":"決定内容","decided_by":"決定者","scope":"影響範囲","importance":"高","priority":"高"}
-  ],
-  "todos": [
-    {"content":"アクション内容","assignee":"担当者","due":"期日(YYYY/MM/DD形式)","importance":"高","priority":"高"}
-  ],
-  "pending": [
-    {"content":"保留内容","reason":"理由","next_action":"次回の扱い"}
-  ],
-  "risks": [
-    {"content":"リスク内容","category":"カテゴリ","impact":"高","probability":"高","response":"対応方針","owner":"担当者","importance":"高","priority":"高"}
-  ],
-  "issues": [
-    {"content":"課題内容","category":"カテゴリ","owner":"担当者","due":"期日","resolution":"解決策","importance":"中","priority":"中"}
-  ],
-  "exec_report": [
-    {"content":"報告内容","decision_needed":"要","background":"背景・経緯","recipient":"報告先役員","deadline":"対応期限","importance":"緊急","priority":"緊急"}
-  ],
-  "manager_report": [
-    {"content":"報告内容","action_needed":"要","background":"背景・経緯","recipient":"担当室長","deadline":"対応期限","importance":"高","priority":"高"}
-  ]
-}`;
-
-  onLog('🤖 文字起こしを解析中...');
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:'POST',
-    headers:{
-      'Content-Type':'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-direct-browser-access':'true'
-    },
-    body: JSON.stringify({
-      model:'claude-sonnet-4-20250514',
-      max_tokens:8000,
-      system,
-      messages:[{ role:'user', content:prompt }]
-    })
-  });
-
-  if(!res.ok) {
-    const err = await res.text();
-    throw new Error(`API Error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  onLog('✅ 解析完了！JSONを処理中...');
-
-  const text = data.content[0].text.trim();
-  // Strip possible markdown fences
-  const clean = text.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
-  try {
-    return JSON.parse(clean);
-  } catch(e) {
-    // Try to extract JSON from response
-    const match = clean.match(/\{[\s\S]+\}/);
-    if(match) return JSON.parse(match[0]);
-    throw new Error('JSONの解析に失敗しました: ' + e.message);
-  }
+// ── 今日の日付 ─────────────────────────────────────────────
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-// ── Word生成 (DOCX via JSZip) ─────────────────────────────
-function escXml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+const STEPS = [
+  {n:1,label:'基本情報'},{n:2,label:'ファイル\nアップロード'},
+  {n:3,label:'AI解析'},{n:4,label:'プレビュー\n・編集'},{n:5,label:'ダウンロード'}
+];
+
+const IP_OPTS = ['','緊急','高','中','低'];
+const EMPTY = {agenda_items:[],minutes_by_agenda:[],decisions:[],todos:[],pending:[],risks:[],issues:[],exec_report:[],manager_report:[]};
+
+// ── XML helpers ───────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function xmlRun(text, opts={}){
+  const b = opts.bold ? '<w:b/><w:bCs/>' : '';
+  const sz = opts.size ? `<w:sz w:val="${opts.size}"/><w:szCs w:val="${opts.size}"/>` : '<w:sz w:val="18"/><w:szCs w:val="18"/>';
+  const col = opts.color ? `<w:color w:val="${opts.color}"/>` : '';
+  // Meiryo UI for Japanese, Calibri for ASCII
+  const font = `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Meiryo UI"/>`;
+  return `<w:r><w:rPr>${font}${b}${sz}${col}</w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
+}
 
 function xmlPara(text, opts={}){
-  const bold = opts.bold ? '<w:b/><w:bCs/>' : '';
-  const size = opts.size ? `<w:sz w:val="${opts.size}"/><w:szCs w:val="${opts.size}"/>` : '';
-  const color = opts.color ? `<w:color w:val="${opts.color}"/>` : '';
-  const shade = opts.shade ? `<w:shd w:val="clear" w:color="auto" w:fill="${opts.shade}"/>` : '';
-  const spacing = opts.spacing ? `<w:spacing w:before="${opts.spacing.before||0}" w:after="${opts.spacing.after||60}"/>` : '<w:spacing w:before="0" w:after="60"/>';
-  const jc = opts.center ? '<w:jc w:val="center"/>' : '';
-  const indent = opts.indent ? `<w:ind w:left="${opts.indent}"/>` : '';
-  const runsXml = (Array.isArray(text) ? text : [text]).map(t => {
-    if(!t && t!==0) return '';
-    if(typeof t === 'object' && t.text !== undefined) {
-      const rb = t.bold ? '<w:b/><w:bCs/>' : bold;
-      const rc = t.color ? `<w:color w:val="${t.color}"/>` : color;
-      return `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>${rb}${size}${rc}</w:rPr><w:t xml:space="preserve">${escXml(t.text)}</w:t></w:r>`;
-    }
-    return `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>${bold}${size}${color}</w:rPr><w:t xml:space="preserve">${escXml(t)}</w:t></w:r>`;
-  }).join('');
-  return `<w:p><w:pPr>${jc}${indent}${spacing}<w:rPr>${shade}</w:rPr></w:pPr>${runsXml}</w:p>`;
+  const jc = opts.center ? '<w:jc w:val="center"/>' : opts.right ? '<w:jc w:val="right"/>' : '';
+  const ind = opts.indent ? `<w:ind w:left="${opts.indent}"/>` : '';
+  const sp = `<w:spacing w:before="${opts.before||0}" w:after="${opts.after||60}"/>`;
+  const bdr = opts.border ? `<w:pBdr><w:bottom w:val="single" w:sz="6" w:color="1F3864" w:space="4"/></w:pBdr>` : '';
+  const runs = Array.isArray(text) ? text.map(t => typeof t==='string' ? xmlRun(t,opts) : xmlRun(t.text||'',{...opts,...t})).join('') : xmlRun(text,opts);
+  return `<w:p><w:pPr>${jc}${ind}${sp}${bdr}</w:pPr>${runs}</w:p>`;
 }
 
 function xmlCell(text, opts={}){
   const shade = opts.shade ? `<w:shd w:val="clear" w:color="auto" w:fill="${opts.shade}"/>` : '';
-  const vAlign = opts.vAlign ? `<w:vAlign w:val="${opts.vAlign}"/>` : '<w:vAlign w:val="center"/>';
-  const width = opts.width ? `<w:tcW w:w="${opts.width}" w:type="dxa"/>` : '';
+  const w = opts.width ? `<w:tcW w:w="${opts.width}" w:type="dxa"/>` : '';
+  const vA = `<w:vAlign w:val="center"/>`;
   const borders = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="BFBFBF"/><w:left w:val="single" w:sz="4" w:color="BFBFBF"/><w:bottom w:val="single" w:sz="4" w:color="BFBFBF"/><w:right w:val="single" w:sz="4" w:color="BFBFBF"/></w:tcBorders>`;
   const margins = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
-  const paraColor = opts.textColor || (opts.shade === '1F3864' ? 'FFFFFF' : '000000');
-  const paraBold = opts.shade === '1F3864' ? '<w:b/><w:bCs/>' : (opts.bold ? '<w:b/><w:bCs/>' : '');
-  const paraSize = opts.size || 18;
+  const textColor = opts.shade==='1F3864'||opts.shade==='2E75B6'||opts.shade==='843C0C'||opts.shade==='7030A0'||opts.shade==='C55A11'||opts.shade==='375623' ? 'FFFFFF' : opts.textColor||'000000';
+  const bold = (opts.shade==='1F3864'||opts.headerStyle) ? '<w:b/><w:bCs/>' : '';
+  const sz = opts.size||18;
+  const font = `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Meiryo UI"/>`;
   const jc = opts.center ? '<w:jc w:val="center"/>' : '';
   const lines = String(text||'').split('\n');
   const parasXml = lines.map(line =>
-    `<w:p><w:pPr>${jc}<w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>${paraBold}<w:sz w:val="${paraSize}"/><w:szCs w:val="${paraSize}"/><w:color w:val="${paraColor}"/></w:rPr><w:t xml:space="preserve">${escXml(line)}</w:t></w:r></w:p>`
+    `<w:p><w:pPr>${jc}<w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${font}${bold}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:color w:val="${textColor}"/></w:rPr><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`
   ).join('');
-  return `<w:tc><w:tcPr>${width}${borders}${shade}${vAlign}${margins}</w:tcPr>${parasXml}</w:tc>`;
+  return `<w:tc><w:tcPr>${w}${borders}${shade}${vA}${margins}</w:tcPr>${parasXml}</w:tc>`;
 }
 
-function xmlSectionHeader(text){
-  return `<w:p><w:pPr><w:spacing w:before="200" w:after="80"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:color="1F3864" w:space="4"/></w:pBdr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:bCs/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="1F3864"/></w:rPr><w:t>${escXml(text)}</w:t></w:r></w:p>`;
+function xmlPageBreak(){ return `<w:p><w:r><w:rPr/><w:br w:type="page"/></w:r></w:p>`; }
+
+function xmlSecHdr(text){
+  const font = `<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Meiryo UI"/>`;
+  return `<w:p><w:pPr><w:spacing w:before="200" w:after="80"/><w:pBdr><w:bottom w:val="single" w:sz="6" w:color="1F3864" w:space="4"/></w:pBdr></w:pPr><w:r><w:rPr>${font}<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="1F3864"/></w:rPr><w:t>${esc(text)}</w:t></w:r></w:p>`;
 }
 
-function xmlPageBreak(){
-  return `<w:p><w:r><w:rPr/><w:br w:type="page"/></w:r></w:p>`;
-}
-
+// ── Word生成 ─────────────────────────────────────────────
 function generateDocx(basicInfo, result){
-  const tableWidth = 9026;
-  // Header table
-  const headerRows = [
-    ['議題', basicInfo.meetingName + (basicInfo.meetingNo ? ` 第${basicInfo.meetingNo}回` : '')],
-    ['日時', `${basicInfo.date} ${basicInfo.startTime}〜${basicInfo.endTime}`],
-    ['場所', basicInfo.location||''],
-    ['出席者', basicInfo.attendees||''],
-    ['作成日', basicInfo.date||''],
-    ['作成者', basicInfo.author||''],
-    ['配布資料', basicInfo.materials||''],
-  ];
+  const W = 9026; // A4 content width
+  const date = basicInfo.date ? basicInfo.date.replace(/-/g,'/') : '';
+  const meetingTitle = `${basicInfo.meetingName}${basicInfo.meetingNo ? ` 第${basicInfo.meetingNo}回` : ''}`;
+  const attendeesXml = [
+    ['【KE】', basicInfo.attendeesKE||''],
+    ['【IBM】', basicInfo.attendeesIBM||''],
+    ['【PwC】', basicInfo.attendeesPwC||''],
+  ].map(([org,names]) => `${org}${names?'　'+names:''}`).join('\n');
+
+  // ── ヘッダー表 ──────────────────────────────────────────
+  const hW1=1600, hW2=3600, hW3=1200, hW4=2626;
   const headerTableXml = `<w:tbl>
-<w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="2E75B6"/><w:left w:val="single" w:sz="4" w:color="2E75B6"/><w:bottom w:val="single" w:sz="4" w:color="2E75B6"/><w:right w:val="single" w:sz="4" w:color="2E75B6"/><w:insideH w:val="single" w:sz="4" w:color="BDD7EE"/><w:insideV w:val="single" w:sz="4" w:color="BDD7EE"/></w:tblBorders></w:tblPr>
-<w:tblGrid><w:gridCol w:w="1800"/><w:gridCol w:w="${tableWidth-1800}"/></w:tblGrid>
-${headerRows.map(([label,val]) => `<w:tr><w:trPr><w:trHeight w:val="400"/></w:trPr>
-${xmlCell(label,{width:1800,shade:'EBF3FB',bold:true,size:18})}
-${xmlCell(val,{width:tableWidth-1800,size:18})}
-</w:tr>`).join('')}
+<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/><w:tblBorders>
+<w:top w:val="single" w:sz="6" w:color="2E75B6"/><w:left w:val="single" w:sz="6" w:color="2E75B6"/>
+<w:bottom w:val="single" w:sz="6" w:color="2E75B6"/><w:right w:val="single" w:sz="6" w:color="2E75B6"/>
+<w:insideH w:val="single" w:sz="4" w:color="BDD7EE"/><w:insideV w:val="single" w:sz="4" w:color="BDD7EE"/>
+</w:tblBorders></w:tblPr>
+<w:tblGrid><w:gridCol w:w="${hW1}"/><w:gridCol w:w="${hW2}"/><w:gridCol w:w="${hW3}"/><w:gridCol w:w="${hW4}"/></w:tblGrid>
+<w:tr><w:trPr><w:trHeight w:val="440"/></w:trPr>
+${xmlCell('議題',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(meetingTitle,{width:hW2,size:18,bold:true})}
+${xmlCell('回数',{width:hW3,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(basicInfo.meetingNo ? `第${basicInfo.meetingNo}回` : '',{width:hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="400"/></w:trPr>
+${xmlCell('日時',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(`${date} ${basicInfo.startTime||''}〜${basicInfo.endTime||''}`,{width:hW2,size:18})}
+${xmlCell('作成日',{width:hW3,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(date,{width:hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="400"/></w:trPr>
+${xmlCell('場所',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(basicInfo.location||'',{width:hW2,size:18})}
+${xmlCell('作成者',{width:hW3,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(basicInfo.author||'',{width:hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="600"/></w:trPr>
+${xmlCell('出席者\n(敬称略)\n(順不同)',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(attendeesXml,{width:hW2+hW3+hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="480"/></w:trPr>
+${xmlCell('【配布資料\n/投影資料】',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(basicInfo.materials||'・',{width:hW2+hW3+hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="480"/></w:trPr>
+${xmlCell('【決定事項】',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(result.decisions.length ? result.decisions.map(d=>`・${d.content||''}`).join('\n') : '・なし',{width:hW2+hW3+hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="480"/></w:trPr>
+${xmlCell('【ToDo】',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(result.todos.length ? result.todos.map(t=>`★ ${t.content||''}（${t.assignee||''}、${t.due||''}）`).join('\n') : 'なし',{width:hW2+hW3+hW4,size:18})}
+</w:tr>
+<w:tr><w:trPr><w:trHeight w:val="1200"/></w:trPr>
+${xmlCell('【議事内容】\n★＝ToDo',{width:hW1,shade:'EBF3FB',headerStyle:true,size:18})}
+${xmlCell(result.minutes_by_agenda.map((m,i)=>`${i+1}. ${m.title||''}\n${(m.content||'').split('\n').map(l=>l?'　'+l:'').join('\n')}`).join('\n\n')||'（記録なし）',{width:hW2+hW3+hW4,size:18})}
+</w:tr>
 </w:tbl>`;
 
-  // Decisions
-  const decisionsXml = result.decisions.length ? `
-${xmlSectionHeader('【決定事項】')}
-${result.decisions.map((d,i)=>xmlPara(`${i+1}. ${d.content}　（${d.decided_by||''}）`,{size:18})).join('')}` : `${xmlSectionHeader('【決定事項】')}${xmlPara('なし',{size:18,color:'666666'})}`;
+  // ── 保留 ──────────────────────────────────────────────
+  const pendingXml = result.pending.length
+    ? result.pending.map((p,i)=>`${xmlPara(`${i+1}. ${p.content||''}（理由: ${p.reason||''}）`,{size:18})}`).join('')
+    : xmlPara('（該当なし）',{size:17,color:'666666'});
 
-  // ToDo
-  const todosXml = `${xmlSectionHeader('【ToDo】')}
-${result.todos.length ? result.todos.map(t=>xmlPara(`★ ${t.content}　（${t.assignee||''}、${t.due||''}）`,{size:18})).join('') : xmlPara('なし',{size:18,color:'666666'})}`;
-
-  // Minutes
-  const minutesXml = `${xmlSectionHeader('【議事内容】　★＝ToDo')}
-${result.minutes_by_agenda.map(m=>[
-  xmlPara(m.title,{bold:true,size:20,spacing:{before:160,after:60}}),
-  ...(m.content||'').split('\n').filter(l=>l.trim()).map(line=>xmlPara(line,{size:18,indent:360}))
-].join('')).join('')}`;
-
-  // Pending
-  const pendingXml = result.pending.length ? `${xmlSectionHeader('【保留・継続審議事項】')}
-${result.pending.map((p,i)=>xmlPara(`${i+1}. ${p.content}　（理由: ${p.reason||''}）`,{size:18})).join('')}` : '';
-
-  // Risk table
-  const riskCols = [500,3200,1200,1000,2326+800];
-  const riskTableXml = result.risks.length ? `
-${xmlSectionHeader('【リスク一覧】')}
-<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/></w:tblPr>
-<w:tblGrid>${riskCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
-<w:tr>${['No.','リスク内容','影響度','重要度','対応方針'].map((h,i)=>xmlCell(h,{width:riskCols[i],shade:'843C0C',center:true,size:16})).join('')}</w:tr>
+  // ── リスク表 ─────────────────────────────────────────
+  const rCols=[600,3400,1000,1000,3026];
+  const riskTableXml = result.risks.length ? `<w:tbl>
+<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/></w:tblPr>
+<w:tblGrid>${rCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
+<w:tr>${['No.','リスク内容','影響度','重要度','対応方針'].map((h,i)=>xmlCell(h,{width:rCols[i],shade:'843C0C',center:true,size:16})).join('')}</w:tr>
 ${result.risks.map((r,i)=>`<w:tr>${[
-  xmlCell(i+1,{width:riskCols[0],center:true,size:16}),
-  xmlCell(r.content,{width:riskCols[1],size:16}),
-  xmlCell(r.impact||'',{width:riskCols[2],center:true,size:16}),
-  xmlCell(r.importance||'',{width:riskCols[3],center:true,size:16}),
-  xmlCell(r.response||'',{width:riskCols[4],size:16}),
+  xmlCell(i+1,{width:rCols[0],center:true,size:16}),
+  xmlCell(r.content||'',{width:rCols[1],size:16}),
+  xmlCell(r.impact||'',{width:rCols[2],center:true,size:16}),
+  xmlCell(r.importance||'',{width:rCols[3],center:true,size:16}),
+  xmlCell(r.response||'',{width:rCols[4],size:16}),
 ].join('')}</w:tr>`).join('')}
-</w:tbl>` : '';
+</w:tbl>` : xmlPara('（該当なし）',{size:17,color:'666666'});
 
-  // Issues table
-  const issCols = [500,3600,1200,1000,2526+200];
-  const issuesXml = result.issues.length ? `
-${xmlSectionHeader('【課題一覧】')}
-<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/></w:tblPr>
-<w:tblGrid>${issCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
-<w:tr>${['No.','課題内容','優先度','重要度','担当者・期日'].map((h,i)=>xmlCell(h,{width:issCols[i],shade:'7030A0',center:true,size:16})).join('')}</w:tr>
+  // ── 課題表 ───────────────────────────────────────────
+  const iCols=[600,3800,1000,1000,2626];
+  const issueTableXml = result.issues.length ? `<w:tbl>
+<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/></w:tblPr>
+<w:tblGrid>${iCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
+<w:tr>${['No.','課題内容','優先度','重要度','担当者・期日'].map((h,i)=>xmlCell(h,{width:iCols[i],shade:'7030A0',center:true,size:16})).join('')}</w:tr>
 ${result.issues.map((r,i)=>`<w:tr>${[
-  xmlCell(i+1,{width:issCols[0],center:true,size:16}),
-  xmlCell(r.content,{width:issCols[1],size:16}),
-  xmlCell(r.priority||'',{width:issCols[2],center:true,size:16}),
-  xmlCell(r.importance||'',{width:issCols[3],center:true,size:16}),
-  xmlCell(`${r.owner||''}　${r.due||''}`,{width:issCols[4],size:16}),
+  xmlCell(i+1,{width:iCols[0],center:true,size:16}),
+  xmlCell(r.content||'',{width:iCols[1],size:16}),
+  xmlCell(r.priority||'',{width:iCols[2],center:true,size:16}),
+  xmlCell(r.importance||'',{width:iCols[3],center:true,size:16}),
+  xmlCell(`${r.owner||''}　${r.due||''}`,{width:iCols[4],size:16}),
 ].join('')}</w:tr>`).join('')}
-</w:tbl>` : '';
+</w:tbl>` : xmlPara('（該当なし）',{size:17,color:'666666'});
 
-  // Exec report table
-  const execCols = [500,3200,900,900,3526-1000+200];
-  const execXml = result.exec_report.length ? `
-${xmlSectionHeader('【役員への報告事項】')}
-<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/></w:tblPr>
-<w:tblGrid>${execCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
-<w:tr>${['No.','報告内容','判断要否','重要度','背景・経緯'].map((h,i)=>xmlCell(h,{width:execCols[i],shade:'C55A11',center:true,size:16})).join('')}</w:tr>
-${result.exec_report.map((r,i)=>`<w:tr>${[
-  xmlCell(i+1,{width:execCols[0],center:true,size:16}),
-  xmlCell(r.content,{width:execCols[1],size:16}),
-  xmlCell(r.decision_needed||'',{width:execCols[2],center:true,size:16}),
-  xmlCell(r.importance||'',{width:execCols[3],center:true,size:16}),
-  xmlCell(r.background||'',{width:execCols[4],size:16}),
+  // ── 室長報告表 ────────────────────────────────────────
+  const mCols=[600,3800,1200,3426];
+  const mgrTableXml = result.manager_report.length ? `<w:tbl>
+<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/></w:tblPr>
+<w:tblGrid>${mCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
+<w:tr>${['No.','報告内容','対応要否','背景・経緯'].map((h,i)=>xmlCell(h,{width:mCols[i],shade:'375623',center:true,size:16})).join('')}</w:tr>
+${result.manager_report.map((r,i)=>`<w:tr><w:trPr><w:trHeight w:val="600"/></w:trPr>${[
+  xmlCell(i+1,{width:mCols[0],center:true,size:16}),
+  xmlCell(r.content||'',{width:mCols[1],size:16}),
+  xmlCell(r.action_needed||'',{width:mCols[2],center:true,size:16}),
+  xmlCell(r.background||'',{width:mCols[3],size:16}),
 ].join('')}</w:tr>`).join('')}
-</w:tbl>` : xmlPara('（該当事項なし）',{size:18,color:'666666'});
+</w:tbl>` : xmlPara('（該当なし）',{size:17,color:'666666'});
 
-  // Manager report table
-  const mgrCols = [500,3200,900,900,2526+200];
-  const mgrXml = result.manager_report.length ? `
-<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/></w:tblPr>
-<w:tblGrid>${mgrCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
-<w:tr>${['No.','報告内容','対応要否','重要度','背景・経緯'].map((h,i)=>xmlCell(h,{width:mgrCols[i],shade:'375623',center:true,size:16})).join('')}</w:tr>
-${result.manager_report.map((r,i)=>`<w:tr>${[
-  xmlCell(i+1,{width:mgrCols[0],center:true,size:16}),
-  xmlCell(r.content,{width:mgrCols[1],size:16}),
-  xmlCell(r.action_needed||'',{width:mgrCols[2],center:true,size:16}),
-  xmlCell(r.importance||'',{width:mgrCols[3],center:true,size:16}),
-  xmlCell(r.background||'',{width:mgrCols[4],size:16}),
+  // ── 役員報告表 ────────────────────────────────────────
+  const eCols=[600,3800,1200,3426];
+  const execTableXml = result.exec_report.length ? `<w:tbl>
+<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/></w:tblPr>
+<w:tblGrid>${eCols.map(c=>`<w:gridCol w:w="${c}"/>`).join('')}</w:tblGrid>
+<w:tr>${['No.','報告内容','判断要否','背景・経緯'].map((h,i)=>xmlCell(h,{width:eCols[i],shade:'C55A11',center:true,size:16})).join('')}</w:tr>
+${result.exec_report.map((r,i)=>`<w:tr><w:trPr><w:trHeight w:val="600"/></w:trPr>${[
+  xmlCell(i+1,{width:eCols[0],center:true,size:16}),
+  xmlCell(r.content||'',{width:eCols[1],size:16}),
+  xmlCell(r.decision_needed||'',{width:eCols[2],center:true,size:16}),
+  xmlCell(r.background||'',{width:eCols[3],size:16}),
 ].join('')}</w:tr>`).join('')}
-</w:tbl>` : xmlPara('（該当事項なし）',{size:18,color:'666666'});
+</w:tbl>` : xmlPara('（該当なし）',{size:17,color:'666666'});
 
   const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
-  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:body>
-${xmlPara(`${basicInfo.meetingName}${basicInfo.meetingNo?` 第${basicInfo.meetingNo}回`:''}　議事録`,{bold:true,size:28,color:'1F3864',spacing:{before:0,after:160}})}
+${xmlPara(meetingTitle+'　議事録',{bold:true,size:28,color:'1F3864',before:0,after:160})}
 ${headerTableXml}
-${xmlPara('',{spacing:{before:160,after:0}})}
-${decisionsXml}
-${todosXml}
-${minutesXml}
+${xmlPara('',{before:120,after:0})}
+${xmlSecHdr('【保留・継続審議事項】')}
 ${pendingXml}
+${xmlSecHdr('【リスク一覧】')}
 ${riskTableXml}
-${issuesXml}
+${xmlSecHdr('【課題一覧】')}
+${issueTableXml}
 ${xmlPageBreak()}
-${xmlSectionHeader('【役員への報告事項】')}
-${execXml}
+${xmlSecHdr('【室長への報告事項】')}
+${mgrTableXml}
 ${xmlPageBreak()}
-${xmlSectionHeader('【担当室長への報告事項】')}
-${mgrXml}
+${xmlSecHdr('【役員への報告事項】')}
+${execTableXml}
 <w:sectPr>
 <w:pgSz w:w="11906" w:h="16838"/>
 <w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/>
@@ -426,101 +318,147 @@ ${mgrXml}
   zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:docDefaults><w:rPrDefault><w:rPr>
-<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>
+<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:cs="Calibri" w:eastAsia="Meiryo UI"/>
 <w:sz w:val="18"/><w:szCs w:val="18"/>
 </w:rPr></w:rPrDefault></w:docDefaults>
 </w:styles>`);
   return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
 
-// ── Excel生成 (SheetJS) ───────────────────────────────────
-function generateXlsx(basicInfo, result, existingWb=null){
-  const wb = existingWb || XLSX.utils.book_new();
-  const mtg = basicInfo.meetingName + (basicInfo.meetingNo?` 第${basicInfo.meetingNo}回`:'');
-  const dt  = basicInfo.date || '';
+// ── Excel生成（テンプレートベース） ─────────────────────────
+async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
+  // テンプレートまたは既存データファイルを読み込む
+  let wb = null;
+  if (xlsxTemplateFile || xlsxDataFile) {
+    const targetFile = xlsxDataFile || xlsxTemplateFile;
+    const ab = await targetFile.arrayBuffer();
+    wb = XLSX.read(ab, {type:'array'});
+  } else {
+    wb = XLSX.utils.book_new();
+  }
 
-  const H = (s) => ({v:s,t:'s',s:{font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3864'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}}});
-  const D = (s) => ({v:s===undefined||s===null?'':String(s),t:'s'});
+  const mtg = basicInfo.meetingName + (basicInfo.meetingNo ? ` 第${basicInfo.meetingNo}回` : '');
+  const dt  = basicInfo.date ? basicInfo.date.replace(/-/g,'/') : '';
 
-  function appendOrCreate(sheetName, headers, newRows) {
+  // ヘッダー名マッピングで追記する関数
+  function appendToSheet(sheetName, dataRows) {
     let ws = wb.Sheets[sheetName];
-    if(ws) {
-      // Append to existing sheet
-      const range = XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+    if (!ws) {
+      // シートがなければ新規作成
+      ws = XLSX.utils.aoa_to_sheet([]);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+    const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : {s:{r:0,c:0},e:{r:0,c:0}};
+    // ヘッダー行を探す（"No."がある行）
+    let headerRow = -1;
+    for (let r = range.s.r; r <= Math.min(range.e.r, 5); r++) {
+      const cell = ws[XLSX.utils.encode_cell({r, c: 0})];
+      if (cell && String(cell.v||'').includes('No.')) { headerRow = r; break; }
+    }
+    if (headerRow < 0) {
+      // ヘッダーなし → dataRowsをそのまま追記
       let nextRow = range.e.r + 1;
-      newRows.forEach(row => {
-        row.forEach((val,ci) => {
-          const cellRef = XLSX.utils.encode_cell({r:nextRow,c:ci});
-          ws[cellRef] = D(val);
+      dataRows.forEach(row => {
+        Object.entries(row).forEach(([key, val], ci) => {
+          const ref = XLSX.utils.encode_cell({r:nextRow, c:ci});
+          ws[ref] = {v: String(val||''), t:'s'};
         });
         nextRow++;
       });
-      ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:nextRow-1,c:headers.length-1}});
-    } else {
-      // Create new sheet with header
-      const aoa = [headers.map(h=>h), ...newRows];
-      ws = XLSX.utils.aoa_to_sheet(aoa);
-      // Style header row
-      headers.forEach((_,ci) => {
-        const ref = XLSX.utils.encode_cell({r:0,c:ci});
-        if(ws[ref]) ws[ref].s = {font:{bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:'1F3864'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}};
-      });
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:nextRow-1, c:20}});
+      return;
     }
+    // ヘッダー行からカラムマップを作成
+    const colMap = {};
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({r:headerRow, c})];
+      if (cell && cell.v) colMap[String(cell.v).replace(/\n/g,'')] = c;
+    }
+    // item行の最後を探す（例データ行をスキップするため"例"でない行）
+    let nextDataRow = headerRow + 1;
+    for (let r = headerRow + 1; r <= range.e.r; r++) {
+      const c0 = ws[XLSX.utils.encode_cell({r, c: 0})];
+      if (c0 && String(c0.v||'') === '例') continue; // 例データ行はスキップ
+      const rowType = ws[XLSX.utils.encode_cell({r, c: colMap['行種別']||0})];
+      if (!rowType || !rowType.v) { nextDataRow = r; break; }
+      nextDataRow = r + 1;
+    }
+
+    // 新しい行を追記
+    dataRows.forEach(row => {
+      // No.を自動採番（item行のみカウント）
+      let maxNo = 0;
+      for (let r = headerRow+1; r < nextDataRow; r++) {
+        const noCell = ws[XLSX.utils.encode_cell({r, c: colMap['No.']||0})];
+        if (noCell && !isNaN(Number(noCell.v))) maxNo = Math.max(maxNo, Number(noCell.v));
+      }
+      row['No.'] = maxNo + 1;
+      row['行種別'] = 'item';
+
+      Object.entries(colMap).forEach(([colName, colIdx]) => {
+        // 正規化したキーで検索
+        const normalizedColName = colName.replace(/\n/g,'');
+        const val = row[normalizedColName] !== undefined ? row[normalizedColName] : (row[colName] !== undefined ? row[colName] : '');
+        const ref = XLSX.utils.encode_cell({r: nextDataRow, c: colIdx});
+        ws[ref] = {v: String(val||''), t:'s'};
+      });
+      nextDataRow++;
+    });
+    const newRange = {s:{r:0,c:0}, e:{r:nextDataRow-1, c:Math.max(range.e.c, 20)}};
+    ws['!ref'] = XLSX.utils.encode_range(newRange);
   }
 
-  // 1. 決定事項
-  appendOrCreate('決定事項',
-    ['No.','会議名','会議日','関連議題','決定内容','決定者','影響範囲','重要度','優先度','最新進捗内容','共有先','共有済未','最終ステータス'],
-    result.decisions.map((d,i)=>[i+1,mtg,dt,'',d.content||'',d.decided_by||'',d.scope||'',d.importance||'',d.priority||'','','','未','未着手']));
+  // 各シートに追記（シート名はテンプレートに合わせてTo-Doを使用）
+  appendToSheet('決定事項', result.decisions.map(d => ({
+    '会議名':mtg, '会議日':dt, '関連議題':'', '決定内容':d.content||'',
+    '決定者':d.decided_by||'', '影響範囲':d.scope||'',
+    '重要度':d.importance||'', '優先度':d.priority||'',
+    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
+    '類似No.\n・判定':'', '最終\nステータス':'未着手',
+  })));
 
-  // 2. Next Action
-  appendOrCreate('Next Action',
-    ['No.','会議名','会議日','アクション内容','担当者','期日','重要度','優先度','最新進捗内容','共有先','共有済未','類似No.・判定','最終ステータス'],
-    result.todos.map((t,i)=>[i+1,mtg,dt,t.content||'',t.assignee||'',t.due||'',t.importance||'',t.priority||'','','','未','','未着手']));
+  appendToSheet('To-Do', result.todos.map(t => ({
+    '会議名':mtg, '会議日':dt, 'アクション内容':t.content||'',
+    '担当者':t.assignee||'', '期日':t.due||'',
+    '重要度':t.importance||'', '優先度':t.priority||'',
+    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
+    '類似No.\n・判定':'', '最終\nステータス':'未着手',
+  })));
 
-  // 3. リスク
-  appendOrCreate('リスク',
-    ['No.','会議名','会議日','リスク内容','カテゴリ','影響度','発生確率','重要度','優先度','対応方針','担当者','最新進捗内容','共有先','共有済未','最終ステータス'],
-    result.risks.map((r,i)=>[i+1,mtg,dt,r.content||'',r.category||'',r.impact||'',r.probability||'',r.importance||'',r.priority||'',r.response||'',r.owner||'','','','未','未着手']));
+  appendToSheet('リスク', result.risks.map(r => ({
+    '会議名':mtg, '会議日':dt, 'リスク内容':r.content||'',
+    'カテゴリ':r.category||'', '影響度':r.impact||'', '発生確率':r.probability||'',
+    '対応方針':r.response||'', '担当者':r.owner||'',
+    '重要度':r.importance||'', '優先度':r.priority||'',
+    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
+    '類似No.\n・判定':'', '最終\nステータス':'未着手',
+  })));
 
-  // 4. 課題
-  appendOrCreate('課題',
-    ['No.','会議名','会議日','課題内容','カテゴリ','重要度','優先度','担当者','解決策・対応内容','最新進捗内容','共有先','共有済未','最終ステータス'],
-    result.issues.map((r,i)=>[i+1,mtg,dt,r.content||'',r.category||'',r.importance||'',r.priority||'',r.owner||'',r.resolution||'','','','未','未着手']));
+  appendToSheet('課題', result.issues.map(r => ({
+    '会議名':mtg, '会議日':dt, '課題内容':r.content||'',
+    'カテゴリ':r.category||'', '担当者':r.owner||'', '解決策・対応内容':r.resolution||'',
+    '重要度':r.importance||'', '優先度':r.priority||'',
+    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
+    '類似No.\n・判定':'', '最終\nステータス':'未着手',
+  })));
 
-  // 5. 役員報告事項
-  appendOrCreate('役員報告事項',
-    ['No.','会議名','会議日','報告内容','判断要否','重要度','優先度','背景・経緯','報告先役員','対応期限','最新進捗内容','共有先','共有済未','最終ステータス'],
-    result.exec_report.map((r,i)=>[i+1,mtg,dt,r.content||'',r.decision_needed||'',r.importance||'',r.priority||'',r.background||'',r.recipient||'',r.deadline||'','','','未','未着手']));
+  appendToSheet('役員報告事項', result.exec_report.map(r => ({
+    '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
+    '判断要否':r.decision_needed||'', '背景・経緯':r.background||'',
+    '報告先役員':r.recipient||'',
+    '重要度':r.importance||'', '優先度':r.priority||'',
+    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
+    '類似No.\n・判定':'', '最終\nステータス':'未着手',
+  })));
 
-  // 6. 室長報告事項
-  appendOrCreate('室長報告事項',
-    ['No.','会議名','会議日','報告内容','対応要否','重要度','優先度','背景・経緯','担当室長','対応期限','最新進捗内容','共有先','共有済未','最終ステータス'],
-    result.manager_report.map((r,i)=>[i+1,mtg,dt,r.content||'',r.action_needed||'',r.importance||'',r.priority||'',r.background||'',r.recipient||'',r.deadline||'','','','未','未着手']));
-
-  // INDEX
-  if(!wb.Sheets['📋 INDEX']) {
-    const idx = XLSX.utils.aoa_to_sheet([
-      ['会議議事録 管理台帳'],[''],
-      ['シート名','概要'],
-      ['決定事項','会議で正式に決定した事項'],
-      ['Next Action','担当者・期日付きアクション管理台帳'],
-      ['リスク','プログラム上のリスク管理台帳'],
-      ['課題','解決すべき課題の管理台帳'],
-      ['役員報告事項','役員への判断・報告が必要な事項'],
-      ['室長報告事項','担当室長への報告が必要な事項'],
-      [''],
-      ['【重要度・優先度の定義】',''],
-      ['緊急','即日対応必須。役員判断が当日必要。重大リスク。'],
-      ['高','今週中に対応必要。ステコミ・役員で言及あり。'],
-      ['中','今月中に対応。次回定例までに対応。'],
-      ['低','余裕がある時に対応。情報共有レベル。'],
-    ]);
-    XLSX.utils.book_append_sheet(wb, idx, '📋 INDEX');
-    // Move INDEX to front
-    wb.SheetNames = ['📋 INDEX', ...wb.SheetNames.filter(s=>s!=='📋 INDEX')];
-  }
+  appendToSheet('室長報告事項', result.manager_report.map(r => ({
+    '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
+    '対応要否':r.action_needed||'', '背景・経緯':r.background||'',
+    '担当室長':r.recipient||'',
+    '重要度':r.importance||'', '優先度':r.priority||'',
+    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
+    '類似No.\n・判定':'', '最終\nステータス':'未着手',
+  })));
 
   return wb;
 }
@@ -532,30 +470,73 @@ function downloadBlob(blob, filename){
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-function makeFilename(meetingName, date, ext, version=1){
+function makeDocxFilename(meetingName, date, version=1){
   const safe = (meetingName||'会議').replace(/[\\/:*?"<>|]/g,'');
-  const d = (date||'').replace(/\//g,'');
+  const d = (date||'').replace(/-/g,'');
   const v = version > 1 ? `_v${version}` : '';
-  return `${ext==='docx'?'議事録':'会議管理台帳'}_${safe}_${d}${v}.${ext}`;
+  return `議事録_${safe}_${d}${v}.docx`;
+}
+function makeXlsxFilename(date){
+  const d = (date||'').replace(/-/g,'');
+  const ts = new Date().toTimeString().slice(0,5).replace(':','');
+  return `会議管理台帳_${d}_${ts}.xlsx`;
 }
 
-// ── Components ────────────────────────────────────────────
-function ApiKeyModal({ onSave, onClose, current }){
-  const [key, setKey] = useState(current||'');
-  return (
+// ── Claude API ────────────────────────────────────────────
+async function callClaude(apiKey, basicInfo, transcript, onLog){
+  onLog('📡 Claude APIに接続中...');
+  const attendees = `【KE】${basicInfo.attendeesKE||''}\n【IBM】${basicInfo.attendeesIBM||''}\n【PwC】${basicInfo.attendeesPwC||''}`;
+  const prompt = `以下の会議情報と文字起こしを分析し、JSON形式で抽出してください。
+
+【基本情報】
+会議名: ${basicInfo.meetingName}${basicInfo.meetingNo?` 第${basicInfo.meetingNo}回`:''}
+日時: ${basicInfo.date} ${basicInfo.startTime}〜${basicInfo.endTime}
+場所: ${basicInfo.location}
+出席者: ${attendees}
+作成者: ${basicInfo.author}
+配布資料: ${basicInfo.materials}
+
+【文字起こし】
+${transcript}
+
+重要度・優先度は「緊急」「高」「中」「低」の4段階で判定してください。
+- 緊急: 即日対応必須、役員判断が当日必要
+- 高: 今週中に対応必要、ステコミ・役員で言及
+- 中: 今月中に対応
+- 低: 余裕がある時に対応
+
+以下のJSON構造で出力してください（マークダウン不要、JSONのみ）:
+{"agenda_items":["議題1"],"minutes_by_agenda":[{"title":"議題名","content":"発言録（発言者名: 発言内容）"}],"decisions":[{"content":"決定内容","decided_by":"決定者","scope":"影響範囲","importance":"高","priority":"高"}],"todos":[{"content":"アクション","assignee":"担当者","due":"YYYY/MM/DD","importance":"高","priority":"高"}],"pending":[{"content":"保留内容","reason":"理由","next_action":"次回の扱い"}],"risks":[{"content":"リスク内容","category":"カテゴリ","impact":"高","probability":"高","response":"対応方針","owner":"担当者","importance":"高","priority":"高"}],"issues":[{"content":"課題内容","category":"カテゴリ","owner":"担当者","due":"期日","resolution":"解決策","importance":"中","priority":"中"}],"exec_report":[{"content":"報告内容","decision_needed":"要","background":"背景","recipient":"役員名","deadline":"期限","importance":"緊急","priority":"緊急"}],"manager_report":[{"content":"報告内容","action_needed":"要","background":"背景","recipient":"室長名","deadline":"期限","importance":"高","priority":"高"}]}`;
+
+  onLog('🤖 文字起こしを解析中...');
+  const res = await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8000,system:'日本のPMO議事録・管理台帳作成の専門家です。指定のJSON形式のみで出力してください。',messages:[{role:'user',content:prompt}]})
+  });
+  if(!res.ok) throw new Error(`API Error ${res.status}: ${await res.text()}`);
+  const data = await res.json();
+  onLog('✅ 解析完了！データを処理中...');
+  const text = data.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
+  try { return JSON.parse(text); }
+  catch(e){ const m=text.match(/\{[\s\S]+\}/); if(m) return JSON.parse(m[0]); throw new Error('JSON解析失敗: '+e.message); }
+}
+
+// ══════════════════════════════════════════════════════════
+// Components
+// ══════════════════════════════════════════════════════════
+function ApiKeyModal({onSave,onClose,current}){
+  const [key,setKey]=useState(current||'');
+  return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
         <div className="modal-title">🔑 Claude API キー設定</div>
-        <div className="notice notice-info" style={{marginBottom:12}}>
-          APIキーは <strong>console.anthropic.com</strong> で発行できます。<br/>
-          入力されたキーはブラウザのlocalStorageに保存されます。
-        </div>
+        <div className="notice notice-info">APIキーは <strong>console.anthropic.com</strong> で発行できます。入力内容はブラウザのlocalStorageに保存されます。</div>
         <label>APIキー <span className="req">*</span></label>
-        <input type="password" value={key} onChange={e=>setKey(e.target.value)}
-          placeholder="sk-ant-api03-..." autoFocus/>
+        <input type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="sk-ant-api03-..." autoFocus/>
         <div className="btn-row" style={{marginTop:16}}>
           <button className="btn btn-primary" onClick={()=>{if(key.trim())onSave(key.trim())}}>保存</button>
           <button className="btn btn-gray" onClick={onClose}>キャンセル</button>
@@ -565,8 +546,8 @@ function ApiKeyModal({ onSave, onClose, current }){
   );
 }
 
-function StepIndicator({ step, setStep, maxReached }){
-  return (
+function StepIndicator({step,setStep,maxReached}){
+  return(
     <div className="steps">
       {STEPS.map(s=>(
         <div key={s.n} className={`step-item ${s.n===step?'active':''} ${s.n<step?'done':''}`}
@@ -580,10 +561,10 @@ function StepIndicator({ step, setStep, maxReached }){
   );
 }
 
-// Step 1
-function Step1({data, setData, onNext}){
-  const upd = (k,v) => setData(p=>({...p,[k]:v}));
-  return (
+// ── Step 1 ─────────────────────────────────────────────────
+function Step1({data,setData,onNext}){
+  const upd=(k,v)=>setData(p=>({...p,[k]:v}));
+  return(
     <div className="card">
       <div className="card-title">📋 Step 1 ― 基本情報の入力</div>
       <div className="form-row">
@@ -602,83 +583,83 @@ function Step1({data, setData, onNext}){
       </div>
       <div className="form-row">
         <div><label>場所・形式</label>
-          <input value={data.location} onChange={e=>upd('location',e.target.value)} placeholder="オンライン（Teams）"/></div>
+          <input value={data.location} onChange={e=>upd('location',e.target.value)}/></div>
         <div><label>作成者</label>
-          <input value={data.author} onChange={e=>upd('author',e.target.value)} placeholder="氏名"/></div>
+          <input value={data.author} onChange={e=>upd('author',e.target.value)}/></div>
+      </div>
+      <div className="section-divider">出席者 <span className="req">*</span></div>
+      <div className="form-row-1">
+        <label>【KE】</label>
+        <input value={data.attendeesKE} onChange={e=>upd('attendeesKE',e.target.value)} placeholder="宮守、福田、土田"/>
       </div>
       <div className="form-row-1">
-        <label>出席者 <span className="req">*</span>（組織名と氏名）</label>
-        <textarea value={data.attendees} onChange={e=>upd('attendees',e.target.value)}
-          placeholder="【KE】宮守、福田&#10;【MSOL】水野、篠原" style={{minHeight:60}}/>
+        <label>【IBM】</label>
+        <input value={data.attendeesIBM} onChange={e=>upd('attendeesIBM',e.target.value)} placeholder="山田、鈴木"/>
       </div>
       <div className="form-row-1">
+        <label>【PwC】</label>
+        <input value={data.attendeesPwC} onChange={e=>upd('attendeesPwC',e.target.value)} placeholder="佐藤、田中"/>
+      </div>
+      <div className="form-row-1" style={{marginTop:4}}>
         <label>配布・投影資料</label>
-        <textarea value={data.materials} onChange={e=>upd('materials',e.target.value)}
-          placeholder="資料ファイル名を入力" style={{minHeight:50}}/>
+        <textarea value={data.materials} onChange={e=>upd('materials',e.target.value)} placeholder="資料ファイル名を入力" style={{minHeight:50}}/>
       </div>
       <div className="btn-row">
-        <button className="btn btn-primary" disabled={!data.meetingName||!data.date||!data.attendees}
+        <button className="btn btn-primary"
+          disabled={!data.meetingName||!data.date||(!data.attendeesKE&&!data.attendeesIBM&&!data.attendeesPwC)}
           onClick={onNext}>次へ →</button>
       </div>
     </div>
   );
 }
 
-// Step 2
-function Step2({transcript, setTranscript, xlsxFile, setXlsxFile, onNext, onBack}){
-  const txtRef = useRef();
-  const xlsRef = useRef();
-  const [drag, setDrag] = useState(false);
-
-  const loadTxt = (file) => {
-    const r = new FileReader();
-    r.onload = e => setTranscript(e.target.result);
-    r.readAsText(file,'UTF-8');
-  };
-
-  return (
+// ── Step 2 ─────────────────────────────────────────────────
+function Step2({transcript,setTranscript,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack}){
+  const txtRef=useRef(),xlsTplRef=useRef(),xlsDatRef=useRef();
+  const [drag,setDrag]=useState(false);
+  const loadTxt=(file)=>{const r=new FileReader();r.onload=e=>setTranscript(e.target.result);r.readAsText(file,'UTF-8');};
+  return(
     <div className="card">
       <div className="card-title">📁 Step 2 ― ファイルアップロード</div>
-      <label style={{fontSize:13,fontWeight:700,color:'#1F3864',marginBottom:8,display:'block'}}>
-        文字起こしファイル（.txt）<span className="req">*</span>
-      </label>
+
+      <div className="section-divider">📄 文字起こし <span className="req">*</span></div>
       <div className={`upload-area ${drag?'drag':''}`}
         onClick={()=>txtRef.current.click()}
         onDragOver={e=>{e.preventDefault();setDrag(true)}}
         onDragLeave={()=>setDrag(false)}
-        onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)loadTxt(f)}}>
-        <input ref={txtRef} type="file" accept=".txt" onChange={e=>{if(e.target.files[0])loadTxt(e.target.files[0])}}/>
+        onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)loadTxt(f);}}>
+        <input ref={txtRef} type="file" accept=".txt" onChange={e=>{if(e.target.files[0])loadTxt(e.target.files[0]);}}/>
         <div className="upload-icon">📄</div>
-        <div style={{fontSize:13,color:'#444'}}>クリックまたはドラッグ＆ドロップ</div>
-        <div className="upload-hint">.txt ファイル対応</div>
+        <div style={{fontSize:13,color:'#444'}}>クリックまたはドラッグ＆ドロップ（.txt）</div>
       </div>
-      {transcript && <div className="file-chip">✅ ファイル読み込み済み（{transcript.length.toLocaleString()}文字）</div>}
-
-      <div style={{marginTop:20}}>
-        <label style={{fontSize:13,fontWeight:700,color:'#1F3864',marginBottom:8,display:'block'}}>
-          既存の管理台帳（.xlsx）―任意
-        </label>
-        <div className="notice notice-info" style={{marginBottom:8}}>
-          アップロードすると、既存シートの末尾に追記します。初回は不要です。
-        </div>
-        <div className="upload-area" onClick={()=>xlsRef.current.click()}>
-          <input ref={xlsRef} type="file" accept=".xlsx,.xls"
-            onChange={e=>{if(e.target.files[0])setXlsxFile(e.target.files[0])}}/>
-          <div className="upload-icon">📊</div>
-          <div style={{fontSize:13,color:'#444'}}>既存Excelをアップロード（任意）</div>
-        </div>
-        {xlsxFile && <div className="file-chip">📊 {xlsxFile.name}
-          <button onClick={()=>setXlsxFile(null)}>✕</button></div>}
-      </div>
-
-      <div style={{marginTop:16}}>
-        <label style={{fontSize:13,fontWeight:700,color:'#1F3864',marginBottom:8,display:'block'}}>
-          または、文字起こしを直接貼り付け
-        </label>
+      {transcript && <div className="file-chip">✅ 読み込み済み（{transcript.length.toLocaleString()}文字）</div>}
+      <div style={{marginTop:10}}>
+        <label style={{fontSize:12,fontWeight:600,color:'#444',marginBottom:4,display:'block'}}>または、文字起こしを直接貼り付け</label>
         <textarea value={transcript} onChange={e=>setTranscript(e.target.value)}
-          placeholder="文字起こしのテキストをここに貼り付けてください..."
-          style={{minHeight:140,fontSize:12}}/>
+          placeholder="文字起こしテキストをここに貼り付け..." style={{minHeight:120,fontSize:12}}/>
       </div>
+
+      <div className="section-divider" style={{marginTop:16}}>📊 Excel管理台帳テンプレート（任意）</div>
+      <div className="notice notice-info">テンプレートをアップロードすると、そのシート構成・カラム構成に合わせて転記します。</div>
+      <div className="upload-area" onClick={()=>xlsTplRef.current.click()}>
+        <input ref={xlsTplRef} type="file" accept=".xlsx" onChange={e=>{if(e.target.files[0])setXlsxTemplateFile(e.target.files[0]);}}/>
+        <div className="upload-icon">📋</div>
+        <div style={{fontSize:13,color:'#444'}}>管理台帳テンプレート（.xlsx）</div>
+        <div className="upload-hint">初回はテンプレート、2回目以降は既存台帳をアップロード</div>
+      </div>
+      {xlsxTemplateFile && <div className="file-chip">📋 テンプレート: {xlsxTemplateFile.name}
+        <button onClick={()=>setXlsxTemplateFile(null)}>✕</button></div>}
+
+      <div style={{marginTop:12}}>
+        <label style={{fontSize:12,fontWeight:600,color:'#444',marginBottom:4,display:'block'}}>既存の管理台帳（追記用・任意）</label>
+        <div className="upload-area" onClick={()=>xlsDatRef.current.click()}>
+          <input ref={xlsDatRef} type="file" accept=".xlsx" onChange={e=>{if(e.target.files[0])setXlsxDataFile(e.target.files[0]);}}/>
+          <div style={{fontSize:13,color:'#444'}}>既存の管理台帳（追記したい場合）</div>
+        </div>
+        {xlsxDataFile && <div className="file-chip">📊 既存台帳: {xlsxDataFile.name}
+          <button onClick={()=>setXlsxDataFile(null)}>✕</button></div>}
+      </div>
+
       <div className="btn-row">
         <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
         <button className="btn btn-primary" disabled={!transcript.trim()} onClick={onNext}>AI解析を開始 →</button>
@@ -687,36 +668,33 @@ function Step2({transcript, setTranscript, xlsxFile, setXlsxFile, onNext, onBack
   );
 }
 
-// Step 3
-function Step3({onAnalyze, onBack, analyzing, logs, error}){
-  return (
+// ── Step 3 ─────────────────────────────────────────────────
+function Step3({onAnalyze,onBack,analyzing,logs,error}){
+  return(
     <div className="card">
       <div className="card-title">🤖 Step 3 ― AI解析</div>
-      {!analyzing && !error && (
+      {!analyzing&&!error&&(
         <div>
-          <div className="notice notice-info">文字起こしをClaude APIで解析します。<br/>
-            決定事項・ToDo・リスク・課題・役員報告・室長報告の抽出と、重要度・優先度の自動判定を行います。</div>
+          <div className="notice notice-info">文字起こしをClaude APIで解析します。決定事項・ToDo・リスク・課題・役員報告・室長報告の抽出と重要度・優先度の自動判定を行います。</div>
           <div className="btn-row" style={{marginTop:20}}>
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
             <button className="btn btn-green" onClick={onAnalyze}>🚀 解析開始</button>
           </div>
         </div>
       )}
-      {analyzing && (
+      {analyzing&&(
         <div className="analyzing-wrap">
           <div className="spinner"/>
           <div style={{fontSize:14,color:'#444'}}>解析中です。しばらくお待ちください...</div>
-          <div className="progress-log">
-            {logs.map((l,i)=><div key={i}>{l}</div>)}
-          </div>
+          <div className="progress-log">{logs.map((l,i)=><div key={i}>{l}</div>)}</div>
         </div>
       )}
-      {error && (
+      {error&&(
         <div>
-          <div className="notice notice-warn">❌ エラーが発生しました: {error}</div>
+          <div className="notice notice-warn">❌ {error}</div>
           <div className="btn-row">
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-            <button className="btn btn-red" onClick={onAnalyze}>再試行</button>
+            <button className="btn btn-primary" onClick={onAnalyze}>再試行</button>
           </div>
         </div>
       )}
@@ -724,32 +702,26 @@ function Step3({onAnalyze, onBack, analyzing, logs, error}){
   );
 }
 
-// Preview components
-function TableEditor({data, setData, cols, sheetColor}){
+// ── TableEditor ────────────────────────────────────────────
+function TableEditor({data,setData,cols}){
   if(!data||data.length===0) return <div style={{color:'#888',fontSize:13,padding:'12px 0'}}>（該当する項目はありませんでした）</div>;
-  const upd = (i,k,v) => setData(p=>p.map((r,ri)=>ri===i?{...r,[k]:v}:r));
-  const del = (i) => setData(p=>p.filter((_,ri)=>ri!==i));
-  const add = () => setData(p=>[...p,{}]);
-  return (
+  const upd=(i,k,v)=>setData(p=>p.map((r,ri)=>ri===i?{...r,[k]:v}:r));
+  const del=(i)=>setData(p=>p.filter((_,ri)=>ri!==i));
+  return(
     <div style={{overflowX:'auto'}}>
       <table className="preview-table">
-        <thead><tr>
-          {cols.map(c=><th key={c.key} style={{minWidth:c.w||80}}>{c.label}</th>)}
-          <th style={{width:40}}>削除</th>
-        </tr></thead>
+        <thead><tr>{cols.map(c=><th key={c.key} style={{minWidth:c.w||80}}>{c.label}</th>)}<th style={{width:36}}>削除</th></tr></thead>
         <tbody>
           {data.map((row,i)=>(
             <tr key={i}>
               {cols.map(c=>(
                 <td key={c.key}>
-                  {c.type==='select' ? (
-                    <select value={row[c.key]||''} onChange={e=>upd(i,c.key,e.target.value)}
-                      style={{width:'100%',fontSize:13}}>
+                  {c.type==='select'?(
+                    <select value={row[c.key]||''} onChange={e=>upd(i,c.key,e.target.value)} style={{width:'100%',minWidth:c.w||70}}>
                       {c.options.map(o=><option key={o} value={o}>{o||'―'}</option>)}
                     </select>
-                  ) : (
-                    <textarea value={row[c.key]||''} onChange={e=>upd(i,c.key,e.target.value)}
-                      style={{minHeight:c.tall?60:36}}/>
+                  ):(
+                    <textarea value={row[c.key]||''} onChange={e=>upd(i,c.key,e.target.value)} style={{minHeight:c.tall?60:32}}/>
                   )}
                 </td>
               ))}
@@ -758,70 +730,52 @@ function TableEditor({data, setData, cols, sheetColor}){
           ))}
         </tbody>
       </table>
-      <button className="btn btn-gray" style={{fontSize:12,padding:'5px 12px'}} onClick={add}>＋ 行追加</button>
+      <button className="btn btn-gray" style={{fontSize:12,padding:'5px 12px',marginTop:6}} onClick={()=>setData(p=>[...p,{}])}>＋ 行追加</button>
     </div>
   );
 }
 
-function MinutesEditor({data, setData}){
+function MinutesEditor({data,setData}){
   if(!data||data.length===0) return <div style={{color:'#888',fontSize:13}}>（議事内容なし）</div>;
-  const upd = (i,k,v) => setData(p=>p.map((r,ri)=>ri===i?{...r,[k]:v}:r));
+  const upd=(i,k,v)=>setData(p=>p.map((r,ri)=>ri===i?{...r,[k]:v}:r));
   return data.map((item,i)=>(
     <div key={i} style={{marginBottom:16,borderBottom:'1px solid #eee',paddingBottom:12}}>
       <label style={{fontSize:12,color:'#1F3864',fontWeight:700}}>議題 {i+1}</label>
-      <input value={item.title||''} onChange={e=>upd(i,'title',e.target.value)}
-        style={{marginBottom:6,fontSize:14,fontWeight:600}}/>
-      <textarea value={item.content||''} onChange={e=>upd(i,'content',e.target.value)}
-        style={{minHeight:100,fontSize:13}}/>
+      <input value={item.title||''} onChange={e=>upd(i,'title',e.target.value)} style={{marginBottom:6,fontSize:14,fontWeight:600}}/>
+      <textarea value={item.content||''} onChange={e=>upd(i,'content',e.target.value)} style={{minHeight:100,fontSize:13}}/>
     </div>
   ));
 }
 
-// Step 4
-function Step4({result, setResult, onNext, onBack}){
-  const [tab, setTab] = useState('minutes');
-  const upd = (key,val) => setResult(p=>({...p,[key]:val}));
-
-  const IP_OPTS = ['','緊急','高','中','低'];
-  const ipCols = [
-    {key:'importance',label:'重要度',type:'select',options:IP_OPTS,w:70},
-    {key:'priority',  label:'優先度',type:'select',options:IP_OPTS,w:70},
+// ── Step 4 ─────────────────────────────────────────────────
+function Step4({result,setResult,onNext,onBack}){
+  const [tab,setTab]=useState('minutes');
+  const upd=(key,val)=>setResult(p=>({...p,[key]:val}));
+  const IP=[{key:'importance',label:'重要度',type:'select',options:IP_OPTS,w:70},{key:'priority',label:'優先度',type:'select',options:IP_OPTS,w:70}];
+  const tabs=[
+    {id:'minutes',label:`📝 議事内容`},
+    {id:'decisions',label:`✅ 決定事項 (${result.decisions?.length||0})`},
+    {id:'todos',label:`📌 ToDo (${result.todos?.length||0})`},
+    {id:'risks',label:`⚠️ リスク (${result.risks?.length||0})`},
+    {id:'issues',label:`🔧 課題 (${result.issues?.length||0})`},
+    {id:'exec',label:`👔 役員報告 (${result.exec_report?.length||0})`},
+    {id:'mgr',label:`📋 室長報告 (${result.manager_report?.length||0})`},
+    {id:'pending',label:`⏸ 保留 (${result.pending?.length||0})`},
   ];
-
-  const tabs = [
-    {id:'minutes',    label:'📝 議事内容'},
-    {id:'decisions',  label:`✅ 決定事項 (${result.decisions?.length||0})`},
-    {id:'todos',      label:`📌 Next Action (${result.todos?.length||0})`},
-    {id:'risks',      label:`⚠️ リスク (${result.risks?.length||0})`},
-    {id:'issues',     label:`🔧 課題 (${result.issues?.length||0})`},
-    {id:'exec',       label:`👔 役員報告 (${result.exec_report?.length||0})`},
-    {id:'mgr',        label:`📋 室長報告 (${result.manager_report?.length||0})`},
-    {id:'pending',    label:`⏸ 保留 (${result.pending?.length||0})`},
-  ];
-
-  return (
+  return(
     <div className="card">
       <div className="card-title">📄 Step 4 ― プレビュー・編集</div>
-      <div className="notice notice-info" style={{marginBottom:12}}>
-        各タブで内容を確認・編集できます。重要度・優先度はAIが自動判定しましたが、必要に応じて修正してください。
-      </div>
+      <div className="notice notice-info" style={{marginBottom:12}}>各タブで内容を確認・編集できます。重要度・優先度はAIが自動判定しましたが、必要に応じて修正してください。</div>
       <div className="tabs">{tabs.map(t=><div key={t.id} className={`tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>{t.label}</div>)}</div>
       <div className="tab-content">
-        {tab==='minutes' && <MinutesEditor data={result.minutes_by_agenda} setData={v=>upd('minutes_by_agenda',v)}/>}
-        {tab==='decisions' && <TableEditor data={result.decisions} setData={v=>upd('decisions',v)}
-          cols={[{key:'content',label:'決定内容',w:200,tall:true},...ipCols,{key:'decided_by',label:'決定者',w:80},{key:'scope',label:'影響範囲',w:100}]}/>}
-        {tab==='todos' && <TableEditor data={result.todos} setData={v=>upd('todos',v)}
-          cols={[{key:'content',label:'アクション内容',w:200,tall:true},...ipCols,{key:'assignee',label:'担当者',w:80},{key:'due',label:'期日',w:90}]}/>}
-        {tab==='risks' && <TableEditor data={result.risks} setData={v=>upd('risks',v)}
-          cols={[{key:'content',label:'リスク内容',w:200,tall:true},...ipCols,{key:'impact',label:'影響度',w:70},{key:'owner',label:'担当者',w:80},{key:'response',label:'対応方針',w:150,tall:true}]}/>}
-        {tab==='issues' && <TableEditor data={result.issues} setData={v=>upd('issues',v)}
-          cols={[{key:'content',label:'課題内容',w:200,tall:true},...ipCols,{key:'owner',label:'担当者',w:80},{key:'due',label:'期日',w:90},{key:'resolution',label:'解決策',w:150,tall:true}]}/>}
-        {tab==='exec' && <TableEditor data={result.exec_report} setData={v=>upd('exec_report',v)}
-          cols={[{key:'content',label:'報告内容',w:200,tall:true},...ipCols,{key:'decision_needed',label:'判断要否',type:'select',options:['','要','否'],w:70},{key:'recipient',label:'報告先',w:80},{key:'background',label:'背景',w:150,tall:true},{key:'deadline',label:'期限',w:90}]}/>}
-        {tab==='mgr' && <TableEditor data={result.manager_report} setData={v=>upd('manager_report',v)}
-          cols={[{key:'content',label:'報告内容',w:200,tall:true},...ipCols,{key:'action_needed',label:'対応要否',type:'select',options:['','要','否'],w:70},{key:'recipient',label:'室長名',w:80},{key:'background',label:'背景',w:150,tall:true},{key:'deadline',label:'期限',w:90}]}/>}
-        {tab==='pending' && <TableEditor data={result.pending} setData={v=>upd('pending',v)}
-          cols={[{key:'content',label:'保留内容',w:200,tall:true},{key:'reason',label:'理由',w:150},{key:'next_action',label:'次回の扱い',w:120}]}/>}
+        {tab==='minutes'&&<MinutesEditor data={result.minutes_by_agenda} setData={v=>upd('minutes_by_agenda',v)}/>}
+        {tab==='decisions'&&<TableEditor data={result.decisions} setData={v=>upd('decisions',v)} cols={[{key:'content',label:'決定内容',w:200,tall:true},...IP,{key:'decided_by',label:'決定者',w:80},{key:'scope',label:'影響範囲',w:100}]}/>}
+        {tab==='todos'&&<TableEditor data={result.todos} setData={v=>upd('todos',v)} cols={[{key:'content',label:'アクション内容',w:200,tall:true},...IP,{key:'assignee',label:'担当者',w:80},{key:'due',label:'期日',w:90}]}/>}
+        {tab==='risks'&&<TableEditor data={result.risks} setData={v=>upd('risks',v)} cols={[{key:'content',label:'リスク内容',w:200,tall:true},...IP,{key:'impact',label:'影響度',w:70},{key:'owner',label:'担当者',w:80},{key:'response',label:'対応方針',w:150,tall:true}]}/>}
+        {tab==='issues'&&<TableEditor data={result.issues} setData={v=>upd('issues',v)} cols={[{key:'content',label:'課題内容',w:200,tall:true},...IP,{key:'owner',label:'担当者',w:80},{key:'due',label:'期日',w:90},{key:'resolution',label:'解決策',w:150,tall:true}]}/>}
+        {tab==='exec'&&<TableEditor data={result.exec_report} setData={v=>upd('exec_report',v)} cols={[{key:'content',label:'報告内容',w:200,tall:true},...IP,{key:'decision_needed',label:'判断要否',type:'select',options:['','要','否'],w:70},{key:'recipient',label:'報告先',w:80},{key:'background',label:'背景',w:150,tall:true}]}/>}
+        {tab==='mgr'&&<TableEditor data={result.manager_report} setData={v=>upd('manager_report',v)} cols={[{key:'content',label:'報告内容',w:200,tall:true},...IP,{key:'action_needed',label:'対応要否',type:'select',options:['','要','否'],w:70},{key:'recipient',label:'室長名',w:80},{key:'background',label:'背景',w:150,tall:true}]}/>}
+        {tab==='pending'&&<TableEditor data={result.pending} setData={v=>upd('pending',v)} cols={[{key:'content',label:'保留内容',w:200,tall:true},{key:'reason',label:'理由',w:150},{key:'next_action',label:'次回の扱い',w:120}]}/>}
       </div>
       <div className="btn-row">
         <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
@@ -831,60 +785,38 @@ function Step4({result, setResult, onNext, onBack}){
   );
 }
 
-// Step 5
-function Step5({basicInfo, result, xlsxFile, onBack, docVersion, setDocVersion}){
-  const [downloading, setDownloading] = useState('');
-
-  const dlWord = async () => {
+// ── Step 5 ─────────────────────────────────────────────────
+function Step5({basicInfo,result,xlsxTemplateFile,xlsxDataFile,onBack,docVersion,setDocVersion}){
+  const [downloading,setDownloading]=useState('');
+  const dlWord=async()=>{
     setDownloading('word');
-    try {
-      const blob = await generateDocx(basicInfo, result);
-      const fname = makeFilename(basicInfo.meetingName, basicInfo.date.replace(/-/g,'/'), 'docx', docVersion);
-      downloadBlob(blob, fname);
-      setDocVersion(v=>v+1);
-    } catch(e){ alert('Word生成エラー: '+e.message); }
+    try{const blob=await generateDocx(basicInfo,result);downloadBlob(blob,makeDocxFilename(basicInfo.meetingName,basicInfo.date,docVersion));setDocVersion(v=>v+1);}
+    catch(e){alert('Word生成エラー: '+e.message);}
     setDownloading('');
   };
-
-  const dlExcel = async () => {
+  const dlExcel=async()=>{
     setDownloading('excel');
-    try {
-      let existingWb = null;
-      if(xlsxFile) {
-        const ab = await xlsxFile.arrayBuffer();
-        existingWb = XLSX.read(ab, {type:'array'});
-      }
-      const wb = generateXlsx(basicInfo, result, existingWb);
-      const wbOut = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-      const blob = new Blob([wbOut],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-      const d = basicInfo.date.replace(/-/g,'');
-      const ts = new Date().toTimeString().slice(0,5).replace(':','');
-      downloadBlob(blob, `会議管理台帳_${d}_${ts}.xlsx`);
-    } catch(e){ alert('Excel生成エラー: '+e.message); }
+    try{
+      const wb=await generateXlsx(basicInfo,result,xlsxTemplateFile,xlsxDataFile);
+      const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+      const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      downloadBlob(blob,makeXlsxFilename(basicInfo.date));
+    }catch(e){alert('Excel生成エラー: '+e.message);}
     setDownloading('');
   };
-
-  const dlBoth = async () => {
-    await dlWord();
-    await dlExcel();
-  };
-
-  const stats = [
-    ['決定事項', result.decisions?.length||0,'#2E75B6'],
-    ['Next Action', result.todos?.length||0,'#1F7A4D'],
-    ['リスク', result.risks?.length||0,'#843C0C'],
-    ['課題', result.issues?.length||0,'#7030A0'],
-    ['役員報告', result.exec_report?.length||0,'#C55A11'],
-    ['室長報告', result.manager_report?.length||0,'#375623'],
+  const dlBoth=async()=>{await dlWord();await dlExcel();};
+  const stats=[
+    ['決定事項',result.decisions?.length||0,'#2E75B6'],
+    ['ToDo',result.todos?.length||0,'#1F7A4D'],
+    ['リスク',result.risks?.length||0,'#843C0C'],
+    ['課題',result.issues?.length||0,'#7030A0'],
+    ['役員報告',result.exec_report?.length||0,'#C55A11'],
+    ['室長報告',result.manager_report?.length||0,'#375623'],
   ];
-
-  return (
+  return(
     <div className="card">
       <div className="card-title">⬇️ Step 5 ― ダウンロード</div>
-      <div className="notice notice-ok" style={{marginBottom:16}}>
-        解析完了！ファイルはダウンロードフォルダに保存されます（既存ファイルは上書きされません）。
-      </div>
-
+      <div className="notice notice-ok" style={{marginBottom:16}}>解析完了！ファイルはダウンロードフォルダに保存されます（既存ファイルは上書きされません）。</div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:20}}>
         {stats.map(([label,count,color])=>(
           <div key={label} style={{textAlign:'center',background:'#f8fafc',borderRadius:8,padding:'10px 4px',border:`2px solid ${color}22`}}>
@@ -893,34 +825,25 @@ function Step5({basicInfo, result, xlsxFile, onBack, docVersion, setDocVersion})
           </div>
         ))}
       </div>
-
       <div className="dl-card">
         <div className="dl-info">
           <div className="dl-name">📄 議事録 .docx</div>
-          <div className="dl-desc">現行フォーマット準拠。役員報告・室長報告は改ページで分離。</div>
+          <div className="dl-desc">テンプレート準拠。Meiryo UI / Calibri フォント。室長・役員報告は改ページ分離。</div>
         </div>
-        <button className="btn btn-blue" onClick={dlWord} disabled={!!downloading}>
-          {downloading==='word'?'生成中...':'⬇️ Word'}
-        </button>
+        <button className="btn btn-blue" onClick={dlWord} disabled={!!downloading}>{downloading==='word'?'生成中...':'⬇️ Word'}</button>
       </div>
-
       <div className="dl-card">
         <div className="dl-info">
           <div className="dl-name">📊 管理台帳 .xlsx</div>
-          <div className="dl-desc">6シート＋INDEX。{xlsxFile?'既存ファイルに追記します。':'新規作成します。'}</div>
+          <div className="dl-desc">{xlsxDataFile?'既存台帳に追記します。':xlsxTemplateFile?'テンプレートに転記します。':'新規作成します。'}To-Doシート対応。</div>
         </div>
-        <button className="btn btn-green" onClick={dlExcel} disabled={!!downloading}>
-          {downloading==='excel'?'生成中...':'⬇️ Excel'}
-        </button>
+        <button className="btn btn-green" onClick={dlExcel} disabled={!!downloading}>{downloading==='excel'?'生成中...':'⬇️ Excel'}</button>
       </div>
-
       <div style={{marginTop:12}}>
-        <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}}
-          onClick={dlBoth} disabled={!!downloading}>
+        <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={dlBoth} disabled={!!downloading}>
           {downloading?'生成中...':'⬇️ Word + Excel を両方ダウンロード'}
         </button>
       </div>
-
       <div className="btn-row" style={{marginTop:20}}>
         <button className="btn btn-gray" onClick={onBack}>← 編集に戻る</button>
       </div>
@@ -930,47 +853,44 @@ function Step5({basicInfo, result, xlsxFile, onBack, docVersion, setDocVersion})
 
 // ── Main App ──────────────────────────────────────────────
 function App(){
-  const [step, setStep] = useState(1);
-  const [maxReached, setMaxReached] = useState(1);
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  const [apiKey, setApiKey] = useState(()=>localStorage.getItem('claude_api_key')||'');
-
-  const [basicInfo, setBasicInfo] = useState({
-    meetingName:'', meetingNo:'', date:'', startTime:'10:00', endTime:'11:00',
-    location:'オンライン（Teams）', attendees:'', author:'', materials:''
+  const [step,setStep]=useState(1);
+  const [maxReached,setMaxReached]=useState(1);
+  const [showKeyModal,setShowKeyModal]=useState(false);
+  const [apiKey,setApiKey]=useState(()=>localStorage.getItem('claude_api_key')||'');
+  const [basicInfo,setBasicInfo]=useState({
+    meetingName:'', meetingNo:'', date:todayStr(),
+    startTime:'10:00', endTime:'11:00',
+    location:'KE（本社）応接室x、オンライン（Teams）',
+    author:'安田 真和',
+    attendeesKE:'', attendeesIBM:'', attendeesPwC:'',
+    materials:''
   });
-  const [transcript, setTranscript] = useState('');
-  const [xlsxFile, setXlsxFile] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [logs, setLogs] = useState([]);
-  const [error, setError] = useState('');
-  const [result, setResult] = useState(null);
-  const [docVersion, setDocVersion] = useState(1);
+  const [transcript,setTranscript]=useState('');
+  const [xlsxTemplateFile,setXlsxTemplateFile]=useState(null);
+  const [xlsxDataFile,setXlsxDataFile]=useState(null);
+  const [analyzing,setAnalyzing]=useState(false);
+  const [logs,setLogs]=useState([]);
+  const [error,setError]=useState('');
+  const [result,setResult]=useState(null);
+  const [docVersion,setDocVersion]=useState(1);
 
-  const saveApiKey = (key) => {
-    setApiKey(key);
-    localStorage.setItem('claude_api_key', key);
-    setShowKeyModal(false);
-  };
+  const saveApiKey=(key)=>{setApiKey(key);localStorage.setItem('claude_api_key',key);setShowKeyModal(false);};
+  const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));};
 
-  const goTo = (n) => { setStep(n); setMaxReached(m=>Math.max(m,n)); };
-
-  const handleAnalyze = async () => {
-    if(!apiKey){ setShowKeyModal(true); return; }
-    setAnalyzing(true); setError(''); setLogs([]);
-    const addLog = (l) => setLogs(p=>[...p,l]);
-    try {
-      const r = await callClaude(apiKey, basicInfo, transcript, addLog);
-      addLog('📊 議事録データを整理中...');
+  const handleAnalyze=async()=>{
+    if(!apiKey){setShowKeyModal(true);return;}
+    setAnalyzing(true);setError('');setLogs([]);
+    const addLog=(l)=>setLogs(p=>[...p,l]);
+    try{
+      const r=await callClaude(apiKey,basicInfo,transcript,addLog);
+      addLog('📊 データを整理中...');
       setResult({...EMPTY,...r});
       goTo(4);
-    } catch(e) {
-      setError(e.message);
-    }
+    }catch(e){setError(e.message);}
     setAnalyzing(false);
   };
 
-  return (
+  return(
     <div className="app-wrap">
       <div className="app-header">
         <div>
@@ -981,27 +901,23 @@ function App(){
           {apiKey?'🔑 APIキー設定済':'🔑 APIキー設定'}
         </button>
       </div>
-
       <StepIndicator step={step} setStep={setStep} maxReached={maxReached}/>
-
-      {step===1 && <Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}/>}
-      {step===2 && <Step2 transcript={transcript} setTranscript={setTranscript}
-        xlsxFile={xlsxFile} setXlsxFile={setXlsxFile}
+      {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}/>}
+      {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
+        xlsxTemplateFile={xlsxTemplateFile} setXlsxTemplateFile={setXlsxTemplateFile}
+        xlsxDataFile={xlsxDataFile} setXlsxDataFile={setXlsxDataFile}
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
-      {step===3 && <Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)}
-        analyzing={analyzing} logs={logs} error={error}/>}
-      {step===4 && result && <Step4 result={result} setResult={setResult}
-        onNext={()=>goTo(5)} onBack={()=>goTo(3)}/>}
-      {step===5 && result && <Step5 basicInfo={basicInfo} result={result}
-        xlsxFile={xlsxFile} onBack={()=>goTo(4)}
-        docVersion={docVersion} setDocVersion={setDocVersion}/>}
-
-      {showKeyModal && <ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)}/>}
+      {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
+      {step===4&&result&&<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)}/>}
+      {step===5&&result&&<Step5 basicInfo={basicInfo} result={result}
+        xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
+        onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>}
+      {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)}/>}
     </div>
   );
 }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root=ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
 </script>
 </body>
