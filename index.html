@@ -391,9 +391,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     ws.getRow(2).height = 32;
 
     // Row3: 例データ行（薄く）
-    const exampleVals = { 'No.':'例','会議名':'第46回 全体PMO定例','会議日':'2026/02/02','最終
-ステータス':'未着手','共有
-済未':'未','行種別':'item' };
+    const exampleVals = { 'No.':'例','会議名':'第46回 全体PMO定例','会議日':'2026/02/02','最終\nステータス':'未着手','共有\n済未':'未','行種別':'item' };
     allCols.forEach((col, i) => {
       const cell = ws.getCell(3, i + 1);
       cell.value = exampleVals[col.key] || '';
@@ -408,8 +406,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     let maxNo = 0;
     existingData.forEach((rowData, idx) => {
       const isAlt = idx % 2 === 1;
-      const isComplete = rowData['最終
-ステータス'] === '完了';
+      const isComplete = rowData['最終\nステータス'] === '完了';
       // 行高さ：最長セルの文字数から推定（列幅40文字想定、1行約15px）
       const maxLen = Math.max(...Object.values(rowData).map(v => String(v||'').length));
       const estLines = Math.max(2, Math.ceil(maxLen / 35));
@@ -475,17 +472,11 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
           {key:'最新進捗内容', header:'最新進捗内容', width:38}] };
   const SEC_SHARE   = { label:'📤 共有管理', bgColor:'5B2C8D',
     cols:[{key:'共有先',    header:'共有先',    width:18},
-          {key:'共有
-済未', header:'共有
-済未', width:9, type:'share', center:true}] };
+          {key:'共有\n済未', header:'共有\n済未', width:9, type:'share', center:true}] };
   const SEC_SIM     = { label:'🔍 類似判定', bgColor:'8B6914',
-    cols:[{key:'類似No.
-・判定', header:'類似No.
-・判定', width:12, center:true}] };
+    cols:[{key:'類似No.\n・判定', header:'類似No.\n・判定', width:12, center:true}] };
   const SEC_STATUS  = { label:'最終ステータス', bgColor:'1F3864',
-    cols:[{key:'最終
-ステータス', header:'最終
-ステータス', width:13, type:'status', center:true}] };
+    cols:[{key:'最終\nステータス', header:'最終\nステータス', width:13, type:'status', center:true}] };
   const SEC_ROWTYPE = { label:'', bgColor:'404040',
     cols:[{key:'行種別', header:'行種別', width:8, center:true}] };
 
@@ -494,20 +485,14 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     'No.': i+1, '会議名':mtg, '会議日':dt, '関連議題':'', '決定内容':d.content||'',
     '決定者':d.decided_by||'', '影響範囲':d.scope||'', '重要度':d.importance||'',
     '優先度':d.priority||'', '最新進捗日':'', '最新進捗内容':'',
-    '共有先':'', '共有
-済未':'未', '類似No.
-・判定':'', '最終
-ステータス':'未着手', '行種別':'item'
+    '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
 
   const baseTodos = result.todos.map((t,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, 'アクション内容':t.content||'',
     '担当者':t.assignee||'', '期日':t.due||'', '重要度':t.importance||'',
     '優先度':t.priority||'', '最新進捗日':'', '最新進捗内容':'',
-    '共有先':'', '共有
-済未':'未', '類似No.
-・判定':'', '最終
-ステータス':'未着手', '行種別':'item'
+    '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
 
   const baseRisks = result.risks.map((r,i) => ({
@@ -515,40 +500,28 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     'カテゴリ':r.category||'', '影響度':r.impact||'', '発生確率':r.probability||'',
     '対応方針':r.response||'', '担当者':r.owner||'', '重要度':r.importance||'',
     '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
-    '共有先':'', '共有
-済未':'未', '類似No.
-・判定':'', '最終
-ステータス':'未着手', '行種別':'item'
+    '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
 
   const baseIssues = result.issues.map((r,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, '課題内容':r.content||'',
     'カテゴリ':r.category||'', '担当者':r.owner||'', '解決策・対応内容':r.resolution||'',
     '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
-    '共有先':'', '共有
-済未':'未', '類似No.
-・判定':'', '最終
-ステータス':'未着手', '行種別':'item'
+    '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
 
   const baseExec = result.exec_report.map((r,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
     '判断要否':r.decision_needed||'', '背景・経緯':r.background||'', '報告先役員':r.recipient||'',
     '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
-    '共有先':'', '共有
-済未':'未', '類似No.
-・判定':'', '最終
-ステータス':'未着手', '行種別':'item'
+    '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
 
   const baseMgr = result.manager_report.map((r,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
     '対応要否':r.action_needed||'', '背景・経緯':r.background||'', '担当室長':r.recipient||'',
     '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
-    '共有先':'', '共有
-済未':'未', '類似No.
-・判定':'', '最終
-ステータス':'未着手', '行種別':'item'
+    '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
 
   // ── INDEX シート ──────────────────────────────────────────
