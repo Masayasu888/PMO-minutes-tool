@@ -332,7 +332,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
   if (xlsxTemplateFile || xlsxDataFile) {
     const targetFile = xlsxDataFile || xlsxTemplateFile;
     const ab = await targetFile.arrayBuffer();
-    wb = XLSX.read(ab, {type:'array'});
+    wb = XLSX.read(ab, {type:'array', cellStyles:true});
   } else {
     wb = XLSX.utils.book_new();
   }
@@ -376,9 +376,10 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     }
     // item行の最後を探す（例データ行をスキップするため"例"でない行）
     let nextDataRow = headerRow + 1;
+    let styleSourceRow = -1; // 例行のスタイルをコピー元にする
     for (let r = headerRow + 1; r <= range.e.r; r++) {
       const c0 = ws[XLSX.utils.encode_cell({r, c: 0})];
-      if (c0 && String(c0.v||'') === '例') continue; // 例データ行はスキップ
+      if (c0 && String(c0.v||'') === '例') { styleSourceRow = r; continue; }
       const rowType = ws[XLSX.utils.encode_cell({r, c: colMap['行種別']||0})];
       if (!rowType || !rowType.v) { nextDataRow = r; break; }
       nextDataRow = r + 1;
@@ -396,11 +397,17 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       row['行種別'] = 'item';
 
       Object.entries(colMap).forEach(([colName, colIdx]) => {
-        // 正規化したキーで検索
         const normalizedColName = colName.replace(/\n/g,'');
         const val = row[normalizedColName] !== undefined ? row[normalizedColName] : (row[colName] !== undefined ? row[colName] : '');
         const ref = XLSX.utils.encode_cell({r: nextDataRow, c: colIdx});
-        ws[ref] = {v: String(val||''), t:'s'};
+        // スタイルを例行からコピー
+        let cellStyle = {};
+        if (styleSourceRow >= 0) {
+          const srcRef = XLSX.utils.encode_cell({r: styleSourceRow, c: colIdx});
+          const srcCell = ws[srcRef];
+          if (srcCell && srcCell.s) cellStyle = srcCell.s;
+        }
+        ws[ref] = {v: String(val||''), t:'s', s: cellStyle};
       });
       nextDataRow++;
     });
@@ -809,7 +816,7 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
     setDownloading('excel');
     try{
       const wb=await generateXlsx(basicInfo,result,xlsxTemplateFile,xlsxDataFile);
-      const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+      const out=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
       const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
       downloadBlob(blob,makeXlsxFilename(basicInfo.date));
     }catch(e){alert('Excel生成エラー: '+e.message);}
