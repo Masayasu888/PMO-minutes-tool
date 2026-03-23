@@ -104,6 +104,9 @@ const STEPS = [
 const IP_OPTS = ['','緊急','高','中','低'];
 const EMPTY = {agenda_items:[],minutes_by_agenda:[],decisions:[],todos:[],pending:[],risks:[],issues:[],exec_report:[],manager_report:[]};
 
+// ── XML escape ───────────────────────────────────────────
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
 function generateDocx(basicInfo, result){
   const W = 9947; // テンプレート実測値
   const FONT = `<w:rFonts w:ascii="Meiryo UI" w:hAnsi="Meiryo UI" w:cs="Meiryo UI" w:eastAsia="Meiryo UI"/>`;
