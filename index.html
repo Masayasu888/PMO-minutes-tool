@@ -104,6 +104,19 @@ textarea{resize:vertical;min-height:70px}
 .suggest-item:hover{background:#EBF3FB;color:#1F3864}
 .add-org-btn{background:none;border:1.5px dashed #2E75B6;color:#2E75B6;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;width:100%;margin-top:4px}
 .add-org-btn:hover{background:#EBF3FB}
+
+/* ── 配布資料リンク入力 ──────────────────────────────────── */
+.material-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1.5px solid #d0d8e4;border-radius:6px;margin-bottom:6px;background:#fafbfc;transition:.15s}
+.material-item:focus-within{border-color:#2E75B6;background:#fff}
+.material-name{flex:1;border:none;background:transparent;font-size:13px;font-family:inherit;outline:none;min-width:0}
+.material-url{flex:1;border:none;background:transparent;font-size:12px;font-family:inherit;outline:none;color:#2E75B6;min-width:0}
+.material-url::placeholder{color:#a0aec0}
+.material-divider{color:#d0d8e4;user-select:none}
+.material-del{background:none;border:none;cursor:pointer;color:#ccc;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0}
+.material-del:hover{color:#e53e3e}
+.material-add{background:none;border:1.5px dashed #2E75B6;color:#2E75B6;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;width:100%;margin-top:2px}
+.material-add:hover{background:#EBF3FB}
+.material-link-icon{font-size:12px;color:#a0aec0;flex-shrink:0}
 </style>
 </head>
 <body>
@@ -695,7 +708,7 @@ async function callClaude(apiKey, basicInfo, transcript, onLog){
 場所: ${basicInfo.location}
 出席者: ${attendees}
 作成者: ${basicInfo.author}
-配布資料: ${basicInfo.materials}
+配布資料: ${Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name).map(m=>m.url?`${m.name}（${m.url}）`:m.name).join('、'):basicInfo.materials||''}
 
 【文字起こし】
 ${transcript}
@@ -844,6 +857,48 @@ function saveAttendeeHistory(org, names){
 }
 
 // ── タグ入力コンポーネント ─────────────────────────────────
+
+// ── 配布資料リンク入力コンポーネント ──────────────────────
+// materials: [{name:'', url:''}]
+function MaterialsInput({ value, onChange }){
+  const [items, setItems] = useState(()=>{
+    if(value && Array.isArray(value) && value.length>0) return value;
+    return [{name:'', url:''}];
+  });
+
+  useEffect(()=>{ onChange(items); }, [items]);
+
+  const upd = (i, key, val) => {
+    const next = items.map((it,idx)=>idx===i?{...it,[key]:val}:it);
+    setItems(next);
+  };
+  const add = () => setItems([...items, {name:'', url:''}]);
+  const del = (i) => {
+    const next = items.filter((_,idx)=>idx!==i);
+    setItems(next.length ? next : [{name:'', url:''}]);
+  };
+
+  return(
+    <div>
+      {items.map((item,i)=>(
+        <div key={i} className="material-item">
+          <span className="material-link-icon">📄</span>
+          <input className="material-name" value={item.name}
+            onChange={e=>upd(i,'name',e.target.value)}
+            placeholder="資料名（例: アジェンダ_v1.0）"/>
+          <span className="material-divider">｜</span>
+          <span className="material-link-icon" style={{color:'#2E75B6'}}>🔗</span>
+          <input className="material-url" value={item.url}
+            onChange={e=>upd(i,'url',e.target.value)}
+            placeholder="URL（任意）"/>
+          <button className="material-del" onClick={()=>del(i)}>🗑</button>
+        </div>
+      ))}
+      <button className="material-add" onClick={add}>＋ 資料を追加</button>
+    </div>
+  );
+}
+
 // ── 名前履歴編集モーダル ──────────────────────────────────
 function AttendeeHistoryModal({ orgKey, onClose }){
   const [hist, setHist] = useState(()=>{
@@ -1095,9 +1150,9 @@ function Step1({data,setData,onNext}){
       </div>
       <div className="section-divider">出席者</div>
       <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
-      <div className="form-row-1" style={{marginTop:4}}>
-        <label>配布・投影資料</label>
-        <textarea value={data.materials} onChange={e=>upd('materials',e.target.value)} placeholder="資料ファイル名を入力" style={{minHeight:50}}/>
+      <div className="form-row-1" style={{marginTop:8}}>
+        <label style={{marginBottom:6}}>配布・投影資料</label>
+        <MaterialsInput value={data.materials} onChange={v=>upd('materials',v)}/>
       </div>
       <div className="btn-row">
         <button className="btn btn-primary"
@@ -1377,7 +1432,7 @@ function App(){
     location:'KE（本社）応接室x、オンライン（Teams）',
     author:'安田 真和',
     attendees: [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}],
-    materials:''
+    materials:[{name:'',url:''}]
   });
   const [transcript,setTranscript]=useState('');
   const [docxTemplateFile,setDocxTemplateFile]=useState(null);
