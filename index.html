@@ -202,7 +202,7 @@ ${row(454,  cell('議題', 2178,{shade:HDR}) + cell(meetingTitle,3685,{bold:true
 ${row(454,  cell('日時', 2178,{shade:HDR}) + cell(`${date} ${basicInfo.startTime||''}〜${basicInfo.endTime||''}`,3685) + cell('作成日',1673,{shade:HDR}) + cell(date,2411))}
 ${row(454,  cell('場所', 2178,{shade:HDR}) + cell(basicInfo.location||'',3685) + cell('作成者',1673,{shade:HDR}) + cell(basicInfo.author||'',2411))}
 ${row(1021, cell('出席者\n(敬称略) (順不同)',2178,{shade:HDR}) + cell(attendeesCell,7769,{span:3}))}
-${row(1021, cell('【配布資料/投影資料】\n'+(basicInfo.materials||'・'),W,{span:4}))}
+${row(1021, cell('【配布資料/投影資料】\n'+(Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name).map(m=>m.url?'・'+m.name+'（'+m.url+'）':'・'+m.name).join('\n')||'・':'・'),W,{span:4}))}
 ${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4}))}
 ${row(820,  cell('【ToDo】\n'+(result.todos.length?result.todos.map(t=>`★ ${t.content||''}（${t.assignee||''}、${t.due||''}）`).join('\n'):'なし'),W,{span:4}))}
 <w:tr>${cell('【議事内容】　★＝ToDo\n'+minutesContent, W,{span:4})}</w:tr>
@@ -1099,27 +1099,31 @@ function AttendeesInput({ value, onChange }){
   });
   const [newOrg, setNewOrg] = useState('');
   const [showAddOrg, setShowAddOrg] = useState(false);
-  const isFirstRender = React.useRef(true);
 
-  // 初回レンダー時はonChangeを呼ばない（親の値を上書きしない）
+  // 親の value が外から変わったとき（ナビゲーション戻り等）に同期
   useEffect(()=>{
-    if(isFirstRender.current){ isFirstRender.current=false; return; }
-    onChange(orgs);
-  }, [orgs]);
+    if(value && value.length>0) setOrgs(value);
+  }, [JSON.stringify(value)]);
 
   const updateNames = (idx, names) => {
     const next = orgs.map((o,i)=>i===idx?{...o,names}:o);
     setOrgs(next);
+    onChange(next); // 即座に親を更新
   };
   const updateOrgName = (idx, name) => {
     const next = orgs.map((o,i)=>i===idx?{...o,org:name}:o);
     setOrgs(next);
+    onChange(next);
   };
-  const removeOrg = (idx) => setOrgs(orgs.filter((_,i)=>i!==idx));
+  const removeOrg = (idx) => {
+    const next = orgs.filter((_,i)=>i!==idx);
+    setOrgs(next); onChange(next);
+  };
   const addOrg = () => {
     const n = newOrg.trim();
     if(!n) return;
-    setOrgs([...orgs, {org:n, names:[]}]);
+    const next = [...orgs, {org:n, names:[]}];
+    setOrgs(next); onChange(next);
     setNewOrg(''); setShowAddOrg(false);
   };
 
