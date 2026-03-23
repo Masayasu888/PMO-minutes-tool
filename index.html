@@ -370,12 +370,12 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       if (start === end) {
         const cell = ws.getCell(1, start);
         cell.value = sec.label;
-        Object.assign(cell, secStyle(sec.bgColor));
+        applyStyle(cell, secStyle(sec.bgColor));
       } else {
         ws.mergeCells(1, start, 1, end);
         const cell = ws.getCell(1, start);
         cell.value = sec.label;
-        Object.assign(cell, secStyle(sec.bgColor));
+        applyStyle(cell, secStyle(sec.bgColor));
       }
       colIdx += sec.cols.length;
     });
@@ -385,7 +385,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     allCols.forEach((col, i) => {
       const cell = ws.getCell(2, i + 1);
       cell.value = col.header;
-      Object.assign(cell, hdrStyle(col.secBg));
+      applyStyle(cell, hdrStyle(col.secBg));
       ws.getColumn(i + 1).width = col.width;
     });
     ws.getRow(2).height = 32;
@@ -399,7 +399,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       cell.value = exampleVals[col.key] || '';
       const s = dataStyle(false, col.center);
       s.font = { ...s.font, color: { argb: 'FF999999' }, italic: true };
-      Object.assign(cell, s);
+      applyStyle(cell, s);
     });
     ws.getRow(3).height = 30;
 
@@ -410,7 +410,10 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       const isAlt = idx % 2 === 1;
       const isComplete = rowData['最終
 ステータス'] === '完了';
-      ws.getRow(rowNum).height = 60;
+      // 行高さ：最長セルの文字数から推定（列幅40文字想定、1行約15px）
+      const maxLen = Math.max(...Object.values(rowData).map(v => String(v||'').length));
+      const estLines = Math.max(2, Math.ceil(maxLen / 35));
+      ws.getRow(rowNum).height = Math.min(150, estLines * 16 + 8);
 
       allCols.forEach((col, ci) => {
         const cell = ws.getCell(rowNum, ci + 1);
@@ -425,15 +428,15 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
                              left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
           cell.alignment = { horizontal: col.center?'center':'left', vertical:'top', wrapText:true };
         } else if (col.type === 'importance' || col.type === 'priority') {
-          Object.assign(cell, impStyle(val, isAlt));
+          applyStyle(cell, impStyle(val, isAlt));
         } else if (col.type === 'share') {
-          Object.assign(cell, shareStyle(val, isAlt));
+          applyStyle(cell, shareStyle(val, isAlt));
         } else if (col.type === 'yohi') {
-          Object.assign(cell, yohiStyle(val, isAlt));
+          applyStyle(cell, yohiStyle(val, isAlt));
         } else if (col.type === 'status') {
-          Object.assign(cell, statusStyle(val, isAlt));
+          applyStyle(cell, statusStyle(val, isAlt));
         } else {
-          Object.assign(cell, dataStyle(isAlt, col.center || col.key === 'No.'));
+          applyStyle(cell, dataStyle(isAlt, col.center || col.key === 'No.'));
         }
       });
 
@@ -452,6 +455,14 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     if (rtIdx >= 0) ws.getColumn(rtIdx + 1).hidden = true;
 
     return ws;
+  }
+
+  // ExcelJSスタイル適用ヘルパー（Object.assignより確実）
+  function applyStyle(cell, s) {
+    if (s.font)      cell.font      = s.font;
+    if (s.fill)      cell.fill      = s.fill;
+    if (s.border)    cell.border    = s.border;
+    if (s.alignment) cell.alignment = s.alignment;
   }
 
   // ── 共通セクション定義 ────────────────────────────────────
