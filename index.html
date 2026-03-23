@@ -295,6 +295,55 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
   const mtg = basicInfo.meetingName + (basicInfo.meetingNo ? ` 第${basicInfo.meetingNo}回` : '');
   const dt  = basicInfo.date ? basicInfo.date.replace(/-/g,'/') : '';
 
+  // ── 既存ファイルから過去データを読み込む ─────────────────
+  // ExcelJSはブラウザでarrayBufferからの読み込みをサポート
+  let existingSheetData = {}; // {sheetName: [{row data...}, ...]}
+  const srcFile = xlsxDataFile || xlsxTemplateFile;
+  if (srcFile) {
+    try {
+      const ab = await srcFile.arrayBuffer();
+      const wbOld = new ExcelJS.Workbook();
+      await wbOld.xlsx.load(ab);
+      wbOld.eachSheet((ws, sheetId) => {
+        const rows = [];
+        let headerRow = null;
+        let headers = [];
+        ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
+          if (!headerRow) {
+            // ヘッダー行を探す（No.を含む行）
+            const vals = row.values.slice(1); // 1-indexed → 0-indexed
+            if (vals.some(v => String(v||'').includes('No.'))) {
+              headerRow = rowNum;
+              headers = vals.map(v => String(v||'').replace(/
+/g,''));
+            }
+          } else {
+            // データ行（行種別='item'のみ）
+            const vals = row.values.slice(1);
+            const rowObj = {};
+            headers.forEach((h, i) => { rowObj[h] = String(vals[i]||''); });
+            // 例行と空行はスキップ
+            if (rowObj['No.'] && rowObj['No.'] !== '例' && rowObj['行種別'] !== 'progress') {
+              rows.push(rowObj);
+            }
+          }
+        });
+        if (rows.length > 0) existingSheetData[ws.name] = rows;
+      });
+    } catch(e) {
+      console.warn('既存ファイル読み込みエラー:', e);
+    }
+  }
+
+  // 既存データ＋新規データを結合する関数
+  function mergeData(sheetName, newRows) {
+    const existing = existingSheetData[sheetName] || [];
+    // No.を既存の最大値から採番し直す
+    let maxNo = existing.reduce((m, r) => Math.max(m, parseInt(r['No.']||0)), 0);
+    const numbered = newRows.map(r => ({ ...r, 'No.': ++maxNo }));
+    return [...existing, ...numbered];
+  }
+
   // ── スタイル定義 ──────────────────────────────────────────
   const FONT_NAME = 'Meiryo UI';
 
@@ -603,7 +652,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'決定者',   header:'決定者',   width:12},
       {key:'影響範囲', header:'影響範囲', width:18},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
-  ], baseDecisions);
+  ], mergeData('決定事項', baseDecisions));
 
   buildSheet('To-Do', '1F7A4D', [
     { ...SEC_BASIC, label:'基本情報', cols:[
@@ -614,7 +663,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'担当者',        header:'担当者',        width:12},
       {key:'期日',          header:'期日',          width:12, center:true},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
-  ], baseTodos);
+  ], mergeData('To-Do', baseTodos));
 
   buildSheet('リスク', '843C0C', [
     { ...SEC_BASIC, label:'基本情報', cols:[
@@ -628,7 +677,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'対応方針',  header:'対応方針',  width:32},
       {key:'担当者',    header:'担当者',    width:12},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
-  ], baseRisks);
+  ], mergeData('リスク', baseRisks));
 
   buildSheet('課題', '7030A0', [
     { ...SEC_BASIC, label:'基本情報', cols:[
@@ -640,7 +689,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'担当者',       header:'担当者',       width:12},
       {key:'解決策・対応内容', header:'解決策・対応内容', width:30},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
-  ], baseIssues);
+  ], mergeData('課題', baseIssues));
 
   buildSheet('役員報告事項', 'C55A11', [
     { ...SEC_BASIC, label:'基本情報', cols:[
@@ -652,7 +701,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'背景・経緯', header:'背景・経緯', width:34},
       {key:'報告先役員', header:'報告先役員', width:14},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
-  ], baseExec);
+  ], mergeData('役員報告事項', baseExec));
 
   buildSheet('室長報告事項', '375623', [
     { ...SEC_BASIC, label:'基本情報', cols:[
@@ -664,7 +713,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'背景・経緯', header:'背景・経緯', width:34},
       {key:'担当室長',  header:'担当室長',  width:14},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
-  ], baseMgr);
+  ], mergeData('室長報告事項', baseMgr));
 
   // ── バッファに書き出し ─────────────────────────────────────
   const buffer = await wb.xlsx.writeBuffer();
@@ -1045,16 +1094,19 @@ function TagNameInput({ orgKey, tags, setTags }){
 const DEFAULT_ORGS = ['KE','IBM','PwC'];
 
 function AttendeesInput({ value, onChange }){
-  // value: [{org:'KE', names:['宮守','福田']}, ...]
-  // Initialize from basicInfo if empty
   const [orgs, setOrgs] = useState(()=>{
     if(value && value.length>0) return value;
     return DEFAULT_ORGS.map(o=>({org:o, names:[]}));
   });
   const [newOrg, setNewOrg] = useState('');
   const [showAddOrg, setShowAddOrg] = useState(false);
+  const isFirstRender = React.useRef(true);
 
-  useEffect(()=>{ onChange(orgs); }, [orgs]);
+  // 初回レンダー時はonChangeを呼ばない（親の値を上書きしない）
+  useEffect(()=>{
+    if(isFirstRender.current){ isFirstRender.current=false; return; }
+    onChange(orgs);
+  }, [orgs]);
 
   const updateNames = (idx, names) => {
     const next = orgs.map((o,i)=>i===idx?{...o,names}:o);
@@ -1149,6 +1201,9 @@ function Step1({data,setData,onNext}){
           <input value={data.author} onChange={e=>upd('author',e.target.value)}/></div>
       </div>
       <div className="section-divider">出席者</div>
+      <div style={{fontSize:11,color:'#888',marginBottom:6}}>
+        💡 名前を入力して <strong>Enter</strong> で追加。「、」または「,」で区切ると複数名を一括登録できます。
+      </div>
       <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
       <div className="form-row-1" style={{marginTop:8}}>
         <label style={{marginBottom:6}}>配布・投影資料</label>
