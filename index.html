@@ -195,6 +195,7 @@ function generateDocx(basicInfo, result){
     : '（記録なし）';
 
   // ── ヘッダー表（実測: 2178/3685/1673/2411、空Row8は除外）────
+  const materialRels = []; // ハイパーリンク用リレーションシップ
   const headerTableXml = `<w:tbl>
 <w:tblPr><w:tblW w:w="${W}" w:type="dxa"/>${tblBdr}</w:tblPr>
 <w:tblGrid><w:gridCol w:w="2178"/><w:gridCol w:w="3685"/><w:gridCol w:w="1673"/><w:gridCol w:w="2411"/></w:tblGrid>
@@ -202,7 +203,26 @@ ${row(454,  cell('議題', 2178,{shade:HDR}) + cell(meetingTitle,3685,{bold:true
 ${row(454,  cell('日時', 2178,{shade:HDR}) + cell(`${date} ${basicInfo.startTime||''}〜${basicInfo.endTime||''}`,3685) + cell('作成日',1673,{shade:HDR}) + cell(date,2411))}
 ${row(454,  cell('場所', 2178,{shade:HDR}) + cell(basicInfo.location||'',3685) + cell('作成者',1673,{shade:HDR}) + cell(basicInfo.author||'',2411))}
 ${row(1021, cell('出席者\n(敬称略) (順不同)',2178,{shade:HDR}) + cell(attendeesCell,7769,{span:3}))}
-${row(1021, cell('【配布資料/投影資料】\n'+(Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name).map(m=>m.url?'・'+m.name+'（'+m.url+'）':'・'+m.name).join('\n')||'・':'・'),W,{span:4}))}
+${(()=>{
+    const mats=Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name):[];
+    if(!mats.length) return row(1021,cell('【配布資料/投影資料】\\n・',W,{span:4}));
+    const matParas=mats.map(m=>{
+      if(m.url){
+        const rId='rMat'+materialRels.length;
+        materialRels.push({id:rId,url:m.url});
+        return '<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>'
+          +'<w:r><w:rPr>'+FONT+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">・</w:t></w:r>'
+          +'<w:hyperlink r:id="'+rId+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+          +'<w:r><w:rPr>'+FONT+'<w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="2E75B6"/><w:u w:val="single"/></w:rPr>'
+          +'<w:t>'+esc(m.name)+'</w:t></w:r></w:hyperlink></w:p>';
+      }
+      return '<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">・'+esc(m.name)+'</w:t></w:r></w:p>';
+    }).join('');
+    const hdr='<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t>【配布資料/投影資料】</w:t></w:r></w:p>';
+    const bdr='<w:tcBorders><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/></w:tcBorders>';
+    const mar='<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
+    return '<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="'+W+'" w:type="dxa"/><w:gridSpan w:val="4"/>'+bdr+'<w:vAlign w:val="center"/>'+mar+'</w:tcPr>'+hdr+matParas+'</w:tc></w:tr>';
+  })()}
 ${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4}))}
 ${row(820,  cell('【ToDo】\n'+(result.todos.length?result.todos.map(t=>`★ ${t.content||''}（${t.assignee||''}、${t.due||''}）`).join('\n'):'なし'),W,{span:4}))}
 <w:tr>${cell('【議事内容】　★＝ToDo\n'+minutesContent, W,{span:4})}</w:tr>
@@ -286,7 +306,7 @@ ${execXml}
   zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`);
   zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
   zip.file('word/document.xml', docXml);
-  zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+  zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${materialRels.map(r=>`<Relationship Id="${r.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${r.url}" TargetMode="External"/>`).join('')}</Relationships>`);
   zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Meiryo UI" w:hAnsi="Meiryo UI" w:cs="Meiryo UI" w:eastAsia="Meiryo UI"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`);
   return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
@@ -320,7 +340,26 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
             // データ行（行種別='item'のみ）
             const vals = row.values.slice(1);
             const rowObj = {};
-            headers.forEach((h, i) => { rowObj[h] = String(vals[i]||''); });
+            // 日付シリアル値を文字列に変換するヘルパー
+            const toStr = (v) => {
+              if (v === null || v === undefined) return '';
+              if (v instanceof Date) {
+                const y = v.getFullYear();
+                const m = String(v.getMonth()+1).padStart(2,'0');
+                const d = String(v.getDate()).padStart(2,'0');
+                return `${y}/${m}/${d}`;
+              }
+              // Excel日付シリアル値（数値）を変換
+              if (typeof v === 'number' && v > 40000 && v < 60000) {
+                const date = new Date(Math.round((v - 25569) * 86400 * 1000));
+                const y = date.getUTCFullYear();
+                const mo = String(date.getUTCMonth()+1).padStart(2,'0');
+                const d = String(date.getUTCDate()).padStart(2,'0');
+                return `${y}/${mo}/${d}`;
+              }
+              return String(v);
+            };
+            headers.forEach((h, i) => { rowObj[h] = toStr(vals[i]); });
             // 例行と空行はスキップ
             if (rowObj['No.'] && rowObj['No.'] !== '例' && rowObj['行種別'] !== 'progress') {
               rows.push(rowObj);
@@ -1089,41 +1128,31 @@ function TagNameInput({ orgKey, tags, setTags }){
   );
 }
 
-// ── 出席者入力コンポーネント ──────────────────────────────
+// ── 出席者入力コンポーネント（完全Controlled）──────────────
 const DEFAULT_ORGS = ['KE','IBM','PwC'];
 
 function AttendeesInput({ value, onChange }){
-  const [orgs, setOrgs] = useState(()=>{
-    if(value && value.length>0) return value;
-    return DEFAULT_ORGS.map(o=>({org:o, names:[]}));
-  });
+  // 内部stateを持たず、常にvalueを直接使う完全Controlled Component
+  const orgs = (value && value.length > 0)
+    ? value
+    : DEFAULT_ORGS.map(o=>({org:o, names:[]}));
+
   const [newOrg, setNewOrg] = useState('');
   const [showAddOrg, setShowAddOrg] = useState(false);
 
-  // 親の value が外から変わったとき（ナビゲーション戻り等）に同期
-  useEffect(()=>{
-    if(value && value.length>0) setOrgs(value);
-  }, [JSON.stringify(value)]);
-
   const updateNames = (idx, names) => {
-    const next = orgs.map((o,i)=>i===idx?{...o,names}:o);
-    setOrgs(next);
-    onChange(next); // 即座に親を更新
+    onChange(orgs.map((o,i)=>i===idx?{...o,names}:o));
   };
   const updateOrgName = (idx, name) => {
-    const next = orgs.map((o,i)=>i===idx?{...o,org:name}:o);
-    setOrgs(next);
-    onChange(next);
+    onChange(orgs.map((o,i)=>i===idx?{...o,org:name}:o));
   };
   const removeOrg = (idx) => {
-    const next = orgs.filter((_,i)=>i!==idx);
-    setOrgs(next); onChange(next);
+    onChange(orgs.filter((_,i)=>i!==idx));
   };
   const addOrg = () => {
     const n = newOrg.trim();
     if(!n) return;
-    const next = [...orgs, {org:n, names:[]}];
-    setOrgs(next); onChange(next);
+    onChange([...orgs, {org:n, names:[]}]);
     setNewOrg(''); setShowAddOrg(false);
   };
 
