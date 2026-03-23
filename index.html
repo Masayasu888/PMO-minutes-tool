@@ -314,8 +314,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
             const vals = row.values.slice(1); // 1-indexed → 0-indexed
             if (vals.some(v => String(v||'').includes('No.'))) {
               headerRow = rowNum;
-              headers = vals.map(v => String(v||'').replace(/
-/g,''));
+              headers = vals.map(v => String(v||'').replace(/\\n/g,''));
             }
           } else {
             // データ行（行種別='item'のみ）
