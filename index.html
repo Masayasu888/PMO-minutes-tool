@@ -84,6 +84,26 @@ textarea{resize:vertical;min-height:70px}
   .steps{padding:8px}.step-label{display:none}
   .card{padding:16px}.btn{padding:9px 16px;font-size:13px}
 }
+
+/* ── 出席者タグ入力UI ───────────────────────────────────── */
+.attendee-block{border:1.5px solid #d0d8e4;border-radius:8px;padding:10px 12px;margin-bottom:8px;background:#fafbfc}
+.attendee-org-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.attendee-org-label{font-size:12px;font-weight:700;color:#1F3864;min-width:60px;white-space:nowrap}
+.attendee-org-input{flex:1;padding:5px 8px;border:1px solid #d0d8e4;border-radius:5px;font-size:12px;font-family:inherit;outline:none}
+.attendee-org-input:focus{border-color:#2E75B6;background:#fff}
+.attendee-del-btn{background:none;border:none;color:#e53e3e;cursor:pointer;font-size:16px;line-height:1;padding:2px 4px}
+.tag-area{display:flex;flex-wrap:wrap;gap:6px;min-height:28px}
+.tag{display:inline-flex;align-items:center;gap:4px;background:#EBF3FB;border:1px solid #bee3f8;padding:3px 8px;border-radius:14px;font-size:12px;color:#1a4a7a;cursor:default}
+.tag-del{background:none;border:none;color:#888;cursor:pointer;font-size:13px;line-height:1;padding:0 2px}
+.tag-del:hover{color:#e53e3e}
+.name-input-wrap{position:relative;flex:1;min-width:120px}
+.name-input{width:100%;padding:4px 8px;border:1px dashed #a0aec0;border-radius:14px;font-size:12px;font-family:inherit;outline:none;background:transparent}
+.name-input:focus{border-color:#2E75B6;background:#fff;border-style:solid}
+.suggest-list{position:absolute;top:100%;left:0;z-index:100;background:#fff;border:1.5px solid #2E75B6;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.1);min-width:160px;max-height:180px;overflow-y:auto;margin-top:2px}
+.suggest-item{padding:7px 12px;font-size:12px;cursor:pointer;color:#333}
+.suggest-item:hover{background:#EBF3FB;color:#1F3864}
+.add-org-btn{background:none;border:1.5px dashed #2E75B6;color:#2E75B6;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;width:100%;margin-top:4px}
+.add-org-btn:hover{background:#EBF3FB}
 </style>
 </head>
 <body>
@@ -140,11 +160,10 @@ function generateDocx(basicInfo, result){
 
   function row(h, cells){ return `<w:tr><w:trPr><w:trHeight w:val="${h}"/></w:trPr>${cells}</w:tr>`; }
 
-  const attendeesCell = [
-    basicInfo.attendeesKE  ? `【KE】　${basicInfo.attendeesKE}`  : '【KE】',
-    basicInfo.attendeesIBM ? `【IBM】　${basicInfo.attendeesIBM}` : '【IBM】',
-    basicInfo.attendeesPwC ? `【PwC】　${basicInfo.attendeesPwC}` : '【PwC】',
-  ].join('\n');
+  const attendeesCell = (basicInfo.attendees||[]).map(o=>{
+    const names = Array.isArray(o.names) ? o.names.join('、') : (o.names||'');
+    return names ? `【${o.org}】　${names}` : `【${o.org}】`;
+  }).join('\n') || '【KE】\n【IBM】\n【PwC】';
 
   // 決定事項・ToDo・議事内容は全て同一表内（テンプレート通り改ページなし）
   // テンプレートのtblBordersはcolor=auto（自動色）
@@ -173,7 +192,7 @@ ${row(1021, cell('出席者\n(敬称略) (順不同)',2178,{shade:HDR}) + cell(a
 ${row(1021, cell('【配布資料/投影資料】\n'+(basicInfo.materials||'・'),W,{span:4}))}
 ${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4}))}
 ${row(820,  cell('【ToDo】\n'+(result.todos.length?result.todos.map(t=>`★ ${t.content||''}（${t.assignee||''}、${t.due||''}）`).join('\n'):'なし'),W,{span:4}))}
-${row(7938, cell('【議事内容】　★＝ToDo\n'+minutesContent, W,{span:4}))}
+<w:tr>${cell('【議事内容】　★＝ToDo\n'+minutesContent, W,{span:4})}</w:tr>
 </w:tbl>`;
   // ※ テンプレートの空Row8（高さ13608）は出力に含めない → 保留セクションが同ページに続く
 
@@ -664,7 +683,10 @@ function makeXlsxFilename(date){
 // ── Claude API ────────────────────────────────────────────
 async function callClaude(apiKey, basicInfo, transcript, onLog){
   onLog('📡 Claude APIに接続中...');
-  const attendees = `【KE】${basicInfo.attendeesKE||''}\n【IBM】${basicInfo.attendeesIBM||''}\n【PwC】${basicInfo.attendeesPwC||''}`;
+  const attendees = (basicInfo.attendees||[]).map(o=>{
+    const names = Array.isArray(o.names)?o.names.join('、'):(o.names||'');
+    return names?`【${o.org}】　${names}`:`【${o.org}】`;
+  }).join('\n');
   const prompt = `以下の会議情報と文字起こしを分析し、JSON形式で抽出してください。
 
 【基本情報】
@@ -803,6 +825,231 @@ function MeetingMasterModal({onClose}){
   );
 }
 
+
+// ── 出席者履歴管理 ────────────────────────────────────────
+const ATTENDEE_KEY = 'pmo_attendee_history';
+
+function loadAttendeeHistory(){
+  try{ return JSON.parse(localStorage.getItem(ATTENDEE_KEY)||'{}'); }
+  catch(e){ return {}; }
+}
+function saveAttendeeHistory(org, names){
+  const hist = loadAttendeeHistory();
+  if(!hist[org]) hist[org] = [];
+  names.forEach(n => {
+    if(n && !hist[org].includes(n)) hist[org].unshift(n);
+  });
+  hist[org] = hist[org].slice(0, 30); // 最大30件
+  localStorage.setItem(ATTENDEE_KEY, JSON.stringify(hist));
+}
+
+// ── タグ入力コンポーネント ─────────────────────────────────
+// ── 名前履歴編集モーダル ──────────────────────────────────
+function AttendeeHistoryModal({ orgKey, onClose }){
+  const [hist, setHist] = useState(()=>{
+    const h = loadAttendeeHistory();
+    return h[orgKey] ? [...h[orgKey]] : [];
+  });
+  const [editing, setEditing] = useState(null); // {idx, val}
+
+  const save = (newList) => {
+    const all = loadAttendeeHistory();
+    all[orgKey] = newList;
+    localStorage.setItem(ATTENDEE_KEY, JSON.stringify(all));
+    setHist([...newList]);
+  };
+  const del = (i) => save(hist.filter((_,idx)=>idx!==i));
+  const startEdit = (i) => setEditing({idx:i, val:hist[i]});
+  const commitEdit = () => {
+    if(!editing) return;
+    const next = hist.map((n,i)=>i===editing.idx ? editing.val.trim() : n).filter(Boolean);
+    save(next); setEditing(null);
+  };
+  const moveUp = (i) => {
+    if(i===0) return;
+    const next=[...hist]; [next[i-1],next[i]]=[next[i],next[i-1]]; save(next);
+  };
+
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">📝 【{orgKey}】名前履歴の編集</div>
+        <div className="notice notice-info" style={{marginBottom:12}}>
+          登録済みの名前を修正・削除できます。修正後はEnterまたは✓で確定してください。
+        </div>
+        {hist.length===0 && <div style={{color:'#888',fontSize:13,padding:'8px 0'}}>履歴がありません</div>}
+        <div style={{maxHeight:280,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {hist.map((name,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'6px 10px',borderBottom:'1px solid #f0f0f0',gap:6}}>
+              {editing && editing.idx===i ? (
+                <>
+                  <input value={editing.val} onChange={e=>setEditing({...editing,val:e.target.value})}
+                    onKeyDown={e=>{if(e.key==='Enter')commitEdit(); if(e.key==='Escape')setEditing(null);}}
+                    style={{flex:1,padding:'3px 8px',border:'1.5px solid #2E75B6',borderRadius:4,fontSize:13,fontFamily:'inherit',outline:'none'}}
+                    autoFocus/>
+                  <button onClick={commitEdit} style={{background:'#1F7A4D',color:'#fff',border:'none',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12}}>✓</button>
+                  <button onClick={()=>setEditing(null)} style={{background:'#e2e8f0',border:'none',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12}}>✕</button>
+                </>
+              ) : (
+                <>
+                  <span style={{flex:1,fontSize:13}}>{name}</span>
+                  <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'2px 7px',cursor:'pointer',fontSize:11,color:'#555'}}>編集</button>
+                  <button onClick={()=>moveUp(i)} disabled={i===0} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'2px 7px',cursor:'pointer',fontSize:11,color:'#555'}}>↑</button>
+                  <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TagNameInput({ orgKey, tags, setTags }){
+  const [input, setInput] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSug, setShowSug] = useState(false);
+  const [showHistEdit, setShowHistEdit] = useState(false);
+  const inputRef = useRef();
+
+  const getSuggestions = (val) => {
+    const hist = loadAttendeeHistory();
+    const all = hist[orgKey] || [];
+    return all.filter(n => n.includes(val) && !tags.includes(n)).slice(0, 8);
+  };
+
+  const addTag = (name) => {
+    const n = name.trim();
+    if(!n || tags.includes(n)) return;
+    const next = [...tags, n];
+    setTags(next);
+    saveAttendeeHistory(orgKey, [n]);
+    setInput(''); setShowSug(false);
+  };
+
+  const delTag = (i) => setTags(tags.filter((_,idx)=>idx!==i));
+
+  const handleKey = (e) => {
+    if(e.key==='Enter'||e.key==='、'||e.key===','){
+      e.preventDefault(); addTag(input);
+    } else if(e.key==='Backspace' && !input && tags.length){
+      setTags(tags.slice(0,-1));
+    }
+  };
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    // 「、」「,」で自動分割
+    if(v.includes('、')||v.includes(',')){
+      v.split(/[、,]/).forEach(n=>n.trim()&&addTag(n.trim()));
+      return;
+    }
+    setInput(v);
+    setSuggestions(getSuggestions(v));
+    setShowSug(true);
+  };
+
+  return(
+    <div>
+      <div className="tag-area" onClick={()=>inputRef.current?.focus()}>
+        {tags.map((name,i)=>(
+          <span key={i} className="tag">
+            {name}
+            <button className="tag-del" onClick={e=>{e.stopPropagation();delTag(i);}}>✕</button>
+          </span>
+        ))}
+        <div className="name-input-wrap">
+          <input ref={inputRef} className="name-input" value={input}
+            onChange={handleChange} onKeyDown={handleKey}
+            onFocus={()=>{setSuggestions(getSuggestions(input));setShowSug(true);}}
+            onBlur={()=>setTimeout(()=>setShowSug(false),150)}
+            placeholder={tags.length?'名前を追加…':'名前を入力（Enterで追加）'}/>
+          {showSug && suggestions.length>0 && (
+            <div className="suggest-list">
+              {suggestions.map((s,i)=>(
+                <div key={i} className="suggest-item" onMouseDown={()=>addTag(s)}>{s}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <button onClick={()=>setShowHistEdit(true)}
+        style={{background:'none',border:'none',color:'#999',fontSize:11,cursor:'pointer',padding:'2px 0',marginTop:2}}>
+        📋 履歴を編集・修正
+      </button>
+      {showHistEdit && <AttendeeHistoryModal orgKey={orgKey} onClose={()=>setShowHistEdit(false)}/>}
+    </div>
+  );
+}
+
+// ── 出席者入力コンポーネント ──────────────────────────────
+const DEFAULT_ORGS = ['KE','IBM','PwC'];
+
+function AttendeesInput({ value, onChange }){
+  // value: [{org:'KE', names:['宮守','福田']}, ...]
+  // Initialize from basicInfo if empty
+  const [orgs, setOrgs] = useState(()=>{
+    if(value && value.length>0) return value;
+    return DEFAULT_ORGS.map(o=>({org:o, names:[]}));
+  });
+  const [newOrg, setNewOrg] = useState('');
+  const [showAddOrg, setShowAddOrg] = useState(false);
+
+  useEffect(()=>{ onChange(orgs); }, [orgs]);
+
+  const updateNames = (idx, names) => {
+    const next = orgs.map((o,i)=>i===idx?{...o,names}:o);
+    setOrgs(next);
+  };
+  const updateOrgName = (idx, name) => {
+    const next = orgs.map((o,i)=>i===idx?{...o,org:name}:o);
+    setOrgs(next);
+  };
+  const removeOrg = (idx) => setOrgs(orgs.filter((_,i)=>i!==idx));
+  const addOrg = () => {
+    const n = newOrg.trim();
+    if(!n) return;
+    setOrgs([...orgs, {org:n, names:[]}]);
+    setNewOrg(''); setShowAddOrg(false);
+  };
+
+  return(
+    <div>
+      {orgs.map((o,i)=>(
+        <div key={i} className="attendee-block">
+          <div className="attendee-org-row">
+            <span style={{fontSize:11,color:'#888',marginRight:2}}>【</span>
+            <input className="attendee-org-input" value={o.org}
+              onChange={e=>updateOrgName(i,e.target.value)} style={{maxWidth:120}}/>
+            <span style={{fontSize:11,color:'#888',marginLeft:2}}>】</span>
+            {orgs.length>1 && (
+              <button className="attendee-del-btn" onClick={()=>removeOrg(i)} title="この組織を削除">✕</button>
+            )}
+          </div>
+          <TagNameInput orgKey={o.org} tags={o.names} setTags={names=>updateNames(i,names)}/>
+        </div>
+      ))}
+      {showAddOrg ? (
+        <div style={{display:'flex',gap:8,marginTop:4}}>
+          <input value={newOrg} onChange={e=>setNewOrg(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&addOrg()}
+            placeholder="組織名（例: MSOL, Hopes）"
+            style={{flex:1,padding:'7px 10px',border:'1.5px solid #2E75B6',borderRadius:6,fontSize:13,fontFamily:'inherit',outline:'none'}}
+            autoFocus/>
+          <button className="btn btn-blue" style={{padding:'7px 14px',fontSize:12}} onClick={addOrg}>追加</button>
+          <button className="btn btn-gray" style={{padding:'7px 12px',fontSize:12}} onClick={()=>setShowAddOrg(false)}>✕</button>
+        </div>
+      ) : (
+        <button className="add-org-btn" onClick={()=>setShowAddOrg(true)}>＋ 組織を追加</button>
+      )}
+    </div>
+  );
+}
+
 // ── Step 1 ─────────────────────────────────────────────────
 function Step1({data,setData,onNext}){
   const upd=(k,v)=>setData(p=>({...p,[k]:v}));
@@ -846,26 +1093,15 @@ function Step1({data,setData,onNext}){
         <div><label>作成者</label>
           <input value={data.author} onChange={e=>upd('author',e.target.value)}/></div>
       </div>
-      <div className="section-divider">出席者 <span className="req">*</span></div>
-      <div className="form-row-1">
-        <label>【KE】</label>
-        <input value={data.attendeesKE} onChange={e=>upd('attendeesKE',e.target.value)} placeholder="宮守、福田、土田"/>
-      </div>
-      <div className="form-row-1">
-        <label>【IBM】</label>
-        <input value={data.attendeesIBM} onChange={e=>upd('attendeesIBM',e.target.value)} placeholder="山田、鈴木"/>
-      </div>
-      <div className="form-row-1">
-        <label>【PwC】</label>
-        <input value={data.attendeesPwC} onChange={e=>upd('attendeesPwC',e.target.value)} placeholder="佐藤、田中"/>
-      </div>
+      <div className="section-divider">出席者</div>
+      <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
       <div className="form-row-1" style={{marginTop:4}}>
         <label>配布・投影資料</label>
         <textarea value={data.materials} onChange={e=>upd('materials',e.target.value)} placeholder="資料ファイル名を入力" style={{minHeight:50}}/>
       </div>
       <div className="btn-row">
         <button className="btn btn-primary"
-          disabled={!data.meetingName||!data.date||(!data.attendeesKE&&!data.attendeesIBM&&!data.attendeesPwC)}
+          disabled={!data.meetingName||!data.date}
           onClick={onNext}>次へ →</button>
       </div>
     </div>
@@ -1140,7 +1376,7 @@ function App(){
     startTime:'10:00', endTime:'11:00',
     location:'KE（本社）応接室x、オンライン（Teams）',
     author:'安田 真和',
-    attendeesKE:'', attendeesIBM:'', attendeesPwC:'',
+    attendees: [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}],
     materials:''
   });
   const [transcript,setTranscript]=useState('');
@@ -1174,7 +1410,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div className="app-sub">グローバル経営基盤 将来像実現プロジェクト PMO</div>
+
         </div>
         <button className="btn-key" onClick={()=>setShowKeyModal(true)}>
           {apiKey?'🔑 APIキー設定済':'🔑 APIキー設定'}
