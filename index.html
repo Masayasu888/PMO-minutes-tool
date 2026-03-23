@@ -229,6 +229,7 @@ ${row(7938, cell('【議事内容】　★＝ToDo\n'+minutesContent, W,{span:4})
 <w:body>
 <w:p><w:pPr><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr>${FONT}<w:b/><w:bCs/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="${HDR}"/></w:rPr><w:t>${esc(meetingTitle)}　議事録</w:t></w:r></w:p>
 ${headerTableXml}
+${pageBreak()}
 ${secHdr('【保留・継続審議事項】')}
 ${pendingXml}
 ${secHdr('【リスク一覧】')}
@@ -307,15 +308,25 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     }
     // item行の最後を探す（例データ行をスキップするため"例"でない行）
     let nextDataRow = headerRow + 1;
+    let styleSourceRow = -1;
     for (let r = headerRow + 1; r <= range.e.r; r++) {
       const c0 = ws[XLSX.utils.encode_cell({r, c: 0})];
-      if (c0 && String(c0.v||'') === '例') continue; // 例データ行はスキップ
+      if (c0 && String(c0.v||'') === '例') { styleSourceRow = r; continue; }
       const rowType = ws[XLSX.utils.encode_cell({r, c: colMap['行種別']||0})];
       if (!rowType || !rowType.v) { nextDataRow = r; break; }
       nextDataRow = r + 1;
     }
 
-    // 新しい行を追記（値のみ書き込み・書式は一切変更しない）
+    // 例行のスタイルをキャッシュ
+    const styleCache = {};
+    if (styleSourceRow >= 0) {
+      Object.entries(colMap).forEach(([colName, colIdx]) => {
+        const srcRef = XLSX.utils.encode_cell({r: styleSourceRow, c: colIdx});
+        const srcCell = ws[srcRef];
+        if (srcCell && srcCell.s) styleCache[colIdx] = JSON.parse(JSON.stringify(srcCell.s));
+      });
+    }
+
     dataRows.forEach(row => {
       let maxNo = 0;
       for (let r = headerRow+1; r < nextDataRow; r++) {
@@ -330,13 +341,14 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
         const val = row[normalizedColName] !== undefined ? row[normalizedColName]
                   : row[colName]          !== undefined ? row[colName] : '';
         const ref = XLSX.utils.encode_cell({r: nextDataRow, c: colIdx});
-        // 既存セルのスタイル・書式をそのまま保持して値だけ上書き
-        const existing = ws[ref];
-        ws[ref] = existing
-          ? { ...existing, v: String(val||''), t: 's' }  // 既存セルがあればスタイルを継承
-          : { v: String(val||''), t: 's' };               // なければ値のみ
+        const baseStyle = styleCache[colIdx] ? JSON.parse(JSON.stringify(styleCache[colIdx])) : {};
+        if (!baseStyle.alignment) baseStyle.alignment = {};
+        baseStyle.alignment.wrapText = true;
+        baseStyle.alignment.vertical = 'top';
+        ws[ref] = { v: String(val||''), t: 's', s: baseStyle };
       });
-      // 行高さは指定しない（Excelが内容に応じて自動調整）
+      if (!ws['!rows']) ws['!rows'] = [];
+      ws['!rows'][nextDataRow] = { hpx: 60 };
       nextDataRow++;
     });
     const newRange = {s:{r:0,c:0}, e:{r:nextDataRow-1, c:Math.max(range.e.c, 20)}};
