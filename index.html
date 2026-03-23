@@ -8,6 +8,7 @@
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+<script src="exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -257,157 +258,401 @@ ${execXml}
   zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Meiryo UI" w:hAnsi="Meiryo UI" w:cs="Meiryo UI" w:eastAsia="Meiryo UI"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`);
   return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
-// ── Excel生成（テンプレートベース） ─────────────────────────
+// ── Excel生成（ExcelJS版・完全書式対応） ────────────────────
 async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
-  // テンプレートまたは既存データファイルを読み込む
-  let wb = null;
-  if (xlsxTemplateFile || xlsxDataFile) {
-    const targetFile = xlsxDataFile || xlsxTemplateFile;
-    const ab = await targetFile.arrayBuffer();
-    wb = XLSX.read(ab, {type:'array', cellStyles:true});
-  } else {
-    wb = XLSX.utils.book_new();
-  }
-
   const mtg = basicInfo.meetingName + (basicInfo.meetingNo ? ` 第${basicInfo.meetingNo}回` : '');
   const dt  = basicInfo.date ? basicInfo.date.replace(/-/g,'/') : '';
 
-  // ヘッダー名マッピングで追記する関数
-  function appendToSheet(sheetName, dataRows) {
-    let ws = wb.Sheets[sheetName];
-    if (!ws) {
-      // シートがなければ新規作成
-      ws = XLSX.utils.aoa_to_sheet([]);
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-    }
-    const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : {s:{r:0,c:0},e:{r:0,c:0}};
-    // ヘッダー行を探す（"No."がある行）
-    let headerRow = -1;
-    for (let r = range.s.r; r <= Math.min(range.e.r, 5); r++) {
-      const cell = ws[XLSX.utils.encode_cell({r, c: 0})];
-      if (cell && String(cell.v||'').includes('No.')) { headerRow = r; break; }
-    }
-    if (headerRow < 0) {
-      // ヘッダーなし → dataRowsをそのまま追記
-      let nextRow = range.e.r + 1;
-      dataRows.forEach(row => {
-        Object.entries(row).forEach(([key, val], ci) => {
-          const ref = XLSX.utils.encode_cell({r:nextRow, c:ci});
-          ws[ref] = {v: String(val||''), t:'s'};
-        });
-        nextRow++;
-      });
-      ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:nextRow-1, c:20}});
-      return;
-    }
-    // ヘッダー行からカラムマップを作成
-    const colMap = {};
-    for (let c = range.s.c; c <= range.e.c; c++) {
-      const cell = ws[XLSX.utils.encode_cell({r:headerRow, c})];
-      if (cell && cell.v) colMap[String(cell.v).replace(/\n/g,'')] = c;
-    }
-    // item行の最後を探す（例データ行をスキップするため"例"でない行）
-    let nextDataRow = headerRow + 1;
-    let styleSourceRow = -1;
-    for (let r = headerRow + 1; r <= range.e.r; r++) {
-      const c0 = ws[XLSX.utils.encode_cell({r, c: 0})];
-      if (c0 && String(c0.v||'') === '例') { styleSourceRow = r; continue; }
-      const rowType = ws[XLSX.utils.encode_cell({r, c: colMap['行種別']||0})];
-      if (!rowType || !rowType.v) { nextDataRow = r; break; }
-      nextDataRow = r + 1;
-    }
+  // ── スタイル定義 ──────────────────────────────────────────
+  const FONT_NAME = 'Meiryo UI';
 
-    // 例行のスタイルをキャッシュ
-    const styleCache = {};
-    if (styleSourceRow >= 0) {
-      Object.entries(colMap).forEach(([colName, colIdx]) => {
-        const srcRef = XLSX.utils.encode_cell({r: styleSourceRow, c: colIdx});
-        const srcCell = ws[srcRef];
-        if (srcCell && srcCell.s) styleCache[colIdx] = JSON.parse(JSON.stringify(srcCell.s));
-      });
-    }
-
-    dataRows.forEach(row => {
-      let maxNo = 0;
-      for (let r = headerRow+1; r < nextDataRow; r++) {
-        const noCell = ws[XLSX.utils.encode_cell({r, c: colMap['No.']||0})];
-        if (noCell && !isNaN(Number(noCell.v))) maxNo = Math.max(maxNo, Number(noCell.v));
-      }
-      row['No.'] = maxNo + 1;
-      row['行種別'] = 'item';
-
-      Object.entries(colMap).forEach(([colName, colIdx]) => {
-        const normalizedColName = colName.replace(/\n/g,'');
-        const val = row[normalizedColName] !== undefined ? row[normalizedColName]
-                  : row[colName]          !== undefined ? row[colName] : '';
-        const ref = XLSX.utils.encode_cell({r: nextDataRow, c: colIdx});
-        const baseStyle = styleCache[colIdx] ? JSON.parse(JSON.stringify(styleCache[colIdx])) : {};
-        if (!baseStyle.alignment) baseStyle.alignment = {};
-        baseStyle.alignment.wrapText = true;
-        baseStyle.alignment.vertical = 'top';
-        ws[ref] = { v: String(val||''), t: 's', s: baseStyle };
-      });
-      if (!ws['!rows']) ws['!rows'] = [];
-      ws['!rows'][nextDataRow] = { hpx: 60 };
-      nextDataRow++;
-    });
-    const newRange = {s:{r:0,c:0}, e:{r:nextDataRow-1, c:Math.max(range.e.c, 20)}};
-    ws['!ref'] = XLSX.utils.encode_range(newRange);
+  // ヘッダーセルスタイル生成
+  function hdrStyle(bgArgb) {
+    return {
+      font:      { name: FONT_NAME, bold: true, color: { argb: 'FFFFFFFF' }, size: 10 },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bgArgb } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+    };
   }
 
-  // 各シートに追記（シート名はテンプレートに合わせてTo-Doを使用）
-  appendToSheet('決定事項', result.decisions.map(d => ({
-    '会議名':mtg, '会議日':dt, '関連議題':'', '決定内容':d.content||'',
-    '決定者':d.decided_by||'', '影響範囲':d.scope||'',
-    '重要度':d.importance||'', '優先度':d.priority||'',
-    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
-    '類似No.\n・判定':'', '最終\nステータス':'未着手',
-  })));
+  // データセルスタイル生成
+  function dataStyle(isAlt, center=false) {
+    return {
+      font:      { name: FONT_NAME, size: 10, color: { argb: 'FF000000' } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: isAlt ? 'FFEAF2FB' : 'FFFFFFFF' } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: center ? 'center' : 'left', vertical: 'top', wrapText: true },
+    };
+  }
 
-  appendToSheet('To-Do', result.todos.map(t => ({
-    '会議名':mtg, '会議日':dt, 'アクション内容':t.content||'',
-    '担当者':t.assignee||'', '期日':t.due||'',
-    '重要度':t.importance||'', '優先度':t.priority||'',
-    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
-    '類似No.\n・判定':'', '最終\nステータス':'未着手',
-  })));
+  // 重要度・優先度の色
+  function impStyle(val, isAlt) {
+    const fills = { '緊急':'FFFF5252','高':'FFFFCDD2','中':'FFFFF9C4','低':'FFC8E6C9' };
+    const bgArgb = fills[val] || (isAlt ? 'FFEAF2FB' : 'FFFFFFFF');
+    return {
+      font:      { name: FONT_NAME, size: 10, bold: val==='緊急', color: { argb: val==='緊急' ? 'FFFFFFFF' : 'FF000000' } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
+    };
+  }
 
-  appendToSheet('リスク', result.risks.map(r => ({
-    '会議名':mtg, '会議日':dt, 'リスク内容':r.content||'',
+  // 共有済未の色
+  function shareStyle(val, isAlt) {
+    const bgArgb = val==='済' ? 'FFC8E6C9' : val==='未' ? 'FFFFCDD2' : (isAlt ? 'FFEAF2FB' : 'FFFFFFFF');
+    return {
+      font:      { name: FONT_NAME, size: 10, color: { argb: 'FF000000' } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
+    };
+  }
+
+  // 要/否スタイル
+  function yohiStyle(val, isAlt) {
+    const bgArgb = val==='要' ? 'FFFFCDD2' : (isAlt ? 'FFEAF2FB' : 'FFFFFFFF');
+    return {
+      font:      { name: FONT_NAME, size: 10, bold: val==='要', color: { argb: val==='要' ? 'FFB71C1C' : 'FF000000' } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: bgArgb } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
+    };
+  }
+
+  // ステータスの色
+  function statusStyle(val, isAlt) {
+    const fills = { '完了':'FFC8E6C9','対応中':'FFFFF9C4','遅延':'FFFFCDD2','保留':'FFE0E0E0','未着手':'FFF5F5F5' };
+    return {
+      font:      { name: FONT_NAME, size: 10, color: { argb: 'FF000000' } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: fills[val] || (isAlt?'FFEAF2FB':'FFFFFFFF') } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: 'center', vertical: 'top', wrapText: true },
+    };
+  }
+
+  // ── ExcelJSワークブック生成 ────────────────────────────────
+  const wb = new ExcelJS.Workbook();
+  wb.creator = '安田 真和';
+  wb.created = new Date();
+
+  // セクション見出しスタイル
+  function secStyle(bgArgb) {
+    return {
+      font:      { name: FONT_NAME, bold: true, size: 10, color: { argb: 'FFFFFFFF' } },
+      fill:      { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF' + bgArgb } },
+      border:    { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                   left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} },
+      alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+    };
+  }
+
+  // ── シート構築汎用関数 ─────────────────────────────────────
+  function buildSheet(sheetName, tabColor, sections, existingData=[]) {
+    const ws = wb.addWorksheet(sheetName, { properties: { tabColor: { argb: 'FF' + tabColor } } });
+
+    // sections: [{ label, bgColor, cols:[{key,header,width,type}] }]
+    // 全セクションのカラムをフラットに展開
+    const allCols = [];
+    sections.forEach(sec => sec.cols.forEach(c => allCols.push({ ...c, secBg: sec.bgColor, secLabel: sec.label })));
+
+    // Row1: セクション見出し（マージ）
+    let colIdx = 1;
+    sections.forEach(sec => {
+      const start = colIdx;
+      const end = colIdx + sec.cols.length - 1;
+      if (start === end) {
+        const cell = ws.getCell(1, start);
+        cell.value = sec.label;
+        Object.assign(cell, secStyle(sec.bgColor));
+      } else {
+        ws.mergeCells(1, start, 1, end);
+        const cell = ws.getCell(1, start);
+        cell.value = sec.label;
+        Object.assign(cell, secStyle(sec.bgColor));
+      }
+      colIdx += sec.cols.length;
+    });
+    ws.getRow(1).height = 16;
+
+    // Row2: カラムヘッダー
+    allCols.forEach((col, i) => {
+      const cell = ws.getCell(2, i + 1);
+      cell.value = col.header;
+      Object.assign(cell, hdrStyle(col.secBg));
+      ws.getColumn(i + 1).width = col.width;
+    });
+    ws.getRow(2).height = 32;
+
+    // Row3: 例データ行（薄く）
+    const exampleVals = { 'No.':'例','会議名':'第46回 全体PMO定例','会議日':'2026/02/02','最終
+ステータス':'未着手','共有
+済未':'未','行種別':'item' };
+    allCols.forEach((col, i) => {
+      const cell = ws.getCell(3, i + 1);
+      cell.value = exampleVals[col.key] || '';
+      const s = dataStyle(false, col.center);
+      s.font = { ...s.font, color: { argb: 'FF999999' }, italic: true };
+      Object.assign(cell, s);
+    });
+    ws.getRow(3).height = 30;
+
+    // 既存データ行を追記
+    let rowNum = 4;
+    let maxNo = 0;
+    existingData.forEach((rowData, idx) => {
+      const isAlt = idx % 2 === 1;
+      const isComplete = rowData['最終
+ステータス'] === '完了';
+      ws.getRow(rowNum).height = 60;
+
+      allCols.forEach((col, ci) => {
+        const cell = ws.getCell(rowNum, ci + 1);
+        const val = rowData[col.key] !== undefined ? rowData[col.key] : '';
+        cell.value = String(val);
+
+        // 完了は行全体グレー
+        if (isComplete) {
+          cell.font      = { name: FONT_NAME, size: 10, color: { argb: 'FF808080' } };
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+          cell.border    = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                             left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+          cell.alignment = { horizontal: col.center?'center':'left', vertical:'top', wrapText:true };
+        } else if (col.type === 'importance' || col.type === 'priority') {
+          Object.assign(cell, impStyle(val, isAlt));
+        } else if (col.type === 'share') {
+          Object.assign(cell, shareStyle(val, isAlt));
+        } else if (col.type === 'yohi') {
+          Object.assign(cell, yohiStyle(val, isAlt));
+        } else if (col.type === 'status') {
+          Object.assign(cell, statusStyle(val, isAlt));
+        } else {
+          Object.assign(cell, dataStyle(isAlt, col.center || col.key === 'No.'));
+        }
+      });
+
+      // 行種別列を非表示用に記録
+      const noVal = rowData['No.'];
+      if (noVal && !isNaN(Number(noVal))) maxNo = Math.max(maxNo, Number(noVal));
+      rowNum++;
+    });
+
+    // フィルター設定（Row2）
+    ws.autoFilter = { from: { row: 2, column: 1 }, to: { row: 2, column: allCols.length } };
+    ws.views = [{ state: 'frozen', ySplit: 2, activeCell: 'A3' }];
+
+    // 行種別列を非表示
+    const rtIdx = allCols.findIndex(c => c.key === '行種別');
+    if (rtIdx >= 0) ws.getColumn(rtIdx + 1).hidden = true;
+
+    return ws;
+  }
+
+  // ── 共通セクション定義 ────────────────────────────────────
+  const SEC_BASIC   = { bgColor:'1F3864' };
+  const SEC_IMP     = { label:'🔺 重要度／優先度', bgColor:'6D3B6D',
+    cols:[{key:'重要度', header:'重要度', width:10, type:'importance', center:true},
+          {key:'優先度', header:'優先度', width:10, type:'priority',   center:true}] };
+  const SEC_PROG    = { label:'📝 最新進捗', bgColor:'2D6A9F',
+    cols:[{key:'最新進捗日',   header:'最新進捗日',   width:13},
+          {key:'最新進捗内容', header:'最新進捗内容', width:38}] };
+  const SEC_SHARE   = { label:'📤 共有管理', bgColor:'5B2C8D',
+    cols:[{key:'共有先',    header:'共有先',    width:18},
+          {key:'共有
+済未', header:'共有
+済未', width:9, type:'share', center:true}] };
+  const SEC_SIM     = { label:'🔍 類似判定', bgColor:'8B6914',
+    cols:[{key:'類似No.
+・判定', header:'類似No.
+・判定', width:12, center:true}] };
+  const SEC_STATUS  = { label:'最終ステータス', bgColor:'1F3864',
+    cols:[{key:'最終
+ステータス', header:'最終
+ステータス', width:13, type:'status', center:true}] };
+  const SEC_ROWTYPE = { label:'', bgColor:'404040',
+    cols:[{key:'行種別', header:'行種別', width:8, center:true}] };
+
+  // ── 各シートのデータマッピング ─────────────────────────────
+  const baseDecisions = result.decisions.map((d,i) => ({
+    'No.': i+1, '会議名':mtg, '会議日':dt, '関連議題':'', '決定内容':d.content||'',
+    '決定者':d.decided_by||'', '影響範囲':d.scope||'', '重要度':d.importance||'',
+    '優先度':d.priority||'', '最新進捗日':'', '最新進捗内容':'',
+    '共有先':'', '共有
+済未':'未', '類似No.
+・判定':'', '最終
+ステータス':'未着手', '行種別':'item'
+  }));
+
+  const baseTodos = result.todos.map((t,i) => ({
+    'No.':i+1, '会議名':mtg, '会議日':dt, 'アクション内容':t.content||'',
+    '担当者':t.assignee||'', '期日':t.due||'', '重要度':t.importance||'',
+    '優先度':t.priority||'', '最新進捗日':'', '最新進捗内容':'',
+    '共有先':'', '共有
+済未':'未', '類似No.
+・判定':'', '最終
+ステータス':'未着手', '行種別':'item'
+  }));
+
+  const baseRisks = result.risks.map((r,i) => ({
+    'No.':i+1, '会議名':mtg, '会議日':dt, 'リスク内容':r.content||'',
     'カテゴリ':r.category||'', '影響度':r.impact||'', '発生確率':r.probability||'',
-    '対応方針':r.response||'', '担当者':r.owner||'',
-    '重要度':r.importance||'', '優先度':r.priority||'',
-    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
-    '類似No.\n・判定':'', '最終\nステータス':'未着手',
-  })));
+    '対応方針':r.response||'', '担当者':r.owner||'', '重要度':r.importance||'',
+    '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
+    '共有先':'', '共有
+済未':'未', '類似No.
+・判定':'', '最終
+ステータス':'未着手', '行種別':'item'
+  }));
 
-  appendToSheet('課題', result.issues.map(r => ({
-    '会議名':mtg, '会議日':dt, '課題内容':r.content||'',
+  const baseIssues = result.issues.map((r,i) => ({
+    'No.':i+1, '会議名':mtg, '会議日':dt, '課題内容':r.content||'',
     'カテゴリ':r.category||'', '担当者':r.owner||'', '解決策・対応内容':r.resolution||'',
-    '重要度':r.importance||'', '優先度':r.priority||'',
-    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
-    '類似No.\n・判定':'', '最終\nステータス':'未着手',
-  })));
+    '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
+    '共有先':'', '共有
+済未':'未', '類似No.
+・判定':'', '最終
+ステータス':'未着手', '行種別':'item'
+  }));
 
-  appendToSheet('役員報告事項', result.exec_report.map(r => ({
-    '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
-    '判断要否':r.decision_needed||'', '背景・経緯':r.background||'',
-    '報告先役員':r.recipient||'',
-    '重要度':r.importance||'', '優先度':r.priority||'',
-    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
-    '類似No.\n・判定':'', '最終\nステータス':'未着手',
-  })));
+  const baseExec = result.exec_report.map((r,i) => ({
+    'No.':i+1, '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
+    '判断要否':r.decision_needed||'', '背景・経緯':r.background||'', '報告先役員':r.recipient||'',
+    '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
+    '共有先':'', '共有
+済未':'未', '類似No.
+・判定':'', '最終
+ステータス':'未着手', '行種別':'item'
+  }));
 
-  appendToSheet('室長報告事項', result.manager_report.map(r => ({
-    '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
-    '対応要否':r.action_needed||'', '背景・経緯':r.background||'',
-    '担当室長':r.recipient||'',
-    '重要度':r.importance||'', '優先度':r.priority||'',
-    '最新進捗日':'', '最新進捗内容':'', '共有先':'', '共有\n済未':'未',
-    '類似No.\n・判定':'', '最終\nステータス':'未着手',
-  })));
+  const baseMgr = result.manager_report.map((r,i) => ({
+    'No.':i+1, '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
+    '対応要否':r.action_needed||'', '背景・経緯':r.background||'', '担当室長':r.recipient||'',
+    '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
+    '共有先':'', '共有
+済未':'未', '類似No.
+・判定':'', '最終
+ステータス':'未着手', '行種別':'item'
+  }));
 
-  return wb;
+  // ── INDEX シート ──────────────────────────────────────────
+  const wsIdx = wb.addWorksheet('📋 INDEX', { properties: { tabColor: { argb: 'FF1F3864' } } });
+  wsIdx.views = [{ showGridLines: false }];
+  wsIdx.getColumn(1).width = 3;
+  wsIdx.getColumn(2).width = 22;
+  wsIdx.getColumn(3).width = 36;
+  const idxTitle = wsIdx.getCell('B2');
+  idxTitle.value = '会議議事録 管理台帳';
+  idxTitle.font = { name: FONT_NAME, bold: true, size: 18, color: { argb: 'FF1F3864' } };
+  wsIdx.getRow(2).height = 40;
+  const idxSub = wsIdx.getCell('B3');
+  idxSub.value = 'グローバル経営基盤 将来像実現プロジェクト  |  Ver 4.0  確定版';
+  idxSub.font = { name: FONT_NAME, size: 10, color: { argb: 'FF595959' } };
+  wsIdx.getRow(3).height = 20;
+  [['決定事項','会議で正式に決定した事項','2E75B6'],
+   ['To-Do','担当者・期日付きアクション管理','1F7A4D'],
+   ['リスク','プログラム上のリスク管理','843C0C'],
+   ['課題','解決すべき課題の管理','7030A0'],
+   ['役員報告事項','役員への判断・報告が必要な事項','C55A11'],
+   ['室長報告事項','担当室長への報告が必要な事項','375623'],
+  ].forEach(([name,desc,color],i) => {
+    const r = i + 5;
+    const c1 = wsIdx.getCell(r, 2);
+    c1.value = name;
+    c1.font  = { name:FONT_NAME, bold:true, size:10, color:{argb:'FFFFFFFF'} };
+    c1.fill  = { type:'pattern', pattern:'solid', fgColor:{argb:'FF'+color} };
+    c1.alignment = { horizontal:'center', vertical:'middle' };
+    c1.border = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}}, left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+    const c2 = wsIdx.getCell(r, 3);
+    c2.value = desc;
+    c2.font  = { name:FONT_NAME, size:9 };
+    c2.fill  = { type:'pattern', pattern:'solid', fgColor:{argb: i%2===0 ? 'FFEAF2FB' : 'FFFFFFFF'} };
+    c2.border = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}}, left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+    wsIdx.getRow(r).height = 22;
+  });
+
+  // ── 各シート構築 ──────────────────────────────────────────
+  buildSheet('決定事項', '2E75B6', [
+    { ...SEC_BASIC, label:'基本情報', cols:[
+      {key:'No.',     header:'No.',     width:5,  center:true},
+      {key:'会議名',   header:'会議名',   width:22},
+      {key:'会議日',   header:'会議日',   width:12, center:true},
+      {key:'関連議題', header:'関連議題', width:20},
+      {key:'決定内容', header:'決定内容', width:42},
+      {key:'決定者',   header:'決定者',   width:12},
+      {key:'影響範囲', header:'影響範囲', width:18},
+    ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
+  ], baseDecisions);
+
+  buildSheet('To-Do', '1F7A4D', [
+    { ...SEC_BASIC, label:'基本情報', cols:[
+      {key:'No.',          header:'No.',          width:5,  center:true},
+      {key:'会議名',        header:'会議名',        width:22},
+      {key:'会議日',        header:'会議日',        width:12, center:true},
+      {key:'アクション内容', header:'アクション内容', width:40},
+      {key:'担当者',        header:'担当者',        width:12},
+      {key:'期日',          header:'期日',          width:12, center:true},
+    ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
+  ], baseTodos);
+
+  buildSheet('リスク', '843C0C', [
+    { ...SEC_BASIC, label:'基本情報', cols:[
+      {key:'No.',      header:'No.',      width:5,  center:true},
+      {key:'会議名',    header:'会議名',    width:22},
+      {key:'会議日',    header:'会議日',    width:12, center:true},
+      {key:'リスク内容', header:'リスク内容', width:40},
+      {key:'カテゴリ',  header:'カテゴリ',  width:14},
+      {key:'影響度',    header:'影響度',    width:10, type:'importance', center:true},
+      {key:'発生確率',  header:'発生確率',  width:10, type:'importance', center:true},
+      {key:'対応方針',  header:'対応方針',  width:32},
+      {key:'担当者',    header:'担当者',    width:12},
+    ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
+  ], baseRisks);
+
+  buildSheet('課題', '7030A0', [
+    { ...SEC_BASIC, label:'基本情報', cols:[
+      {key:'No.',         header:'No.',         width:5,  center:true},
+      {key:'会議名',       header:'会議名',       width:22},
+      {key:'会議日',       header:'会議日',       width:12, center:true},
+      {key:'課題内容',     header:'課題内容',     width:40},
+      {key:'カテゴリ',     header:'カテゴリ',     width:14},
+      {key:'担当者',       header:'担当者',       width:12},
+      {key:'解決策・対応内容', header:'解決策・対応内容', width:30},
+    ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
+  ], baseIssues);
+
+  buildSheet('役員報告事項', 'C55A11', [
+    { ...SEC_BASIC, label:'基本情報', cols:[
+      {key:'No.',      header:'No.',      width:5,  center:true},
+      {key:'会議名',    header:'会議名',    width:22},
+      {key:'会議日',    header:'会議日',    width:12, center:true},
+      {key:'報告内容',  header:'報告内容',  width:42},
+      {key:'判断要否',  header:'判断要否',  width:10, type:'yohi', center:true},
+      {key:'背景・経緯', header:'背景・経緯', width:34},
+      {key:'報告先役員', header:'報告先役員', width:14},
+    ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
+  ], baseExec);
+
+  buildSheet('室長報告事項', '375623', [
+    { ...SEC_BASIC, label:'基本情報', cols:[
+      {key:'No.',      header:'No.',      width:5,  center:true},
+      {key:'会議名',    header:'会議名',    width:22},
+      {key:'会議日',    header:'会議日',    width:12, center:true},
+      {key:'報告内容',  header:'報告内容',  width:42},
+      {key:'対応要否',  header:'対応要否',  width:10, type:'yohi', center:true},
+      {key:'背景・経緯', header:'背景・経緯', width:34},
+      {key:'担当室長',  header:'担当室長',  width:14},
+    ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
+  ], baseMgr);
+
+  // ── バッファに書き出し ─────────────────────────────────────
+  const buffer = await wb.xlsx.writeBuffer();
+  return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 // ── Download helper ───────────────────────────────────────
@@ -848,11 +1093,9 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
   const dlExcel=async()=>{
     setDownloading('excel');
     try{
-      const wb=await generateXlsx(basicInfo,result,xlsxTemplateFile,xlsxDataFile);
-      const out=XLSX.write(wb,{bookType:'xlsx',type:'array',cellStyles:true});
-      const blob=new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const blob=await generateXlsx(basicInfo,result,xlsxTemplateFile,xlsxDataFile);
       downloadBlob(blob,makeXlsxFilename(basicInfo.date));
-    }catch(e){alert('Excel生成エラー: '+e.message);}
+    }catch(e){alert('Excel生成エラー: '+e.message); console.error(e);}
     setDownloading('');
   };
   const dlBoth=async()=>{await dlWord();await dlExcel();};
