@@ -1562,10 +1562,12 @@ function isEnglishName(name) {
 
 
 // ── ドメイン→組織マスター管理モーダル ────────────────────────
-function DomainMasterModal({ onClose }) {
+function DomainMasterModal({ onClose, icsRaws }) {
   const [list, setList] = useState(()=>loadDomainMaster());
   const [domain, setDomain] = useState('');
   const [org, setOrg] = useState('');
+  const [newDomains, setNewDomains] = useState([]); // ICS再取込で追加されたドメイン
+
   const save = (next) => { setList(next); saveDomainMaster(next); };
   const add = () => {
     const d = domain.trim().toLowerCase().replace(/^@/,'');
@@ -1574,30 +1576,101 @@ function DomainMasterModal({ onClose }) {
     save([...list, {domain:d, org:o}]);
     setDomain(''); setOrg('');
   };
+
+  // ICS再取込：未登録ドメインを抽出して一覧表示
+  const [icsUnknown, setIcsUnknown] = useState(null); // [{domain, emails, org:''}]
+  const scanIcs = () => {
+    const raws = icsRaws || [];
+    const unknown = {};
+    raws.forEach(r => {
+      if (!r.email) return;
+      const d = (r.email.split('@')[1]||'').toLowerCase();
+      if (!d) return;
+      if (!list.find(x => d.endsWith(x.domain))) {
+        if (!unknown[d]) unknown[d] = [];
+        unknown[d].push(r.email);
+      }
+    });
+    const result = Object.entries(unknown).map(([d,emails])=>({domain:d,emails,org:''}));
+    setIcsUnknown(result.length > 0 ? result : []);
+  };
+
+  const updUnknown = (i, val) => setIcsUnknown(icsUnknown.map((d,idx)=>idx===i?{...d,org:val}:d));
+
+  const registerUnknown = () => {
+    const toAdd = icsUnknown.filter(d=>d.org.trim());
+    const added = toAdd.map(d=>d.domain);
+    const next = [...list, ...toAdd.map(d=>({domain:d.domain,org:d.org.trim()}))];
+    save(next);
+    setNewDomains(added);
+    setIcsUnknown(null);
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{maxWidth:460}} onClick={e=>e.stopPropagation()}>
+      <div className="modal" style={{maxWidth:500}} onClick={e=>e.stopPropagation()}>
         <div className="modal-title">🌐 ドメイン→組織マスター</div>
         <div className="notice notice-info" style={{marginBottom:10}}>
           メールドメインと組織の対応を登録します。ICS取り込み時に自動判別します。
         </div>
+
+        {/* ICS再取込ボタン */}
+        {icsRaws && icsRaws.length > 0 && (
+          <button onClick={scanIcs}
+            style={{width:'100%',marginBottom:12,padding:'8px',background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:6,color:'#1F3864',fontSize:12,cursor:'pointer',fontWeight:600}}>
+            🔍 読み込み済みICSから未登録ドメインを確認
+          </button>
+        )}
+
+        {/* 未登録ドメイン一覧 */}
+        {icsUnknown !== null && (
+          <div style={{marginBottom:12,border:'1.5px solid #2E75B6',borderRadius:6,overflow:'hidden'}}>
+            <div style={{background:'#2E75B6',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600}}>
+              {icsUnknown.length === 0 ? '✅ 未登録ドメインはありません' : `未登録ドメイン ${icsUnknown.length}件`}
+            </div>
+            {icsUnknown.map((d,i)=>(
+              <div key={i} style={{display:'flex',gap:8,alignItems:'center',padding:'7px 12px',borderTop:'1px solid #e2e8f0'}}>
+                <span style={{flex:1,fontSize:12,color:'#444'}}>@{d.domain}<br/><span style={{fontSize:10,color:'#999'}}>{d.emails.length}名</span></span>
+                <input value={d.org} onChange={e=>updUnknown(i,e.target.value)}
+                  placeholder="組織名を入力"
+                  style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:4,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+              </div>
+            ))}
+            {icsUnknown.length > 0 && (
+              <div style={{padding:'8px 12px',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end'}}>
+                <button className="btn btn-primary" style={{fontSize:12,padding:'6px 14px'}} onClick={registerUnknown}>
+                  登録する
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 手動追加 */}
         <div style={{display:'flex',gap:8,marginBottom:10}}>
-          <input value={domain} onChange={e=>setDomain(e.target.value)} placeholder="kokusai-electric.com"
+          <input value={domain} onChange={e=>setDomain(e.target.value)} placeholder="例: nssol.nipponsteel.com"
             style={{flex:2}} onKeyDown={e=>e.key==='Enter'&&add()}/>
-          <input value={org} onChange={e=>setOrg(e.target.value)} placeholder="KE"
+          <input value={org} onChange={e=>setOrg(e.target.value)} placeholder="組織名"
             style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/>
           <button className="btn btn-blue" style={{padding:'7px 12px',fontSize:12}} onClick={add}>追加</button>
         </div>
+
+        {/* 登録済みリスト */}
         <div style={{maxHeight:240,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
           {list.map((item,i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',padding:'7px 12px',borderBottom:'1px solid #f0f0f0',gap:8}}>
+            <div key={i} style={{
+              display:'flex',alignItems:'center',padding:'7px 12px',borderBottom:'1px solid #f0f0f0',
+              background: newDomains.includes(item.domain) ? '#E8F5E9' : 'transparent'
+            }}>
               <span style={{flex:2,fontSize:13,color:'#444'}}>@{item.domain}</span>
               <span style={{flex:1,fontSize:13,fontWeight:600,color:'#1F3864'}}>{item.org}</span>
+              {newDomains.includes(item.domain) && <span style={{fontSize:10,color:'#1F7A4D',marginRight:8}}>✅ 新規追加</span>}
               <button onClick={()=>save(list.filter((_,j)=>j!==i))}
                 style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16}}>🗑</button>
             </div>
           ))}
         </div>
+
         <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
           <button className="btn btn-primary" onClick={onClose}>閉じる</button>
         </div>
@@ -1967,6 +2040,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         }));
         const raws = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
         setIcsRaws(raws);
+        setData(p => ({ ...p, _icsRaws: raws }));
         setIcsPhase('stepA');
       } catch(err) {
         alert('.icsファイルの解析に失敗しました: ' + err.message);
@@ -2662,7 +2736,7 @@ function App(){
         onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>}
       {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)}/>}
       {showPersonMaster&&<PersonMasterModal onClose={()=>setShowPersonMaster(false)}/>}
-      {showDomainMaster&&<DomainMasterModal onClose={()=>setShowDomainMaster(false)}/>}
+      {showDomainMaster&&<DomainMasterModal onClose={()=>setShowDomainMaster(false)} icsRaws={basicInfo._icsRaws||[]}/>}
     </div>
   );
 }
