@@ -1412,8 +1412,6 @@ function AttendeesInput({ value, onChange, onOpenPersonMaster }){
   const [showSuggest, setShowSuggest] = useState(false);
   const [showAddOrg, setShowAddOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
-  const inputRef = useRef();
-  const domainMaster = loadDomainMaster();
   const orgList = [...new Set([...allOrgNames, ...domainMaster.map(d=>d.org)])];
 
   // アクティブ組織のデータ
@@ -1553,28 +1551,7 @@ function AttendeesInput({ value, onChange, onOpenPersonMaster }){
       </div>
     </div>
   );
-            {orgs.length>1 && (
-              <button className="attendee-del-btn" onClick={()=>removeOrg(i)} title="この組織を削除">✕</button>
-            )}
-          </div>
-          <TagNameInput orgKey={o.org} tags={o.names} setTags={names=>updateNames(i,names)}/>
-        </div>
-      ))}
-      {showAddOrg ? (
-        <div style={{display:'flex',gap:8,marginTop:4}}>
-          <input value={newOrg} onChange={e=>setNewOrg(e.target.value)}
-            onKeyDown={e=>e.key==='Enter'&&addOrg()}
-            placeholder="組織名（例: MSOL, Hopes）"
-            style={{flex:1,padding:'7px 10px',border:'1.5px solid #2E75B6',borderRadius:6,fontSize:13,fontFamily:'inherit',outline:'none'}}
-            autoFocus/>
-          <button className="btn btn-blue" style={{padding:'7px 14px',fontSize:12}} onClick={addOrg}>追加</button>
-          <button className="btn btn-gray" style={{padding:'7px 12px',fontSize:12}} onClick={()=>setShowAddOrg(false)}>✕</button>
-        </div>
-      ) : (
-        <button className="add-org-btn" onClick={()=>setShowAddOrg(true)}>＋ 組織を追加</button>
-      )}
-    </div>
-  );
+}
 }
 
 
