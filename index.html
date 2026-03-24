@@ -1636,9 +1636,9 @@ function PersonMasterModal({ onClose }) {
 function NewAttendeeDialog({ person, onRegister, onSkip, onThisTime }) {
   const domains = loadDomainMaster();
   const orgList = [...new Set(['KE','IBM','PwC','MSOL','Hopes',...domains.map(d=>d.org)])];
-  const detectedOrg = orgFromEmail(person.email);
+  const detectedOrg = person.detectedOrg || orgFromEmail(person.email) || 'KE';
   const [name, setName] = useState(person.name||'');
-  const [org, setOrg]   = useState(detectedOrg||'KE');
+  const [org, setOrg]   = useState(detectedOrg);
 
   return (
     <div className="modal-overlay">
@@ -1727,12 +1727,22 @@ function parseIcs(text) {
     const datePart = tIdx >= 0 ? clean.slice(0, tIdx) : clean.slice(0, 8);
     const timePart = tIdx >= 0 ? clean.slice(tIdx + 1) : '';
     if (datePart.length < 8) return { date: '', time: '' };
+    if (isUTC) {
+      // UTC→JSTはDateオブジェクトで正確に変換（日付またぎ対応）
+      const y = datePart.slice(0,4), mo = datePart.slice(4,6), d = datePart.slice(6,8);
+      const h = timePart.slice(0,2)||'00', mi = timePart.slice(2,4)||'00';
+      const utcMs = Date.UTC(parseInt(y), parseInt(mo)-1, parseInt(d), parseInt(h), parseInt(mi));
+      const jst = new Date(utcMs + 9*60*60*1000);
+      const jy = jst.getUTCFullYear();
+      const jmo = String(jst.getUTCMonth()+1).padStart(2,'0');
+      const jd = String(jst.getUTCDate()).padStart(2,'0');
+      const jh = String(jst.getUTCHours()).padStart(2,'0');
+      const jmi = String(jst.getUTCMinutes()).padStart(2,'0');
+      return { date: `${jy}-${jmo}-${jd}`, time: `${jh}:${jmi}` };
+    }
     const y = datePart.slice(0,4), mo = datePart.slice(4,6), d = datePart.slice(6,8);
-    let h = parseInt(timePart.slice(0,2)||'0', 10);
-    const mi = timePart.slice(2,4)||'00';
-    // UTC（末尾Z）の場合はJST（+9時間）に変換
-    if (isUTC) h = (h + 9) % 24;
-    return { date: `${y}-${mo}-${d}`, time: `${String(h).padStart(2,'0')}:${mi}` };
+    const h = timePart.slice(0,2)||'00', mi = timePart.slice(2,4)||'00';
+    return { date: `${y}-${mo}-${d}`, time: `${h}:${mi}` };
   };
 
 
@@ -1785,7 +1795,6 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   // 出席者キューを処理する（再帰的に1人ずつ）
   const processPendingQueue = (queue, orgs) => {
     if (queue.length === 0) {
-      // 全員処理完了 → Step1に反映
       setData(p => ({ ...p, attendees: orgs }));
       setPendingOrgs(null);
       setPendingPersons([]);
@@ -1793,22 +1802,30 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       return;
     }
     const [current, ...rest] = queue;
+
+    // メールなし・名前なしはスキップ
+    if (!current.email && !current.name) {
+      processPendingQueue(rest, orgs);
+      return;
+    }
+
     const master = loadPersonMaster();
-    const existing = master.find(p => p.email === current.email);
+    const existing = current.email
+      ? master.find(p => p.email === current.email)
+      : master.find(p => p.name === current.name);
 
     if (existing) {
-      // 登録済み
       if (isEnglishName(existing.name) && !isEnglishName(current.name) && current.name !== current.email) {
-        // 英字名→日本語名に更新できる
         setUpdateCandidate({ person: existing, newName: current.name, rest, orgs });
       } else {
-        // そのまま組織に追加
         const updated = addToOrgs(orgs, existing.name, existing.org);
         processPendingQueue(rest, updated);
       }
     } else {
-      // 未登録 → ダイアログ表示
-      setPendingPersons([current, ...rest]);
+      // 未登録 → ドメインで組織を自動判別してダイアログ表示
+      const detectedOrg = orgFromEmail(current.email) || 'KE';
+      const personWithOrg = { ...current, detectedOrg };
+      setPendingPersons([personWithOrg, ...rest]);
       setPendingOrgs(orgs);
     }
   };
