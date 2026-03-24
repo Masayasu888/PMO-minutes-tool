@@ -1601,7 +1601,7 @@ function DomainMasterModal({ onClose, icsRaws }) {
       if (!r.email) return;
       const d = (r.email.split('@')[1]||'').toLowerCase();
       if (!d) return;
-      const isKnown = currentList.some(x => d === x.domain) || DEFAULT_DOMAINS.some(x => d === x.domain);
+      const isKnown = currentList.some(x => d === x.domain);
       if (!isKnown) {
         if (!unknown[d]) unknown[d] = [];
         unknown[d].push(r.email);
@@ -2080,8 +2080,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 
   // Step B: 未登録ドメインを収集してテーブル表示
   const processStepB = (raws, orgs) => {
-    const domainMaster = loadDomainMaster();
-    const allKnown = [...domainMaster, ...DEFAULT_DOMAINS];
+    const allKnown = loadDomainMaster();
     const unknownDomains = {};
     raws.forEach(r => {
       if (!r.email) return;
