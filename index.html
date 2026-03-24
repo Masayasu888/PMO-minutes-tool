@@ -1739,10 +1739,18 @@ function parseIcs(text) {
   const unfolded = unfold(text);
 
   const get = (key) => {
-    // DTSTART, DTSTART;TZID=..., DTSTART;TZID="..." 全て対応
-    const re = new RegExp('^' + key + '[^:]*:(.+)$', 'im');
-    const m = unfolded.match(re);
-    return m ? m[1].trim() : '';
+    // TZID付き（例: DTSTART;TZID="Tokyo Standard Time":20260324T150000）を優先
+    const reTzid = new RegExp('^' + key + ';TZID[^:]*:(.+)$', 'im');
+    const mTzid = unfolded.match(reTzid);
+    if (mTzid) return mTzid[1].trim();
+    // TZID付きがなければ通常版、ただし1601年（Windowsタイムゾーン基準値）は除外
+    const rePlain = new RegExp('^' + key + '[^:]*:(.+)$', 'gim');
+    let m;
+    while ((m = rePlain.exec(unfolded)) !== null) {
+      const val = m[1].trim();
+      if (!val.startsWith('16010101')) return val; // 1601年はスキップ
+    }
+    return '';
   };
 
   // 日時変換（Outlook各種形式に対応）
