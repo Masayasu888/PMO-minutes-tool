@@ -1506,16 +1506,37 @@ function reverseEnglishName(rawName) {
 
 // ICSの1出席者行から {name, email} を抽出
 function parseAttendeeRaw(line) {
-  const cn = line.match(/CN=([^;:]+)/i);
-  const mailMatch = line.match(/mailto:([^\s]+)/i);
+  // mailto: からメールアドレスを取得
+  const mailMatch = line.match(/mailto:([^\s;>]+)/i);
   const email = mailMatch ? mailMatch[1].trim().toLowerCase() : '';
-  let rawName = cn ? cn[1].replace(/^"(.*)"$/, '$1').trim() : '';
-  // CNがメールアドレスと同じ場合 → 名前未取得
-  if (!rawName || rawName.toLowerCase() === email) {
-    // mailtoのローカル部から生成
+
+  // CN= の値を取得（引用符あり・なし両対応）
+  let rawName = '';
+  const cnQuoted = line.match(/CN="([^"]+)"/i);   // CN="..."
+  const cnPlain  = line.match(/CN=([^;:\s"]+)/i); // CN=...（引用符なし）
+  if (cnQuoted) {
+    rawName = cnQuoted[1].trim();
+  } else if (cnPlain) {
+    rawName = cnPlain[1].trim();
+  }
+
+  // CNがメールアドレスそのもの or 空の場合→emailのローカル部から生成
+  if (!rawName || rawName.toLowerCase() === email || rawName.includes('@')) {
     const local = email.split('@')[0] || '';
     rawName = local;
   }
+
+  // スラッシュ区切り「英語名 / 日本語名」→日本語部分を優先
+  if (rawName.includes('/')) {
+    const parts = rawName.split('/').map(s => s.trim());
+    const jpPart = parts.find(p => /[\u3000-\u9FFF\uF900-\uFAFF]/.test(p));
+    if (jpPart) {
+      return { name: jpPart, email, rawName };
+    }
+    // 英語部分のみ → reverseEnglishName
+    rawName = parts[0].trim();
+  }
+
   const name = reverseEnglishName(rawName);
   return { name, email, rawName };
 }
@@ -1755,10 +1776,10 @@ function parseIcs(text) {
 
   // 出席者を抽出（ATTENDEE行を全部取得）- name/email両方取得
   const attendeeRaws = [];
-  const reAtt = /ATTENDEE[^:]*:([^\r\n]+)/gi;
+  const reAtt = /^ATTENDEE[^\r\n]*/gim;
   let m;
   while ((m = reAtt.exec(unfolded)) !== null) {
-    const raw = parseAttendeeRaw(m[1].trim());
+    const raw = parseAttendeeRaw(m[0].trim());
     if (raw.email || raw.name) attendeeRaws.push(raw);
   }
   const attendeeNames = attendeeRaws.map(a => a.name).filter(Boolean);
