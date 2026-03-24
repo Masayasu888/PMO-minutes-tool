@@ -1566,21 +1566,13 @@ function DomainMasterModal({ onClose, icsRaws }) {
   const [list, setList] = useState(()=>{
     const s = localStorage.getItem(DOMAIN_MASTER_KEY);
     if (s === null) {
+      // 初回のみ DEFAULT_DOMAINS を書き込む
       localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(DEFAULT_DOMAINS));
       return [...DEFAULT_DOMAINS];
     }
     try {
-      const stored = JSON.parse(s);
-      // DEFAULT_DOMAINSで欠けているものを補完して初期表示
-      const merged = [...stored];
-      DEFAULT_DOMAINS.forEach(def => {
-        if (!merged.find(d => d.domain === def.domain)) merged.push(def);
-      });
-      // 補完した場合はlocalStorageも更新
-      if (merged.length !== stored.length) {
-        localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(merged));
-      }
-      return merged;
+      // 2回目以降は localStorage の内容をそのまま使用（削除済みドメインは復活させない）
+      return JSON.parse(s);
     } catch(e) { return [...DEFAULT_DOMAINS]; }
   });
   const [domain, setDomain] = useState('');
@@ -2743,7 +2735,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v10</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v11</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={()=>setShowPersonMaster(true)}
