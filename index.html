@@ -1577,13 +1577,7 @@ function DomainMasterModal({ onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{maxWidth:460}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-          <div className="modal-title" style={{margin:0}}>🌐 ドメイン→組織マスター</div>
-          <button onClick={()=>{if(window.confirm('ドメインマスターをデフォルトにリセットしますか？')){saveDomainMaster(DEFAULT_DOMAINS);setList([...DEFAULT_DOMAINS]);}}}
-            style={{background:'none',border:'1px solid #e53e3e',color:'#e53e3e',borderRadius:4,padding:'3px 10px',cursor:'pointer',fontSize:11}}>
-            🔄 リセット
-          </button>
-        </div>
+        <div className="modal-title">🌐 ドメイン→組織マスター</div>
         <div className="notice notice-info" style={{marginBottom:10}}>
           メールドメインと組織の対応を登録します。ICS取り込み時に自動判別します。
         </div>
@@ -2167,9 +2161,14 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         {icsLoaded && (
           <span style={{display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:12,color:'#1F7A4D',whiteSpace:'nowrap'}}>✅ 読み込み済み</span>
-            <button onClick={()=>{setIcsLoaded(false); if(icsRef.current) icsRef.current.value='';}}
-              style={{background:'none',border:'none',color:'#999',fontSize:11,cursor:'pointer',textDecoration:'underline'}}>
-              再読み込み
+            <button onClick={()=>{
+              setIcsLoaded(false);
+              setIcsPhase(null);
+              setIcsRaws([]);
+              if(icsRef.current){ icsRef.current.value=''; icsRef.current.click(); }
+            }}
+              style={{background:'#EBF3FB',border:'1px solid #2E75B6',color:'#2E75B6',borderRadius:4,fontSize:11,cursor:'pointer',padding:'2px 8px',whiteSpace:'nowrap'}}>
+              🔄 再取り込み
             </button>
           </span>
         )}
