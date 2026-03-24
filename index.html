@@ -1580,15 +1580,18 @@ function DomainMasterModal({ onClose, icsRaws }) {
   // ICS再取込：未登録ドメインを抽出して一覧表示
   const [icsUnknown, setIcsUnknown] = useState(null); // [{domain, emails, org:''}]
   const scanIcs = () => {
-    const currentList = loadDomainMaster(); // localStorageから最新を取得
-    setList(currentList); // 表示も同期
+    const currentList = loadDomainMaster();
+    setList(currentList);
     const raws = icsRaws || [];
     const unknown = {};
     raws.forEach(r => {
       if (!r.email) return;
       const d = (r.email.split('@')[1]||'').toLowerCase();
       if (!d) return;
-      if (!currentList.find(x => d === x.domain || d.endsWith('.'+x.domain))) {
+      // 完全一致のみ（サブドメイン誤マッチを防ぐ）
+      const isKnown = currentList.some(x => d === x.domain) ||
+                      DEFAULT_DOMAINS.some(x => d === x.domain);
+      if (!isKnown) {
         if (!unknown[d]) unknown[d] = [];
         unknown[d].push(r.email);
       }
@@ -2040,7 +2043,15 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           endTime:     parsed.endTime     || p.endTime,
           location:    parsed.location    || p.location,
         }));
-        const raws = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
+        const rawAll = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
+        // メールアドレスで重複排除
+        const seen = new Set();
+        const raws = rawAll.filter(r => {
+          const key = r.email || r.name;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
         setIcsRaws(raws);
         setData(p => ({ ...p, _icsRaws: raws }));
         setIcsPhase('stepA');
