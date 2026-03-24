@@ -1561,15 +1561,15 @@ function isEnglishName(name) {
 // ── ドメイン→組織マスター管理モーダル ────────────────────────
 function DomainMasterModal({ onClose, icsRaws }) {
   // DEFAULT_DOMAINSで欠けているエントリを補完して表示
-  const initList = () => {
-    const stored = loadDomainMaster();
-    const merged = [...stored];
-    DEFAULT_DOMAINS.forEach(def => {
-      if (!merged.find(d => d.domain === def.domain)) merged.push(def);
-    });
-    return merged;
-  };
-  const [list, setList] = useState(()=>initList());
+  // 初回アクセス時にlocalStorageへDEFAULT_DOMAINSを書き込む
+  const [list, setList] = useState(()=>{
+    const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
+    if (!stored || JSON.parse(stored).length === 0) {
+      saveDomainMaster([...DEFAULT_DOMAINS]);
+      return [...DEFAULT_DOMAINS];
+    }
+    return JSON.parse(stored);
+  });
   const [domain, setDomain] = useState('');
   const [org, setOrg] = useState('');
   const [newDomains, setNewDomains] = useState([]); // ICS再取込で追加されたドメイン
@@ -2734,7 +2734,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v1</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v2</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={()=>setShowPersonMaster(true)}
