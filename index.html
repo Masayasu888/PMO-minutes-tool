@@ -1957,6 +1957,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       {/* 未登録出席者ダイアログ */}
       {pendingPersons.length > 0 && pendingOrgs && (
         <NewAttendeeDialog
+          key={pendingPersons[0].email || pendingPersons[0].name}
           person={pendingPersons[0]}
           onRegister={handleRegister}
           onThisTime={handleThisTime}
