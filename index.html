@@ -2122,7 +2122,18 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const completStepB = (domainList) => {
     const master = loadDomainMaster();
     const toAdd = domainList.filter(d => d.org.trim());
-    const newMaster = [...master, ...toAdd.map(d => ({domain: d.domain, org: d.org.trim()}))];
+    if (toAdd.length === 0) {
+      // 組織名が全て空欄 → 何も保存せずStep Cへ
+      processStepC(icsRaws, icsOrgs);
+      return;
+    }
+    const newMaster = [...master];
+    toAdd.forEach(d => {
+      // 重複チェック
+      if (!newMaster.find(m => m.domain === d.domain)) {
+        newMaster.push({ domain: d.domain, org: d.org.trim() });
+      }
+    });
     saveDomainMaster(newMaster);
     processStepC(icsRaws, icsOrgs);
   };
