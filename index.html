@@ -1666,8 +1666,8 @@ function DomainMasterModal({ onClose, icsRaws }) {
               <span style={{flex:2,fontSize:13,color:'#444'}}>@{item.domain}</span>
               <span style={{flex:1,fontSize:13,fontWeight:600,color:'#1F3864'}}>{item.org}</span>
               {newDomains.includes(item.domain) && <span style={{fontSize:10,color:'#1F7A4D',marginRight:8}}>✅ 新規追加</span>}
-              <button onClick={()=>save(list.filter((_,j)=>j!==i))}
-                style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16}}>🗑</button>
+              <button onMouseDown={(e)=>{e.stopPropagation();e.preventDefault();save(list.filter((_,j)=>j!==i));}}
+                style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,padding:'4px 8px'}}>🗑</button>
             </div>
           ))}
         </div>
