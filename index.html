@@ -1372,7 +1372,7 @@ function TagNameInput({ orgKey, tags: tagsProp, setTags }){
 
   return(
     <div>
-      <div className="tag-area" onClick={()=>inputRef.current?.focus()}>
+      <div className="tag-area" onClick={()=>inputRef.current && inputRef.current.focus()}>
         {tags.map((name,i)=>(
           <span key={i} className="tag">
             {name}
@@ -1406,7 +1406,7 @@ function AttendeesInput({ value, onChange, onOpenPersonMaster }){
     : DEFAULT_ORGS.map(o=>({org:o, names:[]}));
 
   const allOrgNames = [...new Set([...DEFAULT_ORGS, ...orgs.map(o=>o.org)])];
-  const [activeOrg, setActiveOrg] = useState(orgs[0]?.org || 'KE');
+  const [activeOrg, setActiveOrg] = useState((orgs[0] && orgs[0].org) || 'KE');
   const [searchQ, setSearchQ] = useState('');
   const [selectedOrg, setSelectedOrg] = useState(activeOrg);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -1449,7 +1449,7 @@ function AttendeesInput({ value, onChange, onOpenPersonMaster }){
   const removeOrg = (orgKey) => {
     const next = orgs.filter(o=>o.org!==orgKey);
     onChange(next.length ? next : DEFAULT_ORGS.map(o=>({org:o,names:[]})));
-    if (activeOrg === orgKey) setActiveOrg(next[0]?.org || 'KE');
+    if (activeOrg === orgKey) setActiveOrg((next[0] && next[0].org) || 'KE');
   };
 
   // 候補リスト
@@ -1579,7 +1579,7 @@ function saveDomainMaster(list){ localStorage.setItem(DOMAIN_MASTER_KEY, JSON.st
 // メールアドレスから組織を判別
 function orgFromEmail(email) {
   if (!email) return '';
-  const domain = email.split('@')[1]?.toLowerCase() || '';
+  const domain = (email.split('@')[1] || '').toLowerCase();
   const domains = loadDomainMaster();
   const found = domains.find(d => domain.endsWith(d.domain));
   return found ? found.org : '';
@@ -2240,13 +2240,13 @@ function Step4({result,setResult,onNext,onBack}){
   const IP=[{key:'importance',label:'重要度',type:'select',options:IP_OPTS,w:70},{key:'priority',label:'優先度',type:'select',options:IP_OPTS,w:70}];
   const tabs=[
     {id:'minutes',label:`📝 議事内容`},
-    {id:'decisions',label:`✅ 決定事項 (${result.decisions?.length||0})`},
-    {id:'todos',label:`📌 ToDo (${result.todos?.length||0})`},
-    {id:'risks',label:`⚠️ リスク (${result.risks?.length||0})`},
-    {id:'issues',label:`🔧 課題 (${result.issues?.length||0})`},
-    {id:'exec',label:`👔 役員報告 (${result.exec_report?.length||0})`},
-    {id:'mgr',label:`📋 室長報告 (${result.manager_report?.length||0})`},
-    {id:'pending',label:`⏸ 保留 (${result.pending?.length||0})`},
+    {id:'decisions',label:`✅ 決定事項 (${(result.decisions && result.decisions.length)||0})`},
+    {id:'todos',label:`📌 ToDo (${(result.todos && result.todos.length)||0})`},
+    {id:'risks',label:`⚠️ リスク (${(result.risks && result.risks.length)||0})`},
+    {id:'issues',label:`🔧 課題 (${(result.issues && result.issues.length)||0})`},
+    {id:'exec',label:`👔 役員報告 (${(result.exec_report && result.exec_report.length)||0})`},
+    {id:'mgr',label:`📋 室長報告 (${(result.manager_report && result.manager_report.length)||0})`},
+    {id:'pending',label:`⏸ 保留 (${(result.pending && result.pending.length)||0})`},
   ];
   return(
     <div className="card">
@@ -2290,12 +2290,12 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
   };
   const dlBoth=async()=>{await dlWord();await dlExcel();};
   const stats=[
-    ['決定事項',result.decisions?.length||0,'#2E75B6'],
-    ['ToDo',result.todos?.length||0,'#1F7A4D'],
-    ['リスク',result.risks?.length||0,'#843C0C'],
-    ['課題',result.issues?.length||0,'#7030A0'],
-    ['役員報告',result.exec_report?.length||0,'#C55A11'],
-    ['室長報告',result.manager_report?.length||0,'#375623'],
+    ['決定事項',(result.decisions && result.decisions.length)||0,'#2E75B6'],
+    ['ToDo',(result.todos && result.todos.length)||0,'#1F7A4D'],
+    ['リスク',(result.risks && result.risks.length)||0,'#843C0C'],
+    ['課題',(result.issues && result.issues.length)||0,'#7030A0'],
+    ['役員報告',(result.exec_report && result.exec_report.length)||0,'#C55A11'],
+    ['室長報告',(result.manager_report && result.manager_report.length)||0,'#375623'],
   ];
   return(
     <div className="card">
