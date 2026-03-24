@@ -1569,7 +1569,19 @@ function DomainMasterModal({ onClose, icsRaws }) {
       localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(DEFAULT_DOMAINS));
       return [...DEFAULT_DOMAINS];
     }
-    try { return JSON.parse(s); } catch(e) { return [...DEFAULT_DOMAINS]; }
+    try {
+      const stored = JSON.parse(s);
+      // DEFAULT_DOMAINSで欠けているものを補完して初期表示
+      const merged = [...stored];
+      DEFAULT_DOMAINS.forEach(def => {
+        if (!merged.find(d => d.domain === def.domain)) merged.push(def);
+      });
+      // 補完した場合はlocalStorageも更新
+      if (merged.length !== stored.length) {
+        localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(merged));
+      }
+      return merged;
+    } catch(e) { return [...DEFAULT_DOMAINS]; }
   });
   const [domain, setDomain] = useState('');
   const [org, setOrg] = useState('');
@@ -2731,7 +2743,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v9</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v10</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={()=>setShowPersonMaster(true)}
