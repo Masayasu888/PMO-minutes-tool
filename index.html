@@ -219,7 +219,7 @@ ${(()=>{
       return '<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">・'+esc(m.name)+'</w:t></w:r></w:p>';
     }).join('');
     const hdr='<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t>【配布資料/投影資料】</w:t></w:r></w:p>';
-    const bdr='<w:tcBorders><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/></w:tcBorders>';
+    const bdr='<w:tcBorders><w:top w:val="single" w:sz="4" w:color="auto"/><w:left w:val="single" w:sz="4" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:color="auto"/><w:right w:val="single" w:sz="4" w:color="auto"/></w:tcBorders>';
     const mar='<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
     return '<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="'+W+'" w:type="dxa"/><w:gridSpan w:val="4"/>'+bdr+'<w:vAlign w:val="center"/>'+mar+'</w:tcPr>'+hdr+matParas+'</w:tc></w:tr>';
   })()}
@@ -315,6 +315,9 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
   const mtg = basicInfo.meetingName + (basicInfo.meetingNo ? ` 第${basicInfo.meetingNo}回` : '');
   const dt  = basicInfo.date ? basicInfo.date.replace(/-/g,'/') : '';
 
+  // ── 照合ログ（判定理由シート用） ───────────────────────────
+  const matchLog = []; // {sheet, content, match_type, existing_no, reason, progress}
+
   // ── 既存ファイルから過去データを読み込む ─────────────────
   // ExcelJSはブラウザでarrayBufferからの読み込みをサポート
   let existingSheetData = {}; // {sheetName: [{row data...}, ...]}
@@ -376,10 +379,50 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
   // 既存データ＋新規データを結合する関数
   function mergeData(sheetName, newRows) {
     const existing = existingSheetData[sheetName] || [];
-    // No.を既存の最大値から採番し直す
     let maxNo = existing.reduce((m, r) => Math.max(m, parseInt(r['No.']||0)), 0);
-    const numbered = newRows.map(r => ({ ...r, 'No.': ++maxNo }));
-    return [...existing, ...numbered];
+    const merged = existing.map(r => ({...r}));
+
+    newRows.forEach(row => {
+      const matchType   = row.match_type   || 'new';
+      const existingNo  = row.existing_no  ? String(row.existing_no) : null;
+      const progressText = row.progress    || '';
+      const matchReason = row.match_reason || '';
+
+      // 判定ログに記録
+      matchLog.push({
+        sheet:      sheetName,
+        content:    row.content || row['アクション内容'] || row['リスク内容'] || row['課題内容'] || row['報告内容'] || '',
+        match_type: matchType,
+        existing_no: existingNo || '',
+        reason:     matchReason,
+        progress:   progressText,
+      });
+
+      if (matchType === 'same' && existingNo) {
+        const target = merged.find(r => String(r['No.']) === existingNo);
+        if (target) {
+          if (progressText) {
+            target['最新進捗日']   = row['会議日'] || '';
+            target['最新進捗内容'] = progressText;
+          }
+          target['_updated'] = true;
+          return;
+        }
+      }
+
+      const newRow = { ...row, 'No.': ++maxNo };
+      delete newRow.match_type;
+      delete newRow.existing_no;
+      delete newRow.progress;
+      delete newRow.match_reason;
+      if (matchType === 'similar') {
+        newRow['類似No.\n・判定'] = `⚠️ No.${existingNo} 類似`;
+        newRow['_similar'] = true;
+      }
+      merged.push(newRow);
+    });
+
+    return merged;
   }
 
   // ── スタイル定義 ──────────────────────────────────────────
@@ -526,6 +569,8 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     existingData.forEach((rowData, idx) => {
       const isAlt = idx % 2 === 1;
       const isComplete = rowData['最終\nステータス'] === '完了';
+      const isSimilar  = !!rowData['_similar'];
+      const isUpdated  = !!rowData['_updated'];
       // 行高さ：最長セルの文字数から推定（列幅40文字想定、1行約15px）
       const maxLen = Math.max(...Object.values(rowData).map(v => String(v||'').length));
       const estLines = Math.max(2, Math.ceil(maxLen / 35));
@@ -534,7 +579,8 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       allCols.forEach((col, ci) => {
         const cell = ws.getCell(rowNum, ci + 1);
         const val = rowData[col.key] !== undefined ? rowData[col.key] : '';
-        cell.value = String(val);
+        // _similar/_updated/_isNew は内部フラグなので空文字
+        cell.value = String(col.key.startsWith('_') ? '' : val);
 
         // 完了は行全体グレー
         if (isComplete) {
@@ -542,6 +588,20 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
           cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
           cell.border    = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
                              left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+          cell.alignment = { horizontal: col.center?'center':'left', vertical:'top', wrapText:true };
+        // 類似は黄色背景・茶色枠
+        } else if (isSimilar) {
+          cell.font      = { name: FONT_NAME, size: 10, color: { argb: 'FF000000' } };
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+          cell.border    = { top:{style:'thin',color:{argb:'FFE6A817'}}, bottom:{style:'thin',color:{argb:'FFE6A817'}},
+                             left:{style:'thin',color:{argb:'FFE6A817'}}, right:{style:'thin',color:{argb:'FFE6A817'}} };
+          cell.alignment = { horizontal: col.center?'center':'left', vertical:'top', wrapText:true };
+        // 進捗更新は薄青背景
+        } else if (isUpdated) {
+          cell.font      = { name: FONT_NAME, size: 10, color: { argb: 'FF000000' } };
+          cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDBEAFE' } };
+          cell.border    = { top:{style:'thin',color:{argb:'FF2E75B6'}}, bottom:{style:'thin',color:{argb:'FF2E75B6'}},
+                             left:{style:'thin',color:{argb:'FF2E75B6'}}, right:{style:'thin',color:{argb:'FF2E75B6'}} };
           cell.alignment = { horizontal: col.center?'center':'left', vertical:'top', wrapText:true };
         } else if (col.type === 'importance' || col.type === 'priority') {
           applyStyle(cell, impStyle(val, isAlt));
@@ -679,6 +739,87 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
     wsIdx.getRow(r).height = 22;
   });
 
+  // ── 照合ログシート ─────────────────────────────────────────
+  if (matchLog.length > 0) {
+    const wsLog = wb.addWorksheet('🔍 照合ログ', { properties: { tabColor: { argb: 'FF8B6914' } } });
+    wsLog.views = [{ state: 'frozen', ySplit: 1, activeCell: 'A2' }];
+
+    const logCols = [
+      { header: '判定',     key: 'match_type',   width: 10 },
+      { header: 'シート',   key: 'sheet',        width: 16 },
+      { header: '既存No.',  key: 'existing_no',  width: 10 },
+      { header: '抽出内容', key: 'content',      width: 50 },
+      { header: '判定理由', key: 'reason',       width: 54 },
+      { header: '進捗内容', key: 'progress',     width: 36 },
+    ];
+
+    // ヘッダー行
+    logCols.forEach((col, i) => {
+      const cell = wsLog.getCell(1, i + 1);
+      cell.value = col.header;
+      cell.font      = { name: 'Meiryo UI', bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } };
+      cell.border    = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                         left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+      cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      wsLog.getColumn(i + 1).width = col.width;
+    });
+    wsLog.getRow(1).height = 28;
+
+    // 判定種別ごとの色
+    const logFills = {
+      'same':    { bg: 'FFDBEAFE', border: 'FF2E75B6' },  // 薄青：同一
+      'similar': { bg: 'FFFFF3CD', border: 'FFE6A817' },  // 黄色：類似
+      'new':     { bg: 'FFE8F5E9', border: 'FF4CAF50' },  // 薄緑：新規
+    };
+    const logLabels = { 'same': '同一', 'similar': '類似', 'new': '新規' };
+
+    matchLog.forEach((log, idx) => {
+      const rowNum = idx + 2;
+      const colors = logFills[log.match_type] || logFills['new'];
+      wsLog.getRow(rowNum).height = 48;
+
+      logCols.forEach((col, ci) => {
+        const cell = wsLog.getCell(rowNum, ci + 1);
+        // match_type は日本語ラベルに変換
+        const val = col.key === 'match_type' ? (logLabels[log[col.key]] || log[col.key]) : (log[col.key] || '');
+        cell.value = String(val);
+        cell.font      = { name: 'Meiryo UI', size: 10, color: { argb: 'FF000000' } };
+        cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: colors.bg } };
+        cell.border    = { top:{style:'thin',color:{argb:colors.border}}, bottom:{style:'thin',color:{argb:colors.border}},
+                           left:{style:'thin',color:{argb:colors.border}}, right:{style:'thin',color:{argb:colors.border}} };
+        cell.alignment = { horizontal: ci <= 2 ? 'center' : 'left', vertical: 'top', wrapText: true };
+      });
+    });
+
+    wsLog.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: logCols.length } };
+
+    // INDEXシートにログシートを追記
+    const idxRows = [
+      ['🔍 照合ログ', 'AIによる照合判定の根拠一覧', '8B6914'],
+    ];
+    // INDEXシートの最終行を探して追記
+    const wsIdx2 = wb.getWorksheet('📋 INDEX');
+    if (wsIdx2) {
+      let lastRow = 5 + 6; // 既存6シート分
+      const logRow = lastRow + 1;
+      const c1 = wsIdx2.getCell(logRow, 2);
+      c1.value = '🔍 照合ログ';
+      c1.font  = { name:'Meiryo UI', bold:true, size:10, color:{argb:'FFFFFFFF'} };
+      c1.fill  = { type:'pattern', pattern:'solid', fgColor:{argb:'FF8B6914'} };
+      c1.alignment = { horizontal:'center', vertical:'middle' };
+      c1.border = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                    left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+      const c2 = wsIdx2.getCell(logRow, 3);
+      c2.value = 'AIによる照合判定の根拠一覧（今回生成時のみ）';
+      c2.font  = { name:'Meiryo UI', size:9 };
+      c2.fill  = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFFF9C4'} };
+      c2.border = { top:{style:'thin',color:{argb:'FFBFBFBF'}}, bottom:{style:'thin',color:{argb:'FFBFBFBF'}},
+                    left:{style:'thin',color:{argb:'FFBFBFBF'}}, right:{style:'thin',color:{argb:'FFBFBFBF'}} };
+      wsIdx2.getRow(logRow).height = 22;
+    }
+  }
+
   // ── 各シート構築 ──────────────────────────────────────────
   buildSheet('決定事項', '2E75B6', [
     { ...SEC_BASIC, label:'基本情報', cols:[
@@ -781,12 +922,37 @@ function makeXlsxFilename(date){
 }
 
 // ── Claude API ────────────────────────────────────────────
-async function callClaude(apiKey, basicInfo, transcript, onLog){
+async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={}){
   onLog('📡 Claude APIに接続中...');
   const attendees = (basicInfo.attendees||[]).map(o=>{
     const names = Array.isArray(o.names)?o.names.join('、'):(o.names||'');
     return names?`【${o.org}】　${names}`:`【${o.org}】`;
   }).join('\n');
+
+  // 既存の未完了アイテムをシートごとに整形
+  const sheetMap = {
+    'todos':           'To-Do',
+    'risks':           'リスク',
+    'issues':          '課題',
+    'exec_report':     '役員報告事項',
+    'manager_report':  '室長報告事項',
+  };
+  let existingSection = '';
+  Object.entries(sheetMap).forEach(([key, sheetName]) => {
+    const rows = (existingData[sheetName] || []).filter(r =>
+      r['最終\nステータス'] !== '完了' && r['No.'] && r['No.'] !== '例'
+    );
+    if (rows.length === 0) return;
+    existingSection += `\n【既存の未完了${sheetName}】\n`;
+    rows.forEach(r => {
+      const contentKey = key === 'todos' ? 'アクション内容'
+        : key === 'risks'  ? 'リスク内容'
+        : key === 'issues' ? '課題内容'
+        : '報告内容';
+      existingSection += `No.${r['No.']}: ${r[contentKey]||''} (担当:${r['担当者']||r['報告先役員']||r['担当室長']||''} 状況:${r['最終\nステータス']||''})\n`;
+    });
+  });
+
   const prompt = `以下の会議情報と文字起こしを分析し、JSON形式で抽出してください。
 
 【基本情報】
@@ -799,17 +965,19 @@ async function callClaude(apiKey, basicInfo, transcript, onLog){
 
 【文字起こし】
 ${transcript}
-
+${existingSection ? existingSection + '\n' : ''}
 重要度・優先度は「緊急」「高」「中」「低」の4段階で判定してください。
-- 緊急: 即日対応必須、役員判断が当日必要
-- 高: 今週中に対応必要、ステコミ・役員で言及
-- 中: 今月中に対応
-- 低: 余裕がある時に対応
+
+【既存アイテムの照合ルール】
+既存の未完了アイテムが提供されている場合、文字起こしの内容と照合してください。
+- 同一: 内容・担当者・文脈が明確に一致 → match_type="same", existing_no=該当No.
+- 類似: 関連しているが同一か判断しにくい → match_type="similar", existing_no=該当No.
+- 新規: 既存リストにない → match_type="new"（existing_noは省略）
 
 以下のJSON構造で出力してください（マークダウン不要、JSONのみ）:
-{"agenda_items":["議題1"],"minutes_by_agenda":[{"title":"議題名","content":"発言録（発言者名: 発言内容）"}],"decisions":[{"content":"決定内容","decided_by":"決定者","scope":"影響範囲","importance":"高","priority":"高"}],"todos":[{"content":"アクション","assignee":"担当者","due":"YYYY/MM/DD","importance":"高","priority":"高"}],"pending":[{"content":"保留内容","reason":"理由","next_action":"次回の扱い"}],"risks":[{"content":"リスク内容","category":"カテゴリ","impact":"高","probability":"高","response":"対応方針","owner":"担当者","importance":"高","priority":"高"}],"issues":[{"content":"課題内容","category":"カテゴリ","owner":"担当者","due":"期日","resolution":"解決策","importance":"中","priority":"中"}],"exec_report":[{"content":"報告内容","decision_needed":"要","background":"背景","recipient":"役員名","deadline":"期限","importance":"緊急","priority":"緊急"}],"manager_report":[{"content":"報告内容","action_needed":"要","background":"背景","recipient":"室長名","deadline":"期限","importance":"高","priority":"高"}]}`;
+{"agenda_items":["議題1"],"minutes_by_agenda":[{"title":"議題名","content":"発言録（発言者名: 発言内容）"}],"decisions":[{"content":"決定内容","decided_by":"決定者","scope":"影響範囲","importance":"高","priority":"高"}],"todos":[{"content":"アクション","assignee":"担当者","due":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗内容（あれば）","match_reason":"判定の根拠（例: 発言者が進捗を報告、内容が一致）"}],"pending":[{"content":"保留内容","reason":"理由","next_action":"次回の扱い"}],"risks":[{"content":"リスク内容","category":"カテゴリ","impact":"高","probability":"高","response":"対応方針","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容","category":"カテゴリ","owner":"担当者","due":"期日","resolution":"解決策","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"報告内容","decision_needed":"要","background":"背景","recipient":"役員名","deadline":"期限","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"報告内容","action_needed":"要","background":"背景","recipient":"室長名","deadline":"期限","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
 
-  onLog('🤖 文字起こしを解析中...');
+  onLog('🤖 文字起こしを解析・照合中...');
   const res = await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -817,7 +985,7 @@ ${transcript}
   });
   if(!res.ok) throw new Error(`API Error ${res.status}: ${await res.text()}`);
   const data = await res.json();
-  onLog('✅ 解析完了！データを処理中...');
+  onLog('✅ 解析・照合完了！データを処理中...');
   const text = data.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
   try { return JSON.parse(text); }
   catch(e){ const m=text.match(/\{[\s\S]+\}/); if(m) return JSON.parse(m[0]); throw new Error('JSON解析失敗: '+e.message); }
@@ -1051,12 +1219,17 @@ function AttendeeHistoryModal({ orgKey, onClose }){
   );
 }
 
-function TagNameInput({ orgKey, tags, setTags }){
+function TagNameInput({ orgKey, tags: tagsProp, setTags }){
+  // ローカルstateで即時表示、親stateも同時更新
+  const [tags, setTagsLocal] = useState(tagsProp||[]);
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSug, setShowSug] = useState(false);
   const [showHistEdit, setShowHistEdit] = useState(false);
   const inputRef = useRef();
+
+  // 親から渡されるtagsが変わったら同期
+  useEffect(()=>{ setTagsLocal(tagsProp||[]); }, [JSON.stringify(tagsProp)]);
 
   const getSuggestions = (val) => {
     const hist = loadAttendeeHistory();
@@ -1068,24 +1241,28 @@ function TagNameInput({ orgKey, tags, setTags }){
     const n = name.trim();
     if(!n || tags.includes(n)) return;
     const next = [...tags, n];
+    setTagsLocal(next);
     setTags(next);
     saveAttendeeHistory(orgKey, [n]);
     setInput(''); setShowSug(false);
   };
 
-  const delTag = (i) => setTags(tags.filter((_,idx)=>idx!==i));
+  const delTag = (i) => {
+    const next = tags.filter((_,idx)=>idx!==i);
+    setTagsLocal(next); setTags(next);
+  };
 
   const handleKey = (e) => {
     if(e.key==='Enter'||e.key==='、'||e.key===','){
       e.preventDefault(); addTag(input);
     } else if(e.key==='Backspace' && !input && tags.length){
-      setTags(tags.slice(0,-1));
+      const next = tags.slice(0,-1);
+      setTagsLocal(next); setTags(next);
     }
   };
 
   const handleChange = (e) => {
     const v = e.target.value;
-    // 「、」「,」で自動分割
     if(v.includes('、')||v.includes(',')){
       v.split(/[、,]/).forEach(n=>n.trim()&&addTag(n.trim()));
       return;
@@ -1189,15 +1366,128 @@ function AttendeesInput({ value, onChange }){
   );
 }
 
+
+// ── .ics（iCalendar）解析 ────────────────────────────────
+function parseIcs(text) {
+  const get = (key) => {
+    // DTSTART;TZID=... や DTSTART: 両方対応
+    const re = new RegExp(key + '[^:]*:([^\r\n]+)', 'i');
+    const m = text.match(re);
+    return m ? m[1].trim() : '';
+  };
+
+  // 日時変換（20260319T100000Z or 20260319T100000）
+  const parseDate = (dt) => {
+    if (!dt) return { date: '', time: '' };
+    const s = dt.replace(/[TZ]/g, '');
+    const y = s.slice(0,4), mo = s.slice(4,6), d = s.slice(6,8);
+    const h = s.slice(8,10)||'00', mi = s.slice(10,12)||'00';
+    return { date: `${y}-${mo}-${d}`, time: `${h}:${mi}` };
+  };
+
+  // 複数行にまたがる値を結合（RFC5545の折り返し）
+  const unfold = (t) => t.replace(/\r?\n[ \t]/g, '');
+  const unfolded = unfold(text);
+
+  const summary  = get('SUMMARY')  .replace(/^全体/,'全体').replace(/\\,/g,',').replace(/\\n/g,' ');
+  const location = get('LOCATION') .replace(/\\,/g,',').replace(/\\n/g,' ');
+  const dtStart  = parseDate(get('DTSTART'));
+  const dtEnd    = parseDate(get('DTEND'));
+
+  // 出席者を抽出（ATTENDEE行を全部取得）
+  const attendeeLines = [];
+  const reAtt = /ATTENDEE[^:]*:([^\r\n]+)/gi;
+  let m;
+  while ((m = reAtt.exec(unfolded)) !== null) {
+    attendeeLines.push(m[1].trim());
+  }
+
+  // CN=名前 を抽出
+  const extractName = (line) => {
+    const cn = line.match(/CN=([^;:]+)/i);
+    if (cn) return cn[1].replace(/^"(.*)"$/, '$1').trim();
+    // mailto:xxx@xxx から名前を推測
+    const mail = line.match(/mailto:([^@]+)@/i);
+    return mail ? mail[1] : line;
+  };
+
+  const attendeeNames = attendeeLines.map(extractName).filter(Boolean);
+
+  // 会議名から回数を抽出（例：「全体PMO定例 第46回」→ name=全体PMO定例, no=46）
+  const noMatch = summary.match(/第(\d+)回/);
+  const meetingNo   = noMatch ? noMatch[1] : '';
+  const meetingName = summary.replace(/　?第\d+回/, '').trim();
+
+  return {
+    meetingName,
+    meetingNo,
+    date:      dtStart.date,
+    startTime: dtStart.time,
+    endTime:   dtEnd.time,
+    location,
+    attendeeNames,
+  };
+}
+
 // ── Step 1 ─────────────────────────────────────────────────
 function Step1({data,setData,onNext}){
   const upd=(k,v)=>setData(p=>({...p,[k]:v}));
   const [showMaster, setShowMaster] = useState(false);
   const [meetingList, setMeetingList] = useState(()=>loadMeetingMaster());
   const refreshList = () => setMeetingList(loadMeetingMaster());
+  const icsRef = useRef();
+  const [icsLoaded, setIcsLoaded] = useState(false);
+
+  const handleIcs = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const parsed = parseIcs(e.target.result);
+        // 出席者をデフォルト組織（KE/IBM/PwC）に振り分けない→全員をKEに入れる
+        // 実際の組織分けは手動で調整
+        const currentOrgs = data.attendees && data.attendees.length > 0
+          ? data.attendees
+          : [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}];
+        // 全出席者をKE組織に追加（重複除外）
+        const keOrg = currentOrgs.find(o => o.org === 'KE') || currentOrgs[0];
+        const existingNames = keOrg.names || [];
+        const allNames = [...new Set([...existingNames, ...parsed.attendeeNames])];
+        const newOrgs = currentOrgs.map((o,i) =>
+          i === 0 ? {...o, names: allNames} : o
+        );
+        setData(p => ({
+          ...p,
+          meetingName: parsed.meetingName || p.meetingName,
+          meetingNo:   parsed.meetingNo   || p.meetingNo,
+          date:        parsed.date        || p.date,
+          startTime:   parsed.startTime   || p.startTime,
+          endTime:     parsed.endTime     || p.endTime,
+          location:    parsed.location    || p.location,
+          attendees:   newOrgs,
+        }));
+        setIcsLoaded(true);
+      } catch(err) {
+        alert('.icsファイルの解析に失敗しました: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
   return(
     <div className="card">
       <div className="card-title">📋 Step 1 ― 基本情報の入力</div>
+      <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+        <span style={{fontSize:12,color:'#1a4a7a',flex:1}}>
+          📅 Outlookの会議ファイル（.ics）をアップロードすると基本情報が自動入力されます
+        </span>
+        <input ref={icsRef} type="file" accept=".ics" style={{display:'none'}}
+          onChange={e=>{if(e.target.files[0])handleIcs(e.target.files[0]);}}/>
+        <button className="btn btn-blue" style={{padding:'6px 14px',fontSize:12,whiteSpace:'nowrap'}}
+          onClick={()=>icsRef.current.click()}>
+          📅 .icsを読み込む
+        </button>
+        {icsLoaded && <span style={{fontSize:12,color:'#1F7A4D',whiteSpace:'nowrap'}}>✅ 読み込み済み</span>}
+      </div>
       <div className="form-row">
         <div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
@@ -1539,9 +1829,49 @@ function App(){
     setAnalyzing(true);setError('');setLogs([]);
     const addLog=(l)=>setLogs(p=>[...p,l]);
     try{
-      const r=await callClaude(apiKey,basicInfo,transcript,addLog);
-      addLog('📊 データを整理中...');
-      setResult({...EMPTY,...r});
+      // 既存ファイルからデータを事前読み込み
+      let existingData = {};
+      const srcFile = xlsxDataFile || xlsxTemplateFile;
+      if (srcFile) {
+        addLog('📊 既存台帳を読み込み中...');
+        try {
+          const ab = await srcFile.arrayBuffer();
+          const wbOld = new ExcelJS.Workbook();
+          await wbOld.xlsx.load(ab);
+          wbOld.eachSheet((ws) => {
+            const rows = [];
+            let headerRow = null;
+            let headers = [];
+            ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
+              if (!headerRow) {
+                const vals = row.values.slice(1);
+                if (vals.some(v => String(v||'').includes('No.'))) {
+                  headerRow = rowNum;
+                  headers = vals.map(v => String(v||'').replace(/\n/g,''));
+                }
+              } else {
+                const vals = row.values.slice(1);
+                const rowObj = {};
+                const toStr = (v) => {
+                  if (!v && v !== 0) return '';
+                  if (v instanceof Date) { const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0'); return `${y}/${m}/${d}`; }
+                  if (typeof v === 'number' && v > 40000 && v < 60000) { const dt=new Date(Math.round((v-25569)*86400*1000)); return `${dt.getUTCFullYear()}/${String(dt.getUTCMonth()+1).padStart(2,'0')}/${String(dt.getUTCDate()).padStart(2,'0')}`; }
+                  return String(v);
+                };
+                headers.forEach((h, i) => { rowObj[h] = toStr(vals[i]); });
+                if (rowObj['No.'] && rowObj['No.'] !== '例' && rowObj['行種別'] !== 'progress') {
+                  rows.push(rowObj);
+                }
+              }
+            });
+            if (rows.length > 0) existingData[ws.name] = rows;
+          });
+          addLog(`📋 既存データ読み込み完了（${Object.keys(existingData).join('、')}）`);
+        } catch(e) { addLog('⚠️ 既存ファイル読み込みエラー（無視して続行）'); }
+      }
+      const r=await callClaude(apiKey,basicInfo,transcript,addLog,existingData);
+      addLog('📊 データを整理・照合中...');
+      setResult({...EMPTY,...r,_existingData:existingData});
       goTo(4);
     }catch(e){setError(e.message);}
     setAnalyzing(false);
