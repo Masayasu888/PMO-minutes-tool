@@ -1590,7 +1590,13 @@ function PersonMasterModal({ onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">👥 出席者マスター</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+          <div className="modal-title" style={{margin:0}}>👥 出席者マスター</div>
+          <button onClick={()=>{if(window.confirm('出席者マスターを全件削除しますか？\nICS再取込時に再登録できます。')){{savePersonMaster([]);setList([]);}}} }
+            style={{background:'none',border:'1px solid #e53e3e',color:'#e53e3e',borderRadius:4,padding:'3px 10px',cursor:'pointer',fontSize:11}}>
+            🗑 全件削除
+          </button>
+        </div>
         <div style={{fontSize:11,color:'#888',marginBottom:8}}>
           登録済み: {list.length}件 ／ ICS取り込み時に自動マッチングします
         </div>
@@ -1721,28 +1727,24 @@ function parseIcs(text) {
   // 日時変換（Outlook各種形式に対応）
   const parseDate = (dt) => {
     if (!dt) return { date: '', time: '' };
+    // 数字8桁を直接探す（フォーマットに依存しない）
+    const dateMatch = dt.match(/(\d{8})/);
+    const timeMatch = dt.match(/T(\d{6})/);
+    if (!dateMatch) return { date: '', time: '' };
+    const datePart = dateMatch[1];
+    const timePart = timeMatch ? timeMatch[1] : '000000';
     const isUTC = dt.endsWith('Z');
-    const clean = dt.replace(/[^0-9T]/g, '');
-    const tIdx = clean.indexOf('T');
-    const datePart = tIdx >= 0 ? clean.slice(0, tIdx) : clean.slice(0, 8);
-    const timePart = tIdx >= 0 ? clean.slice(tIdx + 1) : '';
-    if (datePart.length < 8) return { date: '', time: '' };
-    if (isUTC) {
-      // UTC→JSTはDateオブジェクトで正確に変換（日付またぎ対応）
-      const y = datePart.slice(0,4), mo = datePart.slice(4,6), d = datePart.slice(6,8);
-      const h = timePart.slice(0,2)||'00', mi = timePart.slice(2,4)||'00';
-      const utcMs = Date.UTC(parseInt(y), parseInt(mo)-1, parseInt(d), parseInt(h), parseInt(mi));
-      const jst = new Date(utcMs + 9*60*60*1000);
-      const jy = jst.getUTCFullYear();
-      const jmo = String(jst.getUTCMonth()+1).padStart(2,'0');
-      const jd = String(jst.getUTCDate()).padStart(2,'0');
-      const jh = String(jst.getUTCHours()).padStart(2,'0');
-      const jmi = String(jst.getUTCMinutes()).padStart(2,'0');
-      return { date: `${jy}-${jmo}-${jd}`, time: `${jh}:${jmi}` };
-    }
     const y = datePart.slice(0,4), mo = datePart.slice(4,6), d = datePart.slice(6,8);
-    const h = timePart.slice(0,2)||'00', mi = timePart.slice(2,4)||'00';
-    return { date: `${y}-${mo}-${d}`, time: `${h}:${mi}` };
+    const hh = parseInt(timePart.slice(0,2)), mi = timePart.slice(2,4);
+    if (isUTC) {
+      const utcMs = Date.UTC(parseInt(y), parseInt(mo)-1, parseInt(d), hh, parseInt(mi));
+      const jst = new Date(utcMs + 9*60*60*1000);
+      return {
+        date: `${jst.getUTCFullYear()}-${String(jst.getUTCMonth()+1).padStart(2,'0')}-${String(jst.getUTCDate()).padStart(2,'0')}`,
+        time: `${String(jst.getUTCHours()).padStart(2,'0')}:${String(jst.getUTCMinutes()).padStart(2,'0')}`
+      };
+    }
+    return { date: `${y}-${mo}-${d}`, time: `${String(hh).padStart(2,'0')}:${mi}` };
   };
 
 
