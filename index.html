@@ -1485,11 +1485,9 @@ function orgFromEmail(email) {
   if (!email) return '';
   const domain = (email.split('@')[1] || '').toLowerCase();
   const stored = loadDomainMaster();
-  // まず登録済みリストを検索
-  const found = stored.find(d => domain === d.domain || domain.endsWith('.'+d.domain));
+  const found = stored.find(d => domain === d.domain);
   if (found) return found.org;
-  // 次にDEFAULT_DOMAINSをフォールバック
-  const def = DEFAULT_DOMAINS.find(d => domain === d.domain || domain.endsWith('.'+d.domain));
+  const def = DEFAULT_DOMAINS.find(d => domain === d.domain);
   return def ? def.org : '';
 }
 
@@ -2078,19 +2076,21 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   // Step B: 未登録ドメインを収集してテーブル表示
   const processStepB = (raws, orgs) => {
     const domainMaster = loadDomainMaster();
+    const allKnown = [...domainMaster, ...DEFAULT_DOMAINS];
     const unknownDomains = {};
     raws.forEach(r => {
       if (!r.email) return;
-      const domain = r.email.split('@')[1] || '';
+      const domain = (r.email.split('@')[1] || '').toLowerCase();
       if (!domain) return;
-      const known = domainMaster.find(d => domain.endsWith(d.domain));
+      // 完全一致のみ（endsWith による誤マッチを防ぐ）
+      const known = allKnown.find(d => domain === d.domain);
       if (!known) {
-        if (!unknownDomains[domain]) unknownDomains[domain] = [];
-        unknownDomains[domain].push(r.email);
+        if (!unknownDomains[domain]) unknownDomains[domain] = new Set();
+        unknownDomains[domain].add(r.email); // Setで重複排除
       }
     });
-    const domainList = Object.entries(unknownDomains).map(([domain, emails]) => ({
-      domain, emails, org: '', confirmed: false
+    const domainList = Object.entries(unknownDomains).map(([domain, emailSet]) => ({
+      domain, emails: [...emailSet], org: '', confirmed: false
     }));
     if (domainList.length > 0) {
       setPendingDomains(domainList);
