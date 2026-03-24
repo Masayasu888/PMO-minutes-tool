@@ -1557,20 +1557,24 @@ function isEnglishName(name) {
 
 // ── ドメイン→組織マスター管理モーダル ────────────────────────
 function DomainMasterModal({ onClose, icsRaws }) {
-  // DEFAULT_DOMAINSで欠けているエントリを補完して表示
-  // 初回アクセス時にlocalStorageへDEFAULT_DOMAINSを書き込む
+  const readList = () => {
+    try {
+      const s = localStorage.getItem(DOMAIN_MASTER_KEY);
+      return s ? JSON.parse(s) : [...DEFAULT_DOMAINS];
+    } catch(e) { return [...DEFAULT_DOMAINS]; }
+  };
   const [list, setList] = useState(()=>{
-    const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
-    if (!stored) {
-      // 初回のみDEFAULT_DOMAINSを書き込む
+    const s = localStorage.getItem(DOMAIN_MASTER_KEY);
+    if (s === null) {
       localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(DEFAULT_DOMAINS));
       return [...DEFAULT_DOMAINS];
     }
-    return JSON.parse(stored); // 空配列でもそのまま返す
+    try { return JSON.parse(s); } catch(e) { return [...DEFAULT_DOMAINS]; }
   });
   const [domain, setDomain] = useState('');
   const [org, setOrg] = useState('');
-  const [newDomains, setNewDomains] = useState([]); // ICS再取込で追加されたドメイン
+  const [newDomains, setNewDomains] = useState([]);
+  const [icsUnknown, setIcsUnknown] = useState(null);
 
   const save = (next) => {
     localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(next));
@@ -1583,38 +1587,35 @@ function DomainMasterModal({ onClose, icsRaws }) {
     save([...list, {domain:d, org:o}]);
     setDomain(''); setOrg('');
   };
+  const del = (i) => save(list.filter((_,j)=>j!==i));
 
-  // ICS再取込：未登録ドメインを抽出して一覧表示
-  const [icsUnknown, setIcsUnknown] = useState(null); // [{domain, emails, org:''}]
   const scanIcs = () => {
-    const currentList = loadDomainMaster();
-    setList(currentList);
+    const currentList = readList();
     const raws = icsRaws || [];
     const unknown = {};
     raws.forEach(r => {
       if (!r.email) return;
       const d = (r.email.split('@')[1]||'').toLowerCase();
       if (!d) return;
-      // 完全一致のみ（サブドメイン誤マッチを防ぐ）
-      const isKnown = currentList.some(x => d === x.domain) ||
-                      DEFAULT_DOMAINS.some(x => d === x.domain);
+      const isKnown = currentList.some(x => d === x.domain) || DEFAULT_DOMAINS.some(x => d === x.domain);
       if (!isKnown) {
         if (!unknown[d]) unknown[d] = [];
         unknown[d].push(r.email);
       }
     });
-    const result = Object.entries(unknown).map(([d,emails])=>({domain:d,emails,org:''}));
-    setIcsUnknown(result.length > 0 ? result : []);
+    setIcsUnknown(Object.entries(unknown).map(([d,emails])=>({domain:d,emails,org:''})));
   };
 
   const updUnknown = (i, val) => setIcsUnknown(icsUnknown.map((d,idx)=>idx===i?{...d,org:val}:d));
 
   const registerUnknown = () => {
     const toAdd = icsUnknown.filter(d=>d.org.trim());
-    const added = toAdd.map(d=>d.domain);
-    const next = [...list, ...toAdd.map(d=>({domain:d.domain,org:d.org.trim()}))];
-    save(next);
-    setNewDomains(added);
+    if (toAdd.length === 0) { setIcsUnknown(null); return; }
+    const current = readList();
+    const newList = [...current];
+    toAdd.forEach(d => { if (!newList.find(m=>m.domain===d.domain)) newList.push({domain:d.domain,org:d.org.trim()}); });
+    save(newList);
+    setNewDomains(toAdd.map(d=>d.domain));
     setIcsUnknown(null);
   };
 
@@ -1625,11 +1626,8 @@ function DomainMasterModal({ onClose, icsRaws }) {
         <div className="notice notice-info" style={{marginBottom:10}}>
           メールドメインと組織の対応を登録します。ICS取り込み時に自動判別します。
         </div>
-
-        {/* ICS再取込ボタン */}
         {icsRaws && icsRaws.length > 0 ? (
-          <button onClick={scanIcs}
-            style={{width:'100%',marginBottom:12,padding:'8px',background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:6,color:'#1F3864',fontSize:12,cursor:'pointer',fontWeight:600}}>
+          <button onClick={scanIcs} style={{width:'100%',marginBottom:12,padding:'8px',background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:6,color:'#1F3864',fontSize:12,cursor:'pointer',fontWeight:600}}>
             🔍 読み込み済みICSから未登録ドメインを確認
           </button>
         ) : (
@@ -1637,32 +1635,25 @@ function DomainMasterModal({ onClose, icsRaws }) {
             💡 Step1で.icsを読み込むと、未登録ドメインをここで確認できます
           </div>
         )}
-
-        {/* 未登録ドメイン一覧 */}
         {icsUnknown !== null && (
           <div style={{marginBottom:12,border:'1.5px solid #2E75B6',borderRadius:6,overflow:'hidden'}}>
             <div style={{background:'#2E75B6',color:'#fff',padding:'6px 12px',fontSize:12,fontWeight:600}}>
-              {icsUnknown.length === 0 ? '✅ 未登録ドメインはありません' : `未登録ドメイン ${icsUnknown.length}件`}
+              {icsUnknown.length===0 ? '✅ 未登録ドメインはありません' : `未登録ドメイン ${icsUnknown.length}件`}
             </div>
             {icsUnknown.map((d,i)=>(
               <div key={i} style={{display:'flex',gap:8,alignItems:'center',padding:'7px 12px',borderTop:'1px solid #e2e8f0'}}>
                 <span style={{flex:1,fontSize:12,color:'#444'}}>@{d.domain}<br/><span style={{fontSize:10,color:'#999'}}>{d.emails.length}名</span></span>
-                <input value={d.org} onChange={e=>updUnknown(i,e.target.value)}
-                  placeholder="組織名を入力"
+                <input value={d.org} onChange={e=>updUnknown(i,e.target.value)} placeholder="組織名を入力"
                   style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:4,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
               </div>
             ))}
-            {icsUnknown.length > 0 && (
+            {icsUnknown.length>0 && (
               <div style={{padding:'8px 12px',borderTop:'1px solid #e2e8f0',display:'flex',justifyContent:'flex-end'}}>
-                <button className="btn btn-primary" style={{fontSize:12,padding:'6px 14px'}} onClick={registerUnknown}>
-                  登録する
-                </button>
+                <button className="btn btn-primary" style={{fontSize:12,padding:'6px 14px'}} onClick={registerUnknown}>登録する</button>
               </div>
             )}
           </div>
         )}
-
-        {/* 手動追加 */}
         <div style={{display:'flex',gap:8,marginBottom:10}}>
           <input value={domain} onChange={e=>setDomain(e.target.value)} placeholder="例: nssol.nipponsteel.com"
             style={{flex:2}} onKeyDown={e=>e.key==='Enter'&&add()}/>
@@ -1670,26 +1661,20 @@ function DomainMasterModal({ onClose, icsRaws }) {
             style={{flex:1}} onKeyDown={e=>e.key==='Enter'&&add()}/>
           <button className="btn btn-blue" style={{padding:'7px 12px',fontSize:12}} onClick={add}>追加</button>
         </div>
-
-        {/* 登録済みリスト */}
         <div style={{maxHeight:240,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {list.length===0 && <div style={{padding:'16px',textAlign:'center',color:'#888',fontSize:12}}>登録済みドメインはありません</div>}
           {list.map((item,i)=>(
-            <div key={i} style={{
-              display:'flex',alignItems:'center',padding:'7px 12px',borderBottom:'1px solid #f0f0f0',
-              background: newDomains.includes(item.domain) ? '#E8F5E9' : 'transparent'
-            }}>
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'7px 12px',borderBottom:'1px solid #f0f0f0',background:newDomains.includes(item.domain)?'#E8F5E9':'transparent'}}>
               <span style={{flex:2,fontSize:13,color:'#444'}}>@{item.domain}</span>
               <span style={{flex:1,fontSize:13,fontWeight:600,color:'#1F3864'}}>{item.org}</span>
               {newDomains.includes(item.domain) && <span style={{fontSize:10,color:'#1F7A4D',marginRight:8}}>✅ 新規追加</span>}
-              <button
-                onClick={(e)=>{e.stopPropagation();const next=list.filter((_,j)=>j!==i);save(next);}}
+              <button onClick={(e)=>{e.stopPropagation();del(i);}}
                 style={{background:'#fee2e2',border:'1px solid #fca5a5',borderRadius:4,cursor:'pointer',color:'#e53e3e',fontSize:13,padding:'4px 10px',minWidth:40}}>
                 削除
               </button>
             </div>
           ))}
         </div>
-
         <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
           <button className="btn btn-primary" onClick={onClose}>閉じる</button>
         </div>
@@ -2131,10 +2116,10 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         }
       });
       localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(newMaster));
-      const verify = localStorage.getItem(DOMAIN_MASTER_KEY);
-      alert('保存完了: ' + toAdd.map(d=>d.domain+'→'+d.org).join(', ') + '\n保存件数:' + JSON.parse(verify).length);
+      
+      
     } else {
-      alert('登録対象なし（組織名が空欄）');
+      
     }
     processStepC(icsRaws, icsOrgs);
   };
@@ -2746,7 +2731,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v8</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v9</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={()=>setShowPersonMaster(true)}
