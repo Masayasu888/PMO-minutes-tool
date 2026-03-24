@@ -1474,27 +1474,22 @@ function savePersonMaster(list){ localStorage.setItem(PERSON_MASTER_KEY, JSON.st
 function loadDomainMaster(){
   try{
     const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
-    if (!stored) return DEFAULT_DOMAINS;
-    const list = JSON.parse(stored);
-    // DEFAULT_DOMAINSのエントリが欠けていたら補完
-    const merged = [...list];
-    DEFAULT_DOMAINS.forEach(def => {
-      if (!merged.find(d => d.domain === def.domain)) {
-        merged.push(def);
-      }
-    });
-    return merged;
-  }catch(e){ return DEFAULT_DOMAINS; }
+    if (!stored) return [...DEFAULT_DOMAINS];
+    return JSON.parse(stored);
+  }catch(e){ return [...DEFAULT_DOMAINS]; }
 }
-function saveDomainMaster(list){ localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(list)); }
 
-// メールアドレスから組織を判別
+// ドメイン→組織の判別（DEFAULT_DOMAINSも含めて検索）
 function orgFromEmail(email) {
   if (!email) return '';
   const domain = (email.split('@')[1] || '').toLowerCase();
-  const domains = loadDomainMaster();
-  const found = domains.find(d => domain.endsWith(d.domain));
-  return found ? found.org : '';
+  const stored = loadDomainMaster();
+  // まず登録済みリストを検索
+  const found = stored.find(d => domain === d.domain || domain.endsWith('.'+d.domain));
+  if (found) return found.org;
+  // 次にDEFAULT_DOMAINSをフォールバック
+  const def = DEFAULT_DOMAINS.find(d => domain === d.domain || domain.endsWith('.'+d.domain));
+  return def ? def.org : '';
 }
 
 // 英字名を「名 姓」→「姓 名」に変換
@@ -1568,7 +1563,11 @@ function DomainMasterModal({ onClose, icsRaws }) {
   const [org, setOrg] = useState('');
   const [newDomains, setNewDomains] = useState([]); // ICS再取込で追加されたドメイン
 
-  const save = (next) => { setList(next); saveDomainMaster(next); };
+  const save = (next) => {
+    saveDomainMaster(next);
+    // loadDomainMasterは補完するのでsaveした値をそのままstateに反映
+    setList(next);
+  };
   const add = () => {
     const d = domain.trim().toLowerCase().replace(/^@/,'');
     const o = org.trim();
