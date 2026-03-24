@@ -1382,6 +1382,27 @@ function TagNameInput({ orgKey, tags: tagsProp, setTags }){
         <div className="name-input-wrap">
           <input ref={inputRef} className="name-input" value={input}
             onChange={handleChange} onKeyDown={handleKey}
+            onFocus={()=>{setSuggestions(getSuggestions(input));setShowSug(true);}}
+            onBlur={()=>setTimeout(()=>setShowSug(false),150)}
+            placeholder={tags.length?'名前を追加…':'名前を入力（Enterで追加）'}/>
+          {showSug && suggestions.length>0 && (
+            <div className="suggest-list">
+              {suggestions.map((s,i)=>(
+                <div key={i} className="suggest-item" onMouseDown={()=>addTag(s)}>{s}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <button onClick={()=>setShowHistEdit(true)}
+        style={{background:'none',border:'none',color:'#999',fontSize:11,cursor:'pointer',padding:'2px 0',marginTop:2}}>
+        📋 履歴を編集・修正
+      </button>
+      {showHistEdit && <AttendeeHistoryModal orgKey={orgKey} onClose={()=>setShowHistEdit(false)}/>}
+    </div>
+  );
+}
+
 const DEFAULT_ORGS = ['KE','IBM','PwC'];
 
 // マスター検索：日本語・英字・ローマ字対応
@@ -1400,161 +1421,38 @@ function searchPersonMaster(query, excludeNames=[]) {
 }
 
 function AttendeesInput({ value, onChange, onOpenPersonMaster }){
-  // 内部stateを持たず完全Controlled
   const orgs = (value && value.length > 0)
     ? value
-    : DEFAULT_ORGS.map(o=>({org:o, names:[]}));
+    : DEFAULT_ORGS.map(function(o){ return {org:o, names:[]}; });
 
-  const allOrgNames = [...new Set([...DEFAULT_ORGS, ...orgs.map(o=>o.org)])];
-  const [activeOrg, setActiveOrg] = useState((orgs[0] && orgs[0].org) || 'KE');
-  const [searchQ, setSearchQ] = useState('');
-  const [selectedOrg, setSelectedOrg] = useState(activeOrg);
-  const [showSuggest, setShowSuggest] = useState(false);
-  const [showAddOrg, setShowAddOrg] = useState(false);
-  const [newOrgName, setNewOrgName] = useState('');
-  const orgList = [...new Set([...allOrgNames, ...domainMaster.map(d=>d.org)])];
-
-  // アクティブ組織のデータ
-  const activeData = orgs.find(o=>o.org===activeOrg) || {org:activeOrg, names:[]};
-
-  // 名前を追加
-  const addName = (name, org) => {
-    const targetOrg = org || activeOrg;
-    const existing = orgs.find(o=>o.org===targetOrg);
-    let newOrgs;
-    if (existing) {
-      if (existing.names.includes(name)) return;
-      newOrgs = orgs.map(o=>o.org===targetOrg ? {...o, names:[...o.names, name]} : o);
-    } else {
-      newOrgs = [...orgs, {org:targetOrg, names:[name]}];
-    }
-    onChange(newOrgs);
-    setSearchQ(''); setShowSuggest(false);
+  const removeName = function(orgKey, name) {
+    onChange(orgs.map(function(o){ return o.org===orgKey ? {org:o.org, names:o.names.filter(function(n){ return n!==name; })} : o; }));
   };
-
-  // 名前を削除
-  const removeName = (orgKey, name) => {
-    onChange(orgs.map(o=>o.org===orgKey ? {...o, names:o.names.filter(n=>n!==name)} : o));
-  };
-
-  // 組織を追加
-  const addOrg = () => {
-    const n = newOrgName.trim();
-    if(!n || orgs.find(o=>o.org===n)) return;
-    onChange([...orgs, {org:n, names:[]}]);
-    setActiveOrg(n); setNewOrgName(''); setShowAddOrg(false);
-  };
-
-  // 組織を削除
-  const removeOrg = (orgKey) => {
-    const next = orgs.filter(o=>o.org!==orgKey);
-    onChange(next.length ? next : DEFAULT_ORGS.map(o=>({org:o,names:[]})));
-    if (activeOrg === orgKey) setActiveOrg((next[0] && next[0].org) || 'KE');
-  };
-
-  // 候補リスト
-  const existingNames = orgs.flatMap(o=>o.names);
-  const suggestions = searchQ ? searchPersonMaster(searchQ, existingNames) : [];
-  const hasNoResult = searchQ.length >= 1 && suggestions.length === 0;
 
   return (
-    <div className="att-wrap">
-      {/* タブ */}
-      <div className="att-tabs">
-        {orgs.map(o=>(
-          <button key={o.org} className={`att-tab${activeOrg===o.org?' active':''}`}
-            onClick={()=>{setActiveOrg(o.org);setSelectedOrg(o.org);setSearchQ('');setShowSuggest(false);}}>
-            {o.org}
-            {o.names.length>0 && <span style={{marginLeft:4,fontSize:10,background:'#2E75B6',color:'#fff',padding:'1px 5px',borderRadius:8}}>{o.names.length}</span>}
-          </button>
-        ))}
-        {!showAddOrg && (
-          <button className="att-tab-add" onClick={()=>setShowAddOrg(true)} title="組織を追加">＋</button>
-        )}
-        {showAddOrg && (
-          <div style={{display:'flex',gap:4,alignItems:'center',padding:'4px 8px'}}>
-            <input value={newOrgName} onChange={e=>setNewOrgName(e.target.value)}
-              onKeyDown={e=>{if(e.key==='Enter')addOrg();if(e.key==='Escape')setShowAddOrg(false);}}
-              placeholder="組織名" autoFocus
-              style={{padding:'4px 8px',border:'1.5px solid #2E75B6',borderRadius:4,fontSize:12,width:90,outline:'none'}}/>
-            <button onClick={addOrg} style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:11}}>追加</button>
-            <button onClick={()=>setShowAddOrg(false)} style={{background:'#e2e8f0',border:'none',borderRadius:4,padding:'4px 6px',cursor:'pointer',fontSize:11}}>✕</button>
+    <div style={{border:'1.5px solid #d0d8e4',borderRadius:8,padding:12}}>
+      {orgs.map(function(o, i){
+        return (
+          <div key={i} style={{marginBottom:8}}>
+            <strong>[{o.org}]</strong>
+            {o.names.map(function(name, j){
+              return (
+                <span key={j} style={{marginLeft:6,background:'#EBF3FB',padding:'2px 8px',borderRadius:12,fontSize:12}}>
+                  {name}
+                  <button onClick={function(){ removeName(o.org, name); }} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',marginLeft:4}}>✕</button>
+                </span>
+              );
+            })}
           </div>
-        )}
-        {orgs.length>1 && (
-          <button onClick={()=>removeOrg(activeOrg)}
-            style={{marginLeft:'auto',padding:'7px 10px',background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:11}}>
-            {activeOrg}を削除
-          </button>
-        )}
-      </div>
-
-      {/* ボディ */}
-      <div className="att-body">
-        {/* 登録済みタグ */}
-        <div className="att-tags">
-          {activeData.names.length===0 && (
-            <span style={{fontSize:12,color:'#bbb'}}>まだ登録されていません</span>
-          )}
-          {activeData.names.map((name,i)=>(
-            <span key={i} className="att-tag">
-              {name}
-              <button className="att-tag-del" onClick={()=>removeName(activeOrg, name)}>✕</button>
-            </span>
-          ))}
-        </div>
-
-        {/* 検索・追加 */}
-        <div className="att-search-wrap">
-          <div className="att-search-row">
-            <select className="att-org-select" value={selectedOrg}
-              onChange={e=>{setSelectedOrg(e.target.value);setActiveOrg(e.target.value);}}>
-              {orgList.map(o=><option key={o} value={o}>{o}</option>)}
-            </select>
-            <input ref={inputRef} className="att-search-input" value={searchQ}
-              onChange={e=>{setSearchQ(e.target.value);setShowSuggest(true);}}
-              onFocus={()=>setShowSuggest(true)}
-              onBlur={()=>setTimeout(()=>setShowSuggest(false),180)}
-              onKeyDown={e=>{
-                if(e.key==='Enter'&&searchQ.trim()&&suggestions.length===0){
-                  // 候補なし→マスターを開く
-                  if(onOpenPersonMaster) onOpenPersonMaster();
-                }
-                if(e.key==='Escape'){setSearchQ('');setShowSuggest(false);}
-              }}
-              placeholder="名前を検索（日本語・英字可）"/>
-          </div>
-
-          {/* サジェスト */}
-          {showSuggest && searchQ && (
-            <div className="att-suggest">
-              {suggestions.map((p,i)=>(
-                <div key={i} className="att-suggest-item"
-                  onMouseDown={()=>addName(p.name, p.org)}>
-                  <span className="att-suggest-badge">{p.org}</span>
-                  <span style={{fontWeight:600}}>{p.name}</span>
-                  {p.email && <span style={{fontSize:11,color:'#999',marginLeft:'auto'}}>{p.email.split('@')[0]}</span>}
-                </div>
-              ))}
-              {hasNoResult && (
-                <div className="att-suggest-new"
-                  onMouseDown={()=>{setShowSuggest(false);if(onOpenPersonMaster)onOpenPersonMaster();}}>
-                  ＋ 「{searchQ}」をマスターに登録...
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-        <div style={{fontSize:11,color:'#999',marginTop:6}}>
-          マスター登録済みの名前を検索して追加できます
-        </div>
-      </div>
+        );
+      })}
+      <button onClick={function(){ if(onOpenPersonMaster) onOpenPersonMaster(); }}
+        style={{marginTop:8,background:'none',border:'1px dashed #2E75B6',color:'#2E75B6',borderRadius:6,padding:'6px 14px',cursor:'pointer',fontSize:12,width:'100%'}}>
+        ＋ 出席者マスターから追加
+      </button>
     </div>
   );
 }
-}
-
-
 
 // ══════════════════════════════════════════════════════════
 // 出席者マスター・ドメインマスター
