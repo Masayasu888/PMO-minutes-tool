@@ -2246,11 +2246,11 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <span>出席者</span>
         <div style={{display:'flex',gap:6}}>
-          <button onClick={()=>setShowPersonMaster(true)}
+          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }}
             style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
             👥 参加者マスター
           </button>
-          <button onClick={()=>setShowDomainMaster(true)}
+          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }}
             style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
             🌐 組織マスター
           </button>
@@ -2649,7 +2649,7 @@ function App(){
         </div>
       </div>
       <StepIndicator step={step} setStep={setStep} maxReached={maxReached}/>
-      {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)} onOpenPersonMaster={()=>setShowPersonMaster(true)}/>}
+      {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)} onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
         docxTemplateFile={docxTemplateFile} setDocxTemplateFile={setDocxTemplateFile}
         xlsxTemplateFile={xlsxTemplateFile} setXlsxTemplateFile={setXlsxTemplateFile}
