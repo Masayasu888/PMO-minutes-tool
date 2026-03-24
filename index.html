@@ -1471,7 +1471,21 @@ const DEFAULT_DOMAINS = [
 
 function loadPersonMaster(){ try{ return JSON.parse(localStorage.getItem(PERSON_MASTER_KEY)||'[]'); }catch(e){ return []; } }
 function savePersonMaster(list){ localStorage.setItem(PERSON_MASTER_KEY, JSON.stringify(list)); }
-function loadDomainMaster(){ try{ return JSON.parse(localStorage.getItem(DOMAIN_MASTER_KEY)||JSON.stringify(DEFAULT_DOMAINS)); }catch(e){ return DEFAULT_DOMAINS; } }
+function loadDomainMaster(){
+  try{
+    const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
+    if (!stored) return DEFAULT_DOMAINS;
+    const list = JSON.parse(stored);
+    // DEFAULT_DOMAINSのエントリが欠けていたら補完
+    const merged = [...list];
+    DEFAULT_DOMAINS.forEach(def => {
+      if (!merged.find(d => d.domain === def.domain)) {
+        merged.push(def);
+      }
+    });
+    return merged;
+  }catch(e){ return DEFAULT_DOMAINS; }
+}
 function saveDomainMaster(list){ localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(list)); }
 
 // メールアドレスから組織を判別
@@ -1660,77 +1674,162 @@ function PersonMasterModal({ onClose }) {
 }
 
 // ── 未登録出席者ダイアログ ─────────────────────────────────────
-function NewAttendeeDialog({ person, onRegister, onSkip, onThisTime }) {
-  const domains = loadDomainMaster();
-  const orgList = [...new Set(['KE','IBM','PwC','MSOL','Hopes',...domains.map(d=>d.org)])];
-  const detectedOrg = person.detectedOrg || orgFromEmail(person.email) || 'KE';
-  const [name, setName] = useState(person.name||'');
-  const [org, setOrg]   = useState(detectedOrg);
-
+// ── Step A: インポート選択 ──────────────────────────────────
+function IcsStepA({ count, onAll, onOwnerOnly, onSkip }) {
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{maxWidth:460}}>
-        <div className="modal-title">👤 新しい出席者が見つかりました</div>
-        <div style={{background:'#f8fafc',borderRadius:6,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#444'}}>
-          <div style={{marginBottom:4}}>📧 <strong>{person.email}</strong></div>
-          <div style={{color:'#888'}}>取得名: {person.rawName||'（不明）'}</div>
+      <div className="modal" style={{maxWidth:440}}>
+        <div className="modal-title">📅 参加者のインポート</div>
+        <div style={{fontSize:13,color:'#444',marginBottom:16}}>
+          .icsから <strong>{count}名</strong> の参加者が見つかりました。インポート方法を選択してください。
         </div>
-        <div style={{marginBottom:10}}>
-          <label style={{fontSize:12,fontWeight:600,color:'#444',marginBottom:4,display:'block'}}>表示名（日本語）</label>
-          <input value={name} onChange={e=>setName(e.target.value)}
-            placeholder="例: 宮守 秀勝" style={{marginBottom:10}}/>
-          <label style={{fontSize:12,fontWeight:600,color:'#444',marginBottom:4,display:'block'}}>組織</label>
-          <select value={org} onChange={e=>setOrg(e.target.value)} style={{width:'100%',padding:'8px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}>
-            {orgList.map(o=><option key={o} value={o}>{o}</option>)}
-          </select>
-          {detectedOrg && <div style={{fontSize:11,color:'#2E75B6',marginTop:4}}>💡 ドメインから「{detectedOrg}」と自動判別しました</div>}
-        </div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <button className="btn btn-green" style={{flex:1,justifyContent:'center'}} onClick={()=>onRegister({name:name||person.name,email:person.email,org})}>
-            ✅ 登録してStep1に追加
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <button className="btn btn-primary" onClick={onAll}
+            style={{justifyContent:'flex-start',gap:10,padding:'12px 16px'}}>
+            <span style={{fontSize:18}}>✅</span>
+            <span><strong>全員インポート</strong><br/><span style={{fontSize:11,fontWeight:'normal',opacity:.8}}>全参加者を登録・出席者に追加</span></span>
           </button>
-          <button className="btn btn-gray" style={{flex:1,justifyContent:'center'}} onClick={()=>onThisTime({name:name||person.name,org})}>
-            今回のみ追加
+          <button className="btn btn-gray" onClick={onOwnerOnly}
+            style={{justifyContent:'flex-start',gap:10,padding:'12px 16px'}}>
+            <span style={{fontSize:18}}>👤</span>
+            <span><strong>担当者のみ</strong><br/><span style={{fontSize:11,opacity:.8}}>主催者・自分のみ追加（他はスキップ）</span></span>
           </button>
-          <button className="btn btn-gray" style={{padding:'10px 14px'}} onClick={onSkip}>スキップ</button>
+          <button style={{background:'none',border:'none',color:'#999',cursor:'pointer',fontSize:12,padding:'8px'}} onClick={onSkip}>
+            ⏭ 参加者はスキップして手動入力する
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── 名前更新確認ダイアログ ─────────────────────────────────────
-function UpdateNameDialog({ person, newName, onUpdate, onSkip }) {
+// ── Step B: 未登録ドメイン一覧 ──────────────────────────────
+function IcsStepB({ domains, onComplete, onSkip }) {
+  const [list, setList] = React.useState(domains.map(d => ({...d})));
+  const upd = (i, key, val) => setList(list.map((d,idx) => idx===i ? {...d,[key]:val} : d));
+
   return (
     <div className="modal-overlay">
-      <div className="modal" style={{maxWidth:420}}>
-        <div className="modal-title">🔄 名前を更新できます</div>
-        <div style={{marginBottom:16}}>
-          <div style={{fontSize:13,marginBottom:8}}>メールアドレス: <strong>{person.email}</strong></div>
-          <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'#f8fafc',borderRadius:6}}>
-            <div style={{textAlign:'center'}}>
-              <div style={{fontSize:11,color:'#888',marginBottom:2}}>現在の登録名</div>
-              <div style={{fontSize:14,color:'#e53e3e'}}>{person.name}</div>
+      <div className="modal" style={{maxWidth:560}}>
+        <div className="modal-title">🌐 未登録の組織ドメイン</div>
+        <div style={{fontSize:12,color:'#666',marginBottom:12}}>
+          以下のドメインが未登録です。組織名を入力して登録してください。
+        </div>
+        <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden',marginBottom:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',background:'#1F3864',color:'#fff',padding:'8px 12px',fontSize:12,fontWeight:600}}>
+            <span>ドメイン</span><span>組織名</span>
+          </div>
+          {list.map((d,i) => (
+            <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr',padding:'8px 12px',borderTop:'1px solid #f0f0f0',alignItems:'center',gap:8}}>
+              <span style={{fontSize:12,color:'#444'}}>@{d.domain}<br/><span style={{fontSize:10,color:'#999'}}>{d.emails.length}名</span></span>
+              <input value={d.org} onChange={e=>upd(i,'org',e.target.value)}
+                placeholder="例: 日鉄ソリューションズ"
+                style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:4,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
             </div>
-            <div style={{fontSize:20,color:'#2E75B6'}}>→</div>
-            <div style={{textAlign:'center'}}>
-              <div style={{fontSize:11,color:'#888',marginBottom:2}}>今回取得した名前</div>
-              <div style={{fontSize:14,color:'#1F7A4D',fontWeight:600}}>{newName}</div>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+          <button className="btn btn-gray" onClick={onSkip}>スキップ</button>
+          <button className="btn btn-primary" onClick={()=>onComplete(list)}>
+            登録して次へ →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Step C: 未登録メンバー一覧 ──────────────────────────────
+function IcsStepC({ members: initMembers, onComplete, onSkip }) {
+  const [members, setMembers] = React.useState(initMembers.map(m => ({...m})));
+  const upd = (i, key, val) => setMembers(members.map((m,idx) => idx===i ? {...m,[key]:val} : m));
+  const orgList = ['KE','IBM','PwC','MSOL','Hopes',...new Set(loadDomainMaster().map(d=>d.org))];
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{maxWidth:700}}>
+        <div className="modal-title">👥 未登録の参加者</div>
+        <div style={{fontSize:12,color:'#666',marginBottom:8}}>
+          氏名を確認・修正して登録してください。チェックを外すと今回はスキップします。
+        </div>
+        <div style={{maxHeight:360,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6,marginBottom:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'24px 180px 1fr 80px',background:'#1F3864',color:'#fff',padding:'8px 10px',fontSize:11,fontWeight:600,gap:8,position:'sticky',top:0}}>
+            <span>✓</span><span>氏名</span><span>メールアドレス</span><span>組織</span>
+          </div>
+          {members.map((m,i) => (
+            <div key={i} style={{display:'grid',gridTemplateColumns:'24px 180px 1fr 80px',padding:'7px 10px',borderTop:'1px solid #f0f0f0',alignItems:'center',gap:8,background:m.include?'':'#f9f9f9'}}>
+              <input type="checkbox" checked={m.include} onChange={e=>upd(i,'include',e.target.checked)}/>
+              <input value={m.displayName} onChange={e=>upd(i,'displayName',e.target.value)}
+                style={{padding:'3px 6px',border:'1.5px solid #d0d8e4',borderRadius:4,fontSize:12,fontFamily:'inherit',outline:'none',width:'100%',boxSizing:'border-box'}}/>
+              <span style={{fontSize:11,color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</span>
+              <select value={m.orgName} onChange={e=>upd(i,'orgName',e.target.value)}
+                style={{padding:'3px 4px',border:'1px solid #d0d8e4',borderRadius:4,fontSize:11,width:'100%'}}>
+                {[...new Set([m.detectedOrg, m.orgName, ...orgList])].filter(Boolean).map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
             </div>
+          ))}
+        </div>
+        <div style={{display:'flex',gap:8,justifyContent:'space-between',alignItems:'center'}}>
+          <span style={{fontSize:11,color:'#888'}}>
+            {members.filter(m=>m.include).length}名を登録（未確定）
+          </span>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-gray" onClick={onSkip}>スキップ</button>
+            <button className="btn btn-primary" onClick={()=>onComplete(members)}>
+              登録して次へ →
+            </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Step D: 日本語名更新（1件ずつ） ─────────────────────────
+function IcsStepD({ item, current, total, onUpdate, onSkip }) {
+  if (!item) return null;
+  const mismatch = (() => {
+    const a = (item.person.name||'').toLowerCase().replace(/\s/g,'');
+    const b = (item.newName||'').toLowerCase().replace(/\s/g,'');
+    if (a.length >= 2 && b.length >= 2) {
+      for (let i = 0; i < a.length - 1; i++) {
+        if (b.includes(a.slice(i, i+2))) return false;
+      }
+      return true;
+    }
+    return false;
+  })();
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{maxWidth:440}}>
+        <div className="modal-title">🔄 名前を更新できます（{current}/{total}件）</div>
+        <div style={{fontSize:12,color:'#666',marginBottom:8}}>📧 {item.person.email}</div>
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:'#f8fafc',borderRadius:6,marginBottom:12}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:11,color:'#888',marginBottom:2}}>現在の登録名</div>
+            <div style={{fontSize:14,color:'#e53e3e'}}>{item.person.name}</div>
+          </div>
+          <div style={{fontSize:20,color:'#2E75B6'}}>→</div>
+          <div style={{textAlign:'center'}}>
+            <div style={{fontSize:11,color:'#888',marginBottom:2}}>今回取得した名前</div>
+            <div style={{fontSize:14,color:'#1F7A4D',fontWeight:600}}>{item.newName}</div>
+          </div>
+        </div>
+        {mismatch && (
+          <div style={{padding:'6px 10px',background:'#FFF3CD',borderRadius:4,fontSize:12,color:'#856404',marginBottom:12}}>
+            ⚠️ 名前が大きく異なります。確認してください。
+          </div>
+        )}
         <div style={{display:'flex',gap:8}}>
-          <button className="btn btn-green" style={{flex:1,justifyContent:'center'}} onClick={onUpdate}>
-            ✅ 更新する
-          </button>
-          <button className="btn btn-gray" style={{flex:1,justifyContent:'center'}} onClick={onSkip}>
-            このままにする
-          </button>
+          <button className="btn btn-green" style={{flex:1,justifyContent:'center'}} onClick={()=>onUpdate(true)}>✅ 更新する</button>
+          <button className="btn btn-gray" style={{flex:1,justifyContent:'center'}} onClick={()=>onUpdate(false)}>このままにする</button>
         </div>
       </div>
     </div>
   );
 }
+
 
 // ── .ics（iCalendar）解析 ────────────────────────────────
 function parseIcs(text) {
@@ -1818,51 +1917,22 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
 
-  const [pendingPersons, setPendingPersons] = useState([]); // 未処理の未登録者キュー
-  const [updateCandidate, setUpdateCandidate] = useState(null); // {person, newName, rest}
-  const [icsBasicInfo, setIcsBasicInfo] = useState(null); // ICS基本情報の一時保存
-  const [pendingOrgs, setPendingOrgs] = useState(null); // 処理中の組織データ
-
-  // 出席者キューを処理する（再帰的に1人ずつ）
-  const processPendingQueue = (queue, orgs) => {
-    if (queue.length === 0) {
-      setData(p => ({ ...p, attendees: orgs }));
-      setPendingOrgs(null);
-      setPendingPersons([]);
-      setIcsLoaded(true);
-      return;
-    }
-    const [current, ...rest] = queue;
-
-    // メールなし・名前なしはスキップ
-    if (!current.email && !current.name) {
-      processPendingQueue(rest, orgs);
-      return;
-    }
-
-    const master = loadPersonMaster();
-    const existing = current.email
-      ? master.find(p => p.email === current.email)
-      : master.find(p => p.name === current.name);
-
-    if (existing) {
-      if (isEnglishName(existing.name) && !isEnglishName(current.name) && current.name !== current.email) {
-        setUpdateCandidate({ person: existing, newName: current.name, rest, orgs });
-      } else {
-        const updated = addToOrgs(orgs, existing.name, existing.org);
-        processPendingQueue(rest, updated);
-      }
-    } else {
-      // 未登録 → ドメインで組織を自動判別してダイアログ表示
-      const detectedOrg = orgFromEmail(current.email) || 'KE';
-      const personWithOrg = { ...current, detectedOrg };
-      setPendingPersons([personWithOrg, ...rest]);
-      setPendingOrgs(orgs);
-    }
-  };
+  // ── ICS取り込み状態管理（新仕様）──────────────────────────
+  // icsPhase: null | 'stepA' | 'stepB' | 'stepC' | 'stepD'
+  const [icsPhase, setIcsPhase] = useState(null);
+  const [icsRaws, setIcsRaws] = useState([]);        // 全出席者Raw
+  const [icsOrgs, setIcsOrgs] = useState([]);        // 構築中の組織データ
+  // Step B: 未登録ドメイン
+  const [pendingDomains, setPendingDomains] = useState([]); // [{domain, org:'', emails:[]}]
+  // Step C: 未登録メンバー
+  const [pendingMembers, setPendingMembers] = useState([]); // [{email,name,rawName,detectedOrg,orgName:'',displayName:''}]
+  // Step D: 日本語名更新候補
+  const [updateQueue, setUpdateQueue] = useState([]);  // [{person, newName}]
+  const [updateIdx, setUpdateIdx] = useState(0);
 
   // 組織配列に名前を追加するヘルパー
   const addToOrgs = (orgs, name, org) => {
+    if (!name || !org) return orgs;
     const exists = orgs.find(o => o.org === org);
     if (exists) {
       return orgs.map(o => o.org === org
@@ -1873,12 +1943,19 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
     return [...orgs, { org, names: [name] }];
   };
 
+  // ICS処理の完了（Step1に反映）
+  const finalizeIcs = (orgs) => {
+    setData(p => ({ ...p, attendees: orgs }));
+    setIcsPhase(null);
+    setIcsLoaded(true);
+  };
+
+  // .ics読み込み
   const handleIcs = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const parsed = parseIcs(e.target.result);
-        // 基本情報をStep1に即座にセット
         setData(p => ({
           ...p,
           meetingName: parsed.meetingName || p.meetingName,
@@ -1888,11 +1965,9 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           endTime:     parsed.endTime     || p.endTime,
           location:    parsed.location    || p.location,
         }));
-        setIcsBasicInfo(parsed);
-        // 出席者を処理
-        const initOrgs = [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}];
-        const raws = parsed.attendeeRaws || [];
-        processPendingQueue(raws, initOrgs);
+        const raws = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
+        setIcsRaws(raws);
+        setIcsPhase('stepA');
       } catch(err) {
         alert('.icsファイルの解析に失敗しました: ' + err.message);
       }
@@ -1900,44 +1975,175 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
     reader.readAsText(file, 'UTF-8');
   };
 
-  // 未登録者ダイアログのコールバック
-  const handleRegister = (personData) => {
-    const master = loadPersonMaster();
-    const newEntry = { name: personData.name, email: pendingPersons[0].email, org: personData.org };
-    savePersonMaster([...master, newEntry]);
-    const [, ...rest] = pendingPersons;
-    const updated = addToOrgs(pendingOrgs, personData.name, personData.org);
-    setPendingPersons(rest);
-    processPendingQueue(rest, updated);
-  };
-  const handleThisTime = (personData) => {
-    const [, ...rest] = pendingPersons;
-    const updated = addToOrgs(pendingOrgs, personData.name, personData.org || orgFromEmail(pendingPersons[0].email) || 'KE');
-    setPendingPersons(rest);
-    processPendingQueue(rest, updated);
-  };
-  const handleSkipPerson = () => {
-    const [, ...rest] = pendingPersons;
-    setPendingPersons(rest);
-    processPendingQueue(rest, pendingOrgs);
+  // Step A: 全員 or 担当者のみ選択後の処理開始
+  const startIcsImport = (importAll) => {
+    let raws = icsRaws;
+    if (!importAll) {
+      // 担当者のみ = OWNERまたはORGANIZERのみ（簡易: 自分のメール除外）
+      // 実際には主催者のみ残す（最初の1件）
+      raws = icsRaws.slice(0, 1);
+    }
+    const initOrgs = [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}];
+    setIcsOrgs(initOrgs);
+    processStepB(raws, initOrgs);
   };
 
-  // 名前更新ダイアログのコールバック
-  const handleUpdateName = () => {
-    if (!updateCandidate) return;
+  // Step B: 未登録ドメインを収集してテーブル表示
+  const processStepB = (raws, orgs) => {
+    const domainMaster = loadDomainMaster();
+    const unknownDomains = {};
+    raws.forEach(r => {
+      if (!r.email) return;
+      const domain = r.email.split('@')[1] || '';
+      if (!domain) return;
+      const known = domainMaster.find(d => domain.endsWith(d.domain));
+      if (!known) {
+        if (!unknownDomains[domain]) unknownDomains[domain] = [];
+        unknownDomains[domain].push(r.email);
+      }
+    });
+    const domainList = Object.entries(unknownDomains).map(([domain, emails]) => ({
+      domain, emails, org: '', confirmed: false
+    }));
+    if (domainList.length > 0) {
+      setPendingDomains(domainList);
+      setIcsRaws(raws);
+      setIcsOrgs(orgs);
+      setIcsPhase('stepB');
+    } else {
+      processStepC(raws, orgs);
+    }
+  };
+
+  // Step B完了: ドメインを登録してStep Cへ
+  const completStepB = (domainList) => {
+    const master = loadDomainMaster();
+    const toAdd = domainList.filter(d => d.org.trim());
+    const newMaster = [...master, ...toAdd.map(d => ({domain: d.domain, org: d.org.trim()}))];
+    saveDomainMaster(newMaster);
+    processStepC(icsRaws, icsOrgs);
+  };
+
+  // Step C: 未登録メンバーを収集してテーブル表示
+  const processStepC = (raws, orgs) => {
     const master = loadPersonMaster();
-    const updated = master.map(p => p.email === updateCandidate.person.email ? { ...p, name: updateCandidate.newName } : p);
-    savePersonMaster(updated);
-    const updOrgs = addToOrgs(updateCandidate.orgs, updateCandidate.newName, updateCandidate.person.org);
-    setUpdateCandidate(null);
-    processPendingQueue(updateCandidate.rest, updOrgs);
+    const members = [];
+    const updateCandidates = [];
+
+    raws.forEach(r => {
+      if (!r.email && !r.name) return;
+      const existing = r.email
+        ? master.find(p => p.email === r.email)
+        : null;
+
+      if (existing) {
+        // 登録済み
+        if (existing.confirmed) {
+          // 確定済み: 日本語名なし + 今回日本語名あり → Step D候補
+          if (isEnglishName(existing.name) && !isEnglishName(r.name) && r.name !== r.email) {
+            updateCandidates.push({ person: existing, newName: r.name });
+          }
+          // それ以外は何もしない（確定済みは更新しない）
+        } else {
+          // 未確定: 日本語名があれば更新候補
+          if (isEnglishName(existing.name) && !isEnglishName(r.name) && r.name !== r.email) {
+            updateCandidates.push({ person: existing, newName: r.name });
+          }
+        }
+      } else {
+        // 未登録
+        const detectedOrg = orgFromEmail(r.email) || 'KE';
+        members.push({
+          email: r.email || '',
+          name: r.name || '',
+          rawName: r.rawName || '',
+          detectedOrg,
+          orgName: detectedOrg,
+          displayName: r.name || '',
+          include: true,
+          confirmed: false,
+        });
+      }
+    });
+
+    setIcsOrgs(orgs);
+    setIcsRaws(raws);
+
+    if (members.length > 0) {
+      setPendingMembers(members);
+      setUpdateQueue(updateCandidates);
+      setIcsPhase('stepC');
+    } else if (updateCandidates.length > 0) {
+      setUpdateQueue(updateCandidates);
+      setUpdateIdx(0);
+      setIcsPhase('stepD');
+    } else {
+      // 全員登録済み → 出席者リストに追加して完了
+      let orgsResult = orgs;
+      raws.forEach(r => {
+        if (!r.email && !r.name) return;
+        const existing = master.find(p => p.email === r.email);
+        if (existing) orgsResult = addToOrgs(orgsResult, existing.name, existing.org);
+      });
+      finalizeIcs(orgsResult);
+    }
   };
-  const handleSkipUpdate = () => {
-    if (!updateCandidate) return;
-    const updOrgs = addToOrgs(updateCandidate.orgs, updateCandidate.person.name, updateCandidate.person.org);
-    setUpdateCandidate(null);
-    processPendingQueue(updateCandidate.rest, updOrgs);
+
+  // Step C完了: メンバー登録してStep Dへ
+  const completeStepC = (members) => {
+    const master = loadPersonMaster();
+    const toRegister = members.filter(m => m.include && m.displayName.trim());
+    const newMaster = [...master, ...toRegister.map(m => ({
+      name: m.displayName.trim(),
+      email: m.email,
+      org: m.orgName || m.detectedOrg,
+      confirmed: false,
+    }))];
+    savePersonMaster(newMaster);
+
+    // 出席者リストに追加
+    let orgsResult = icsOrgs;
+    // 登録済み全員も追加
+    const allMaster = newMaster;
+    icsRaws.forEach(r => {
+      if (!r.email && !r.name) return;
+      const p = allMaster.find(m => m.email === r.email);
+      if (p) orgsResult = addToOrgs(orgsResult, p.name, p.org);
+    });
+
+    if (updateQueue.length > 0) {
+      setIcsOrgs(orgsResult);
+      setUpdateIdx(0);
+      setIcsPhase('stepD');
+    } else {
+      finalizeIcs(orgsResult);
+    }
   };
+
+  // Step D: 日本語名更新（1件ずつ）
+  const handleUpdateName = (doUpdate) => {
+    const master = loadPersonMaster();
+    const current = updateQueue[updateIdx];
+    if (doUpdate && current) {
+      const updated = master.map(p =>
+        p.email === current.person.email ? { ...p, name: current.newName } : p
+      );
+      savePersonMaster(updated);
+      // orgsも更新
+      const newOrgs = icsOrgs.map(o => ({
+        ...o,
+        names: o.names.map(n => n === current.person.name ? current.newName : n)
+      }));
+      setIcsOrgs(newOrgs);
+    }
+    const nextIdx = updateIdx + 1;
+    if (nextIdx >= updateQueue.length) {
+      finalizeIcs(icsOrgs);
+    } else {
+      setUpdateIdx(nextIdx);
+    }
+  };
+
 
   return(
     <div className="card">
@@ -1947,30 +2153,54 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           📅 Outlookの会議ファイル（.ics）をアップロードすると基本情報が自動入力されます
         </span>
         <input ref={icsRef} type="file" accept=".ics" style={{display:'none'}}
-          onChange={e=>{if(e.target.files[0])handleIcs(e.target.files[0]);}}/>
+          onChange={e=>{if(e.target.files[0]){handleIcs(e.target.files[0]); e.target.value='';} }}/>
         <button className="btn btn-blue" style={{padding:'6px 14px',fontSize:12,whiteSpace:'nowrap'}}
           onClick={()=>icsRef.current.click()}>
           📅 .icsを読み込む
         </button>
-        {icsLoaded && <span style={{fontSize:12,color:'#1F7A4D',whiteSpace:'nowrap'}}>✅ 読み込み済み</span>}
+        {icsLoaded && (
+          <span style={{display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:12,color:'#1F7A4D',whiteSpace:'nowrap'}}>✅ 読み込み済み</span>
+            <button onClick={()=>{setIcsLoaded(false); if(icsRef.current) icsRef.current.value='';}}
+              style={{background:'none',border:'none',color:'#999',fontSize:11,cursor:'pointer',textDecoration:'underline'}}>
+              再読み込み
+            </button>
+          </span>
+        )}
       </div>
-      {/* 未登録出席者ダイアログ */}
-      {pendingPersons.length > 0 && pendingOrgs && (
-        <NewAttendeeDialog
-          key={pendingPersons[0].email || pendingPersons[0].name}
-          person={pendingPersons[0]}
-          onRegister={handleRegister}
-          onThisTime={handleThisTime}
-          onSkip={handleSkipPerson}
+      {/* ICS Step A/B/C/D ダイアログ */}
+      {icsPhase==='stepA' && (
+        <IcsStepA
+          count={icsRaws.length}
+          onAll={()=>startIcsImport(true)}
+          onOwnerOnly={()=>startIcsImport(false)}
+          onSkip={()=>{setIcsPhase(null);setIcsLoaded(true);}}
         />
       )}
-      {/* 名前更新ダイアログ */}
-      {updateCandidate && (
-        <UpdateNameDialog
-          person={updateCandidate.person}
-          newName={updateCandidate.newName}
+      {icsPhase==='stepB' && (
+        <IcsStepB
+          domains={pendingDomains}
+          onComplete={completStepB}
+          onSkip={()=>processStepC(icsRaws, icsOrgs)}
+        />
+      )}
+      {icsPhase==='stepC' && (
+        <IcsStepC
+          members={pendingMembers}
+          onComplete={completeStepC}
+          onSkip={()=>{
+            if(updateQueue.length>0){setUpdateIdx(0);setIcsPhase('stepD');}
+            else finalizeIcs(icsOrgs);
+          }}
+        />
+      )}
+      {icsPhase==='stepD' && updateQueue.length>0 && (
+        <IcsStepD
+          item={updateQueue[updateIdx]}
+          current={updateIdx+1}
+          total={updateQueue.length}
           onUpdate={handleUpdateName}
-          onSkip={handleSkipUpdate}
+          onSkip={()=>handleUpdateName(false)}
         />
       )}
       <div className="form-row">
@@ -2109,6 +2339,11 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
       {!analyzing&&!error&&(
         <div>
           <div className="notice notice-info">文字起こしをClaude APIで解析します。決定事項・ToDo・リスク・課題・役員報告・室長報告の抽出と重要度・優先度の自動判定を行います。</div>
+          <div style={{background:'#FFF9E6',border:'1px solid #F0C040',borderRadius:6,padding:'10px 14px',marginTop:8,fontSize:12,color:'#7A5800'}}>
+            🔑 <strong>Claude APIキーを使用します。</strong>
+            解析開始ボタンを押すと、Anthropic社のClaude API（claude-sonnet-4）にリクエストが送信されます。
+            APIキーが未設定の場合は設定画面が表示されます。
+          </div>
           <div className="btn-row" style={{marginTop:20}}>
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
             <button className="btn btn-green" onClick={onAnalyze}>🚀 解析開始</button>
