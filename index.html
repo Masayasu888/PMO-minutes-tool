@@ -1580,13 +1580,15 @@ function DomainMasterModal({ onClose, icsRaws }) {
   // ICS再取込：未登録ドメインを抽出して一覧表示
   const [icsUnknown, setIcsUnknown] = useState(null); // [{domain, emails, org:''}]
   const scanIcs = () => {
+    const currentList = loadDomainMaster(); // localStorageから最新を取得
+    setList(currentList); // 表示も同期
     const raws = icsRaws || [];
     const unknown = {};
     raws.forEach(r => {
       if (!r.email) return;
       const d = (r.email.split('@')[1]||'').toLowerCase();
       if (!d) return;
-      if (!list.find(x => d.endsWith(x.domain))) {
+      if (!currentList.find(x => d === x.domain || d.endsWith('.'+x.domain))) {
         if (!unknown[d]) unknown[d] = [];
         unknown[d].push(r.email);
       }
