@@ -1575,9 +1575,8 @@ function DomainMasterModal({ onClose, icsRaws }) {
   const [newDomains, setNewDomains] = useState([]); // ICS再取込で追加されたドメイン
 
   const save = (next) => {
-    saveDomainMaster(next);
-    // loadDomainMasterは補完するのでsaveした値をそのままstateに反映
-    setList(next);
+    localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(next));
+    setList([...next]);
   };
   const add = () => {
     const d = domain.trim().toLowerCase().replace(/^@/,'');
@@ -2123,21 +2122,18 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 
   // Step B完了: ドメインを登録してStep Cへ
   const completStepB = (domainList) => {
-    const master = loadDomainMaster();
     const toAdd = domainList.filter(d => d.org.trim());
-    if (toAdd.length === 0) {
-      // 組織名が全て空欄 → 何も保存せずStep Cへ
-      processStepC(icsRaws, icsOrgs);
-      return;
+    if (toAdd.length > 0) {
+      const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
+      const master = stored ? JSON.parse(stored) : [...DEFAULT_DOMAINS];
+      const newMaster = [...master];
+      toAdd.forEach(d => {
+        if (!newMaster.find(m => m.domain === d.domain)) {
+          newMaster.push({ domain: d.domain, org: d.org.trim() });
+        }
+      });
+      localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(newMaster));
     }
-    const newMaster = [...master];
-    toAdd.forEach(d => {
-      // 重複チェック
-      if (!newMaster.find(m => m.domain === d.domain)) {
-        newMaster.push({ domain: d.domain, org: d.org.trim() });
-      }
-    });
-    saveDomainMaster(newMaster);
     processStepC(icsRaws, icsOrgs);
   };
 
@@ -2748,7 +2744,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v5</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v6</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={()=>setShowPersonMaster(true)}
