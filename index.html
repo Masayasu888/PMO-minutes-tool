@@ -1577,7 +1577,13 @@ function DomainMasterModal({ onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{maxWidth:460}} onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">🌐 ドメイン→組織マスター</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+          <div className="modal-title" style={{margin:0}}>🌐 ドメイン→組織マスター</div>
+          <button onClick={()=>{if(window.confirm('ドメインマスターをデフォルトにリセットしますか？')){saveDomainMaster(DEFAULT_DOMAINS);setList([...DEFAULT_DOMAINS]);}}}
+            style={{background:'none',border:'1px solid #e53e3e',color:'#e53e3e',borderRadius:4,padding:'3px 10px',cursor:'pointer',fontSize:11}}>
+            🔄 リセット
+          </button>
+        </div>
         <div className="notice notice-info" style={{marginBottom:10}}>
           メールドメインと組織の対応を登録します。ICS取り込み時に自動判別します。
         </div>
@@ -2237,7 +2243,19 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         <div><label>作成者</label>
           <input value={data.author} onChange={e=>upd('author',e.target.value)}/></div>
       </div>
-      <div className="section-divider">出席者</div>
+      <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <span>出席者</span>
+        <div style={{display:'flex',gap:6}}>
+          <button onClick={()=>setShowPersonMaster(true)}
+            style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
+            👥 参加者マスター
+          </button>
+          <button onClick={()=>setShowDomainMaster(true)}
+            style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
+            🌐 組織マスター
+          </button>
+        </div>
+      </div>
       <div style={{fontSize:11,color:'#888',marginBottom:6}}>
         💡 名前を入力して <strong>Enter</strong> で追加。「、」または「,」で区切ると複数名を一括登録できます。
       </div>
