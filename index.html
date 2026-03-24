@@ -1560,7 +1560,16 @@ function isEnglishName(name) {
 
 // ── ドメイン→組織マスター管理モーダル ────────────────────────
 function DomainMasterModal({ onClose, icsRaws }) {
-  const [list, setList] = useState(()=>loadDomainMaster());
+  // DEFAULT_DOMAINSで欠けているエントリを補完して表示
+  const initList = () => {
+    const stored = loadDomainMaster();
+    const merged = [...stored];
+    DEFAULT_DOMAINS.forEach(def => {
+      if (!merged.find(d => d.domain === def.domain)) merged.push(def);
+    });
+    return merged;
+  };
+  const [list, setList] = useState(()=>initList());
   const [domain, setDomain] = useState('');
   const [org, setOrg] = useState('');
   const [newDomains, setNewDomains] = useState([]); // ICS再取込で追加されたドメイン
@@ -1621,11 +1630,15 @@ function DomainMasterModal({ onClose, icsRaws }) {
         </div>
 
         {/* ICS再取込ボタン */}
-        {icsRaws && icsRaws.length > 0 && (
+        {icsRaws && icsRaws.length > 0 ? (
           <button onClick={scanIcs}
             style={{width:'100%',marginBottom:12,padding:'8px',background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:6,color:'#1F3864',fontSize:12,cursor:'pointer',fontWeight:600}}>
             🔍 読み込み済みICSから未登録ドメインを確認
           </button>
+        ) : (
+          <div style={{fontSize:11,color:'#888',marginBottom:10,padding:'6px 10px',background:'#f8f8f8',borderRadius:4,textAlign:'center'}}>
+            💡 Step1で.icsを読み込むと、未登録ドメインをここで確認できます
+          </div>
         )}
 
         {/* 未登録ドメイン一覧 */}
