@@ -1478,6 +1478,7 @@ function loadDomainMaster(){
     return JSON.parse(stored);
   }catch(e){ return [...DEFAULT_DOMAINS]; }
 }
+function saveDomainMaster(list){ localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(list)); }
 
 // ドメイン→組織の判別（DEFAULT_DOMAINSも含めて検索）
 function orgFromEmail(email) {
