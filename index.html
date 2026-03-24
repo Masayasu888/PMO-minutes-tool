@@ -1475,7 +1475,10 @@ function loadDomainMaster(){
   try{
     const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
     if (!stored) return [...DEFAULT_DOMAINS];
-    return JSON.parse(stored);
+    const list = JSON.parse(stored);
+    // 空リストの場合はデフォルトに戻す
+    if (!list || list.length === 0) return [...DEFAULT_DOMAINS];
+    return list;
   }catch(e){ return [...DEFAULT_DOMAINS]; }
 }
 function saveDomainMaster(list){ localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(list)); }
