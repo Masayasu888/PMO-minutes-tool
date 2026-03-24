@@ -1475,10 +1475,7 @@ function loadDomainMaster(){
   try{
     const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
     if (!stored) return [...DEFAULT_DOMAINS];
-    const list = JSON.parse(stored);
-    // 空リストの場合はデフォルトに戻す
-    if (!list || list.length === 0) return [...DEFAULT_DOMAINS];
-    return list;
+    return JSON.parse(stored); // 空配列でもそのまま返す
   }catch(e){ return [...DEFAULT_DOMAINS]; }
 }
 function saveDomainMaster(list){ localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(list)); }
@@ -1564,11 +1561,12 @@ function DomainMasterModal({ onClose, icsRaws }) {
   // 初回アクセス時にlocalStorageへDEFAULT_DOMAINSを書き込む
   const [list, setList] = useState(()=>{
     const stored = localStorage.getItem(DOMAIN_MASTER_KEY);
-    if (!stored || JSON.parse(stored).length === 0) {
-      saveDomainMaster([...DEFAULT_DOMAINS]);
+    if (!stored) {
+      // 初回のみDEFAULT_DOMAINSを書き込む
+      localStorage.setItem(DOMAIN_MASTER_KEY, JSON.stringify(DEFAULT_DOMAINS));
       return [...DEFAULT_DOMAINS];
     }
-    return JSON.parse(stored);
+    return JSON.parse(stored); // 空配列でもそのまま返す
   });
   const [domain, setDomain] = useState('');
   const [org, setOrg] = useState('');
@@ -2748,7 +2746,7 @@ function App(){
       <div className="app-header">
         <div>
           <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v7</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v8</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center'}}>
           <button onClick={()=>setShowPersonMaster(true)}
