@@ -10,6 +10,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <script src="exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.41.0/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202c;min-height:100vh}
@@ -141,6 +142,49 @@ textarea{resize:vertical;min-height:70px}
 .material-add{background:none;border:1.5px dashed #2E75B6;color:#2E75B6;border-radius:6px;padding:6px 14px;font-size:12px;cursor:pointer;width:100%;margin-top:2px}
 .material-add:hover{background:#EBF3FB}
 .material-link-icon{font-size:12px;color:#a0aec0;flex-shrink:0}
+
+/* ── 会議中モード ─────────────────────────────────────────── */
+.live-mode-wrap{max-width:1400px;margin:0 auto;padding:16px}
+.live-header{background:#1a202c;color:#fff;padding:12px 20px;border-radius:10px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.live-title{font-size:16px;font-weight:700;color:#fc8181;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.live-title.recording{animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+.live-settings{background:#fff;border-radius:10px;padding:14px 18px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.live-setting-group{display:flex;flex-direction:column;gap:4px;min-width:160px}
+.live-setting-group label{font-size:11px;font-weight:600;color:#444}
+.live-setting-group input{padding:6px 10px;border:1.5px solid #d0d8e4;border-radius:6px;font-size:12px;font-family:inherit;outline:none}
+.live-setting-group input:focus{border-color:#2E75B6}
+.live-panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;height:calc(100vh - 280px);min-height:400px}
+.live-panel{background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:flex;flex-direction:column;overflow:hidden}
+.live-panel-header{padding:10px 16px;font-size:13px;font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.live-panel-body{flex:1;overflow-y:auto;padding:12px 16px;font-size:13px;line-height:1.7}
+.live-transcript-line{padding:2px 0;border-bottom:1px solid #f0f4f8}
+.live-transcript-time{font-size:11px;color:#a0aec0;margin-right:6px;font-family:monospace}
+.live-interim{color:#a0aec0;font-style:italic;padding:4px 0}
+.ai-flag{padding:8px 12px;border-radius:6px;margin-bottom:8px;font-size:12px}
+.ai-flag-root{background:#FFF5F5;border-left:3px solid #E53E3E;color:#742a2a}
+.ai-flag-warn{background:#FFFBEB;border-left:3px solid #D69E2E;color:#744210}
+.ai-flag-risk{background:#FFF5F5;border-left:3px solid #E53E3E;color:#742a2a}
+.ai-flag-issue{background:#FAF5FF;border-left:3px solid #805AD5;color:#44337a}
+.ai-section{margin-bottom:14px}
+.ai-section-title{font-size:11px;font-weight:700;color:#2E75B6;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #EBF3FB;text-transform:uppercase;letter-spacing:.5px}
+.ai-question{padding:6px 10px;background:#EBF3FB;border-radius:4px;margin-bottom:4px;font-size:12px;color:#1a4a7a}
+.ai-contradiction{padding:6px 10px;background:#FFF3CD;border-radius:4px;margin-bottom:4px;font-size:12px;color:#7D4E00}
+.ai-summary{font-size:12px;color:#333;line-height:1.7;background:#f8fafc;padding:10px;border-radius:6px}
+.ai-exec{font-size:12px;font-weight:600;color:#C55A11;background:#FFF4EB;padding:10px;border-radius:6px;border-left:3px solid #C55A11}
+.analyzing-badge{display:inline-flex;align-items:center;gap:4px;background:#EBF3FB;color:#2E75B6;padding:3px 8px;border-radius:10px;font-size:11px}
+.live-btn{padding:7px 14px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;transition:.15s}
+.live-btn-red{background:#E53E3E;color:#fff}.live-btn-red:hover{background:#c53030}
+.live-btn-green{background:#38A169;color:#fff}.live-btn-green:hover{background:#2f855a}
+.live-btn-gray{background:#e2e8f0;color:#444}.live-btn-gray:hover{background:#cbd5e0}
+.live-btn-blue{background:#2E75B6;color:#fff}.live-btn-blue:hover{background:#1d5fa0}
+.live-btn-dark{background:#1F3864;color:#fff}.live-btn-dark:hover{background:#16295a}
+.live-btn:disabled{opacity:.5;cursor:not-allowed}
+.mode-toggle{display:flex;gap:8px;align-items:center}
+.mode-btn{padding:6px 14px;border-radius:6px;border:1.5px solid #d0d8e4;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#555;transition:.15s}
+.mode-btn.active{background:#1F3864;color:#fff;border-color:#1F3864}
+.mode-btn.live-active{background:#E53E3E;color:#fff;border-color:#E53E3E}
+@media(max-width:768px){.live-panels{grid-template-columns:1fr;height:auto}}
 </style>
 </head>
 <body>
@@ -2637,8 +2681,446 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
   );
 }
 
+// ── 会議中モード（LiveMeetingMode） ───────────────────────────
+function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
+  const [azureKey, setAzureKey]       = useState(() => localStorage.getItem('azure_speech_key') || '');
+  const [azureRegion, setAzureRegion] = useState(() => localStorage.getItem('azure_speech_region') || 'japaneast');
+  const [boxToken, setBoxToken]       = useState(() => localStorage.getItem('box_token_live') || '');
+  const [boxFileId, setBoxFileId]     = useState(() => localStorage.getItem('box_fileid_live') || '');
+  const [prevMinutes, setPrevMinutes] = useState('');
+  const [prevLoaded, setPrevLoaded]   = useState(false);
+  const [transcript, setTranscript]   = useState([]);   // [{time, text}]
+  const [interimText, setInterimText] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [analysis, setAnalysis]       = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisCount, setAnalysisCount] = useState(0);
+  const [showSettings, setShowSettings]   = useState(true);
+  const [prevPasteText, setPrevPasteText] = useState('');
+  const [showPrevPaste, setShowPrevPaste] = useState(false);
+  const [micDevices, setMicDevices]       = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
+  const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical'); // 'physical'|'vbcable'
+
+  const recognizerRef    = useRef(null);
+  const timerRef         = useRef(null);
+  const transcriptRef    = useRef([]);
+  const analyzedLenRef   = useRef(0);
+  const transcriptBodyRef = useRef(null);
+  const analysisPanelRef  = useRef(null);
+
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+
+  // マイクデバイス一覧を取得
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
+      navigator.mediaDevices.enumerateDevices().then(devices => {
+        const mics = devices.filter(d => d.kind === 'audioinput');
+        setMicDevices(mics);
+        // VB-Cableを自動検出してmicModeに反映
+        const vb = mics.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio'));
+        if (vb && selectedMicId === 'default') {
+          // VB-Cableが存在する場合、IDだけ保持（モードは手動で切り替え）
+        }
+      });
+    }).catch(() => {});
+  }, []);
+
+  // 自動スクロール
+  useEffect(() => {
+    if (transcriptBodyRef.current) {
+      transcriptBodyRef.current.scrollTop = transcriptBodyRef.current.scrollHeight;
+    }
+  }, [transcript, interimText]);
+
+  const saveAzureSettings = () => {
+    localStorage.setItem('azure_speech_key', azureKey);
+    localStorage.setItem('azure_speech_region', azureRegion);
+    localStorage.setItem('azure_mic_id', selectedMicId);
+    localStorage.setItem('azure_mic_mode', micMode);
+  };
+
+  const loadBoxPrevMinutes = async () => {
+    if (!boxFileId || !boxToken) { alert('BoxファイルIDとアクセストークンを入力してください'); return; }
+    try {
+      localStorage.setItem('box_token_live', boxToken);
+      localStorage.setItem('box_fileid_live', boxFileId);
+      const res = await fetch(`https://api.box.com/2.0/files/${boxFileId}/content`, {
+        headers: { 'Authorization': `Bearer ${boxToken}` }
+      });
+      if (!res.ok) throw new Error('Box APIエラー: ' + res.status + ' - トークンを確認してください');
+      const text = await res.text();
+      setPrevMinutes(text);
+      setPrevLoaded(true);
+      alert(`✅ 前回議事録を読み込みました（${text.length}文字）`);
+    } catch(e) { alert('⚠️ Box読み込みエラー: ' + e.message); }
+  };
+
+  const usePastePrevMinutes = () => {
+    if (prevPasteText.trim()) {
+      setPrevMinutes(prevPasteText.trim());
+      setPrevLoaded(true);
+      setShowPrevPaste(false);
+      alert(`✅ 前回議事録をセットしました（${prevPasteText.trim().length}文字）`);
+    }
+  };
+
+  const startRecording = async () => {
+    if (!azureKey || !azureRegion) { alert('Azure Speech Services のキーとリージョンを入力してください'); return; }
+    if (!apiKey) { onOpenKeyModal(); return; }
+    const SpeechSDK = window.SpeechSDK;
+    if (!SpeechSDK) { alert('Azure Speech SDK の読み込みに失敗しました。ページを再読込してください。'); return; }
+    try {
+      saveAzureSettings();
+      const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(azureKey, azureRegion);
+      speechConfig.speechRecognitionLanguage = 'ja-JP';
+
+      // マイクデバイス選択
+      let audioConfig;
+      if (micMode === 'vbcable') {
+        // VB-Cable（またはカスタム選択）：deviceIdで指定
+        const vbDevice = micDevices.find(d =>
+          d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio')
+        );
+        const deviceId = vbDevice ? vbDevice.deviceId : selectedMicId;
+        if (deviceId && deviceId !== 'default') {
+          audioConfig = SpeechSDK.AudioConfig.fromMicrophoneInput(deviceId);
+        } else {
+          audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+        }
+      } else if (selectedMicId && selectedMicId !== 'default') {
+        audioConfig = SpeechSDK.AudioConfig.fromMicrophoneInput(selectedMicId);
+      } else {
+        audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+      }
+
+      const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+      // PMO専門用語をヒントとして登録
+      const phraseList = SpeechSDK.PhraseListGrammar.fromRecognizer(recognizer);
+      ['PMO','PgMO','ステコミ','IBM','MSOL','KE','KOKUSAI Electric','SAP','S/4HANA',
+       'ERP','CRM','Salesforce','ARAS','PLM','Sfotes','サプライヤーポータル',
+       'スコープ','マイルストーン','ガバナンス','エスカレーション','リスク','課題台帳'
+      ].forEach(t => phraseList.addPhrase(t));
+
+      recognizer.recognizing = (_, e) => { setInterimText(e.result.text); };
+      recognizer.recognized  = (_, e) => {
+        if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text) {
+          const time = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+          setTranscript(prev => {
+            const next = [...prev, { time, text: e.result.text }];
+            transcriptRef.current = next;
+            return next;
+          });
+          setInterimText('');
+        }
+      };
+      recognizer.canceled = (_, e) => {
+        if (e.reason === SpeechSDK.CancellationReason.Error) {
+          alert('Azure Speech エラー: ' + e.errorDetails + '\nキーとリージョンを確認してください。');
+          stopRecording();
+        }
+      };
+
+      recognizer.startContinuousRecognitionAsync(
+        () => { setIsRecording(true); setShowSettings(false); },
+        (err) => { alert('録音開始エラー: ' + err); }
+      );
+      recognizerRef.current = recognizer;
+
+      // 30秒ごとに自動分析
+      timerRef.current = setInterval(() => { runAnalysis(); }, 30000);
+    } catch(e) { alert('エラー: ' + e.message); }
+  };
+
+  const stopRecording = () => {
+    if (recognizerRef.current) {
+      recognizerRef.current.stopContinuousRecognitionAsync();
+      recognizerRef.current = null;
+    }
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    setIsRecording(false);
+    setInterimText('');
+  };
+
+  const runAnalysis = async () => {
+    const lines = transcriptRef.current;
+    if (!lines.length || !apiKey) return;
+    const fullText = lines.map(l => `[${l.time}] ${l.text}`).join('\n');
+    const newText  = lines.slice(analyzedLenRef.current).map(l => `[${l.time}] ${l.text}`).join('\n');
+    if (!newText.trim()) return;
+
+    setIsAnalyzing(true);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1200,
+          messages: [{
+            role: 'user',
+            content: `あなたはグローバルERPプロジェクトのクライアント側PMOアシスタントです。
+ベンダー（IBM・MSOL等）との会議をリアルタイムでモニタリングし、PMO担当者（Masa）が見落としなく適切に判断・指摘できるよう支援します。
+
+【前回議事録】
+${prevMinutes || '（なし）'}
+
+【今回の会議テキスト全体】
+${fullText}
+
+【最新の新規発言（前回分析以降）】
+${newText}
+
+以下のJSON形式のみで回答してください（説明文・マークダウン不要）：
+{
+  "flags": [
+    {"type": "根拠不足|矛盾|リスク|課題", "speaker": "発言者(不明な場合は空)", "content": "問題のある発言内容", "reason": "指摘理由（具体的に）"}
+  ],
+  "questions": ["今すぐ確認すべき質問1", "質問2"],
+  "contradictions": ["前回議事録との矛盾・変化点"],
+  "summary": "ここまでの会議内容の要約（3〜5行）",
+  "exec_summary": "役員が知るべきプロジェクト状況（1〜2行・経営者視点）"
+}`
+          }]
+        })
+      });
+      const data = await res.json();
+      const text = (data.content?.[0]?.text || '').replace(/```json\n?|\n?```/g,'').trim();
+      try {
+        const parsed = JSON.parse(text);
+        setAnalysis(parsed);
+        analyzedLenRef.current = lines.length;
+        setAnalysisCount(c => c + 1);
+        if (analysisPanelRef.current) analysisPanelRef.current.scrollTop = 0;
+      } catch(e) { console.error('Parse error:', e, text); }
+    } catch(e) { console.error('Analysis error:', e); }
+    setIsAnalyzing(false);
+  };
+
+  const handleEndMeeting = () => {
+    stopRecording();
+    const fullText = transcriptRef.current.map(l => `[${l.time}] ${l.text}`).join('\n');
+    onEndMeeting(fullText);
+  };
+
+  const flagClass = (type) => ({
+    '根拠不足': 'ai-flag-root', '矛盾': 'ai-flag-warn',
+    'リスク': 'ai-flag-risk', '課題': 'ai-flag-issue'
+  }[type] || 'ai-flag-warn');
+
+  return (
+    <div className="live-mode-wrap">
+      {/* ヘッダー */}
+      <div className="live-header">
+        <div className={`live-title ${isRecording ? 'recording' : ''}`}>
+          {isRecording ? '🔴' : '⚫'} 会議中モード
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+          {!isRecording
+            ? <button className="live-btn live-btn-green" onClick={startRecording}>▶ 録音開始</button>
+            : <button className="live-btn live-btn-gray"  onClick={stopRecording}>⏸ 一時停止</button>
+          }
+          <button className="live-btn live-btn-blue" onClick={runAnalysis} disabled={isAnalyzing || !transcript.length}>
+            {isAnalyzing ? '⏳ 分析中...' : '🤖 今すぐ分析'}
+          </button>
+          <button className="live-btn live-btn-gray" onClick={()=>setShowSettings(s=>!s)}>
+            ⚙️ 設定
+          </button>
+          <button className="live-btn live-btn-dark" onClick={handleEndMeeting}>
+            ✅ 会議終了→議事録作成
+          </button>
+        </div>
+        {isAnalyzing && <span className="analyzing-badge">⏳ AI分析中...</span>}
+        {analysisCount > 0 && !isAnalyzing && <span style={{fontSize:11,color:'#68d391'}}>✓ 分析 {analysisCount}回完了</span>}
+      </div>
+
+      {/* 設定パネル */}
+      {showSettings && (
+        <div className="live-settings">
+          <div className="live-setting-group" style={{minWidth:220}}>
+            <label>🔷 Azure Speech キー</label>
+            <input type="password" value={azureKey} onChange={e=>setAzureKey(e.target.value)} placeholder="Azure Subscription Key"/>
+          </div>
+          <div className="live-setting-group" style={{minWidth:140}}>
+            <label>🌏 リージョン</label>
+            <input value={azureRegion} onChange={e=>setAzureRegion(e.target.value)} placeholder="japaneast"/>
+          </div>
+
+          {/* マイク選択 */}
+          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>🎤 マイク入力モード</div>
+            <div style={{display:'flex',gap:6}}>
+              <button
+                className={`live-btn ${micMode==='physical'?'live-btn-blue':'live-btn-gray'}`}
+                onClick={()=>setMicMode('physical')}
+                title="対面会議：PCの物理マイクを使用">
+                🎤 物理マイク<br/><span style={{fontSize:10}}>対面会議</span>
+              </button>
+              <button
+                className={`live-btn ${micMode==='vbcable'?'live-btn-red':'live-btn-gray'}`}
+                onClick={()=>setMicMode('vbcable')}
+                title="Teams会議：VB-Cable経由で相手の声も取得">
+                🔁 VB-Cable<br/><span style={{fontSize:10}}>Teams会議</span>
+              </button>
+            </div>
+            {micMode === 'vbcable' && (
+              <div style={{fontSize:11,color:'#C53030',background:'#FFF5F5',padding:'4px 8px',borderRadius:4}}>
+                ⚠️ Teamsのスピーカーを「CABLE Input」に設定してください
+              </div>
+            )}
+            {/* デバイス詳細選択（任意） */}
+            {micDevices.length > 0 && (
+              <div className="live-setting-group" style={{minWidth:220}}>
+                <label style={{fontSize:10}}>デバイス詳細（任意）</label>
+                <select style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit'}}
+                  value={selectedMicId} onChange={e=>setSelectedMicId(e.target.value)}>
+                  <option value="default">デフォルト（モードに従う）</option>
+                  {micDevices.map(d=>(
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `マイク ${d.deviceId.slice(0,8)}`}
+                      {(d.label.toLowerCase().includes('cable')||d.label.toLowerCase().includes('vb')) ? ' 🔁' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>📦 前回議事録（Box）</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <input style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit',width:180}} value={boxToken} onChange={e=>setBoxToken(e.target.value)} placeholder="Box アクセストークン" type="password"/>
+              <input style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit',width:140}} value={boxFileId} onChange={e=>setBoxFileId(e.target.value)} placeholder="ファイルID"/>
+              <button className="live-btn live-btn-blue" onClick={loadBoxPrevMinutes}>Box読込</button>
+              <button className="live-btn live-btn-gray" onClick={()=>setShowPrevPaste(s=>!s)}>テキスト貼付</button>
+              {prevLoaded && <span style={{fontSize:11,color:'#38A169',alignSelf:'center'}}>✓ 読込済</span>}
+            </div>
+            {showPrevPaste && (
+              <div style={{display:'flex',gap:6,flexDirection:'column'}}>
+                <textarea style={{width:'100%',padding:'6px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit',height:80,resize:'vertical'}}
+                  placeholder="前回の議事録テキストをここに貼り付け..."
+                  value={prevPasteText} onChange={e=>setPrevPasteText(e.target.value)}/>
+                <button className="live-btn live-btn-blue" style={{alignSelf:'flex-start'}} onClick={usePastePrevMinutes}>セット</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* メインパネル */}
+      <div className="live-panels">
+        {/* 左：文字起こし */}
+        <div className="live-panel">
+          <div className="live-panel-header" style={{background:'#2D3748'}}>
+            📝 リアルタイム文字起こし
+            <span style={{marginLeft:'auto',fontSize:11,color:'#a0aec0'}}>{transcript.length}行</span>
+          </div>
+          <div className="live-panel-body" ref={transcriptBodyRef}>
+            {transcript.length === 0 && !interimText && (
+              <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13}}>
+                {isRecording ? '音声を待機中...' : '「録音開始」ボタンで開始します'}
+              </div>
+            )}
+            {transcript.map((line, i) => (
+              <div key={i} className="live-transcript-line">
+                <span className="live-transcript-time">{line.time}</span>
+                <span>{line.text}</span>
+              </div>
+            ))}
+            {interimText && (
+              <div className="live-interim">
+                <span className="live-transcript-time">...</span>
+                {interimText}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 右：AIアシスト */}
+        <div className="live-panel">
+          <div className="live-panel-header" style={{background:'#1F3864'}}>
+            🤖 AIアシストパネル
+            <span style={{marginLeft:'auto',fontSize:11,color:'#a0b4cc'}}>
+              {analysis ? `最終分析: ${new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}` : '分析待ち'}
+            </span>
+          </div>
+          <div className="live-panel-body" ref={analysisPanelRef}>
+            {!analysis && (
+              <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13}}>
+                会議開始後30秒で自動分析されます<br/>
+                <span style={{fontSize:11}}>または「今すぐ分析」ボタンを押してください</span>
+              </div>
+            )}
+            {analysis && (
+              <>
+                {/* 役員向けサマリー */}
+                {analysis.exec_summary && (
+                  <div className="ai-section">
+                    <div className="ai-section-title">👔 役員向けサマリー</div>
+                    <div className="ai-exec">{analysis.exec_summary}</div>
+                  </div>
+                )}
+
+                {/* 要約 */}
+                {analysis.summary && (
+                  <div className="ai-section">
+                    <div className="ai-section-title">📋 ここまでの要約</div>
+                    <div className="ai-summary">{analysis.summary}</div>
+                  </div>
+                )}
+
+                {/* フラグ */}
+                {analysis.flags && analysis.flags.length > 0 && (
+                  <div className="ai-section">
+                    <div className="ai-section-title">🚩 フラグ ({analysis.flags.length}件)</div>
+                    {analysis.flags.map((f, i) => (
+                      <div key={i} className={`ai-flag ${flagClass(f.type)}`}>
+                        <div style={{fontWeight:700,marginBottom:2}}>
+                          [{f.type}] {f.speaker && `(${f.speaker})`}
+                        </div>
+                        <div style={{marginBottom:4}}>「{f.content}」</div>
+                        <div style={{fontSize:11,opacity:0.85}}>→ {f.reason}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 確認すべき質問 */}
+                {analysis.questions && analysis.questions.length > 0 && (
+                  <div className="ai-section">
+                    <div className="ai-section-title">💬 確認すべき質問 ({analysis.questions.length}件)</div>
+                    {analysis.questions.map((q, i) => (
+                      <div key={i} className="ai-question">❓ {q}</div>
+                    ))}
+                  </div>
+                )}
+
+                {/* 前回との矛盾 */}
+                {analysis.contradictions && analysis.contradictions.length > 0 && (
+                  <div className="ai-section">
+                    <div className="ai-section-title">⚠️ 前回議事録との差分・矛盾</div>
+                    {analysis.contradictions.map((c, i) => (
+                      <div key={i} className="ai-contradiction">⚡ {c}</div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────
 function App(){
+  const [appMode, setAppMode] = useState('post'); // 'live' | 'post'
   const [step,setStep]=useState(1);
   const [maxReached,setMaxReached]=useState(1);
   const [showKeyModal,setShowKeyModal]=useState(false);
@@ -2665,6 +3147,14 @@ function App(){
 
   const saveApiKey=(key)=>{setApiKey(key);localStorage.setItem('claude_api_key',key);setShowKeyModal(false);};
   const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));};
+
+  // 会議中モード終了 → 議事録作成モードへ
+  const handleEndLiveMeeting = (liveTranscript) => {
+    setTranscript(liveTranscript);
+    setAppMode('post');
+    setStep(1);
+    setMaxReached(1);
+  };
 
   const handleAnalyze=async()=>{
     if(!apiKey){setShowKeyModal(true);return;}
@@ -2730,26 +3220,52 @@ function App(){
   };
 
   return(
-    <div className="app-wrap">
-      <div className="app-header">
+    <div className={appMode === 'live' ? 'live-mode-wrap' : 'app-wrap'} style={appMode === 'live' ? {maxWidth:'none',padding:0} : {}}>
+      {/* ヘッダー（常時表示） */}
+      <div className={appMode === 'live' ? '' : 'app-wrap'} style={appMode === 'live' ? {padding:'0 16px'} : {padding:0}}>
+      <div className="app-header" style={appMode==='live'?{borderRadius:'10px 10px 0 0',marginBottom:0}:{}}>
         <div>
-          <div className="app-title">会議議事録・管理台帳 自動生成ツール</div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v11</div>
+          <div className="app-title">
+            {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
+          </div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v12</div>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center'}}>
-          <button onClick={()=>setShowPersonMaster(true)}
-            style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,padding:'5px 10px',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
-            👥 出席者マスター
-          </button>
-          <button onClick={()=>setShowDomainMaster(true)}
-            style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,padding:'5px 10px',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
-            🌐 ドメイン設定
-          </button>
+        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+          {/* モード切り替えボタン */}
+          <div className="mode-toggle">
+            <button className={`mode-btn ${appMode==='post'?'active':''}`}
+              onClick={()=>setAppMode('post')}>📄 会議後モード</button>
+            <button className={`mode-btn ${appMode==='live'?'live-active':''}`}
+              onClick={()=>setAppMode('live')}>🔴 会議中モード</button>
+          </div>
+          {appMode === 'post' && (<>
+            <button onClick={()=>setShowPersonMaster(true)}
+              style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,padding:'5px 10px',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+              👥 出席者マスター
+            </button>
+            <button onClick={()=>setShowDomainMaster(true)}
+              style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,padding:'5px 10px',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+              🌐 ドメイン設定
+            </button>
+          </>)}
           <button className="btn-key" onClick={()=>setShowKeyModal(true)}>
             {apiKey?'🔑 APIキー設定済':'🔑 APIキー設定'}
           </button>
         </div>
       </div>
+      </div>
+
+      {/* 会議中モード */}
+      {appMode === 'live' && (
+        <LiveMeetingMode
+          apiKey={apiKey}
+          onEndMeeting={handleEndLiveMeeting}
+          onOpenKeyModal={()=>setShowKeyModal(true)}
+        />
+      )}
+
+      {/* 会議後モード（既存Step1〜5） */}
+      {appMode === 'post' && (<div className="app-wrap" style={{paddingTop:0}}>
       <StepIndicator step={step} setStep={setStep} maxReached={maxReached}/>
       {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)} onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
@@ -2763,6 +3279,8 @@ function App(){
         docxTemplateFile={docxTemplateFile}
         xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
         onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>}
+      </div>)}
+
       {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)}/>}
       {showPersonMaster&&<PersonMasterModal onClose={()=>setShowPersonMaster(false)}/>}
       {showDomainMaster&&<DomainMasterModal onClose={()=>setShowDomainMaster(false)} icsRaws={basicInfo._icsRaws||[]}/>}
