@@ -2685,26 +2685,23 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
 function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [azureKey, setAzureKey]       = useState(() => localStorage.getItem('azure_speech_key') || '');
   const [azureRegion, setAzureRegion] = useState(() => localStorage.getItem('azure_speech_region') || 'japaneast');
-  const [boxToken, setBoxToken]       = useState(() => localStorage.getItem('box_token_live') || '');
-  const [boxFileId, setBoxFileId]     = useState(() => localStorage.getItem('box_fileid_live') || '');
   const [prevMinutes, setPrevMinutes] = useState('');
   const [prevLoaded, setPrevLoaded]   = useState(false);
-  const [transcript, setTranscript]   = useState([]);   // [{time, text}]
+  const [prevFileName, setPrevFileName] = useState('');
+  const [transcript, setTranscript]   = useState([]);
   const [interimText, setInterimText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [analysis, setAnalysis]       = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisCount, setAnalysisCount] = useState(0);
   const [showSettings, setShowSettings]   = useState(true);
-  const [prevPasteText, setPrevPasteText] = useState('');
-  const [showPrevPaste, setShowPrevPaste] = useState(false);
   const [micDevices, setMicDevices]       = useState([]);
   const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
   const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical');
   const [showVbSetupModal, setShowVbSetupModal] = useState(false);
   const [vbSetupDone, setVbSetupDone]     = useState(()=>localStorage.getItem('vbcable_setup_done')==='1');
   const [vbSetupStep, setVbSetupStep]     = useState(0);
-  const [refFiles, setRefFiles]           = useState([]); // [{name, text}] 参考ファイル一覧
+  const [refFiles, setRefFiles]           = useState([]);
   const refFilesRef                       = useRef([]);
   useEffect(() => { refFilesRef.current = refFiles; }, [refFiles]);
 
@@ -2747,6 +2744,19 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   };
 
   const removeRefFile = (name) => setRefFiles(prev => prev.filter(f => f.name !== name));
+
+  // 前回議事録をローカルファイルから読み込む
+  const loadPrevMinutesFromFile = async (file) => {
+    if (!file) return;
+    try {
+      const text = await extractFileText(file);
+      setPrevMinutes(text);
+      setPrevLoaded(true);
+      setPrevFileName(file.name);
+    } catch(e) {
+      alert('ファイルの読み込みに失敗しました: ' + e.message);
+    }
+  };
 
   // 全パターン共通のセットアップモーダル管理
   const [showSetupModal, setShowSetupModal] = useState(false);
@@ -3252,21 +3262,32 @@ ${newText}
             )}
           </div>
           <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>📦 前回議事録（Box）</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              <input style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit',width:180}} value={boxToken} onChange={e=>setBoxToken(e.target.value)} placeholder="Box アクセストークン" type="password"/>
-              <input style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit',width:140}} value={boxFileId} onChange={e=>setBoxFileId(e.target.value)} placeholder="ファイルID"/>
-              <button className="live-btn live-btn-blue" onClick={loadBoxPrevMinutes}>Box読込</button>
-              <button className="live-btn live-btn-gray" onClick={()=>setShowPrevPaste(s=>!s)}>テキスト貼付</button>
-              {prevLoaded && <span style={{fontSize:11,color:'#38A169',alignSelf:'center'}}>✓ 読込済</span>}
-            </div>
-            {showPrevPaste && (
-              <div style={{display:'flex',gap:6,flexDirection:'column'}}>
-                <textarea style={{width:'100%',padding:'6px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit',height:80,resize:'vertical'}}
-                  placeholder="前回の議事録テキストをここに貼り付け..."
-                  value={prevPasteText} onChange={e=>setPrevPasteText(e.target.value)}/>
-                <button className="live-btn live-btn-blue" style={{alignSelf:'flex-start'}} onClick={usePastePrevMinutes}>セット</button>
+            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>📄 前回議事録</div>
+            <div style={{fontSize:10,color:'#718096'}}>PCのファイルを選択（.txt / .docx）</div>
+            <label style={{cursor:'pointer'}}>
+              <input type="file" accept=".txt,.docx,.doc"
+                style={{display:'none'}}
+                onChange={e=>loadPrevMinutesFromFile(e.target.files[0])}/>
+              <div style={{
+                border:'2px dashed #a0aec0',borderRadius:6,padding:'6px 12px',
+                textAlign:'center',fontSize:12,color:'#2E75B6',background:'#fafbfc',
+                cursor:'pointer',transition:'.15s'
+              }}>
+                📂 ファイルを選択
               </div>
+            </label>
+            {prevLoaded ? (
+              <div style={{display:'flex',alignItems:'center',gap:6,
+                background:'#E8F5E9',border:'1px solid #A5D6A7',
+                borderRadius:4,padding:'4px 8px',fontSize:11}}>
+                <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1B5E20'}}>
+                  ✅ {prevFileName}
+                </span>
+                <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:13}}
+                  onClick={()=>{setPrevMinutes('');setPrevLoaded(false);setPrevFileName('');}}>×</button>
+              </div>
+            ) : (
+              <div style={{fontSize:10,color:'#a0aec0'}}>未選択</div>
             )}
           </div>
 
@@ -3610,7 +3631,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v14</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v15</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
