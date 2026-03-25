@@ -2778,7 +2778,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
       // マイクデバイス選択
       let audioConfig;
       if (micMode === 'vbcable') {
-        // VB-Cable（またはカスタム選択）：deviceIdで指定
+        // VB-Cable：CABLE Outputデバイスを指定
         const vbDevice = micDevices.find(d =>
           d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio')
         );
@@ -2788,8 +2788,19 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
         } else {
           audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
         }
-      } else if (selectedMicId && selectedMicId !== 'default') {
-        audioConfig = SpeechSDK.AudioConfig.fromMicrophoneInput(selectedMicId);
+      } else if (micMode === 'physical' || micMode === 'mixed') {
+        // 対面 or 混在：物理マイク（マイク配列）を使用
+        const physDevice = micDevices.find(d =>
+          d.label.includes('マイク配列') || d.label.toLowerCase().includes('array')
+        );
+        const deviceId = (selectedMicId && selectedMicId !== 'default')
+          ? selectedMicId
+          : (physDevice ? physDevice.deviceId : 'default');
+        if (deviceId && deviceId !== 'default') {
+          audioConfig = SpeechSDK.AudioConfig.fromMicrophoneInput(deviceId);
+        } else {
+          audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+        }
       } else {
         audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
       }
@@ -2920,6 +2931,9 @@ ${newText}
       <div className="live-header">
         <div className={`live-title ${isRecording ? 'recording' : ''}`}>
           {isRecording ? '🔴' : '⚫'} 会議中モード
+          {isRecording && micMode === 'physical' && <span style={{fontSize:11,marginLeft:6,color:'#90CDF4'}}>🎤 対面</span>}
+          {isRecording && micMode === 'mixed'    && <span style={{fontSize:11,marginLeft:6,color:'#9AE6B4'}}>🎤💻 混在</span>}
+          {isRecording && micMode === 'vbcable'  && <span style={{fontSize:11,marginLeft:6,color:'#FEB2B2'}}>🔁 Teams</span>}
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           {!isRecording
@@ -2954,24 +2968,41 @@ ${newText}
 
           {/* マイク選択 */}
           <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>🎤 マイク入力モード</div>
-            <div style={{display:'flex',gap:6}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>🎤 会議形式を選択</div>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               <button
                 className={`live-btn ${micMode==='physical'?'live-btn-blue':'live-btn-gray'}`}
                 onClick={()=>setMicMode('physical')}
-                title="対面会議：PCの物理マイクを使用">
-                🎤 物理マイク<br/><span style={{fontSize:10}}>対面会議</span>
+                title="対面会議：PCの物理マイクで全員の声を取得">
+                🎤 物理マイク<br/><span style={{fontSize:10}}>対面のみ</span>
+              </button>
+              <button
+                className={`live-btn ${micMode==='mixed'?'live-btn-blue':'live-btn-gray'}`}
+                onClick={()=>setMicMode('mixed')}
+                title="対面＋Teams混在：物理マイク＋Teamsスピーカーから全員の声を取得">
+                🎤💻 混在<br/><span style={{fontSize:10}}>対面＋Teams</span>
               </button>
               <button
                 className={`live-btn ${micMode==='vbcable'?'live-btn-red':'live-btn-gray'}`}
                 onClick={()=>setMicMode('vbcable')}
-                title="Teams会議：VB-Cable経由で相手の声も取得">
-                🔁 VB-Cable<br/><span style={{fontSize:10}}>Teams会議</span>
+                title="Teamsのみ：VB-Cable経由でTeams参加者の声を取得">
+                🔁 VB-Cable<br/><span style={{fontSize:10}}>Teamsのみ</span>
               </button>
             </div>
+            {micMode === 'physical' && (
+              <div style={{fontSize:11,color:'#2B6CB0',background:'#EBF3FB',padding:'4px 8px',borderRadius:4}}>
+                📋 Windows出力：スピーカー(Realtek) ／ デバイス：マイク配列
+              </div>
+            )}
+            {micMode === 'mixed' && (
+              <div style={{fontSize:11,color:'#276749',background:'#E8F5E9',padding:'4px 8px',borderRadius:4}}>
+                📋 Windows出力：スピーカー(Realtek) ／ デバイス：マイク配列<br/>
+                💡 Teamsのスピーカー音量を上げると相手の声の精度が上がります
+              </div>
+            )}
             {micMode === 'vbcable' && (
               <div style={{fontSize:11,color:'#C53030',background:'#FFF5F5',padding:'4px 8px',borderRadius:4}}>
-                ⚠️ Teamsのスピーカーを「CABLE Input」に設定してください
+                📋 Windows出力：CABLE Input ／ Teamsスピーカー：CABLE Input に設定してください
               </div>
             )}
             {/* デバイス詳細選択（任意） */}
@@ -3228,7 +3259,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v12</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v13</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
