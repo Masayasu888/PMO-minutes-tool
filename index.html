@@ -2703,23 +2703,212 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical');
   const [showVbSetupModal, setShowVbSetupModal] = useState(false);
   const [vbSetupDone, setVbSetupDone]     = useState(()=>localStorage.getItem('vbcable_setup_done')==='1');
-  const [vbSetupStep, setVbSetupStep]     = useState(0); // 0=intro, 1=step1, 2=step2, 3=done
+  const [vbSetupStep, setVbSetupStep]     = useState(0);
+  const [refFiles, setRefFiles]           = useState([]); // [{name, text}] 参考ファイル一覧
+  const refFilesRef                       = useRef([]);
+  useEffect(() => { refFilesRef.current = refFiles; }, [refFiles]);
+
+  // ファイルテキスト抽出
+  const extractFileText = (file) => new Promise((resolve) => {
+    const name = file.name.toLowerCase();
+    const reader = new FileReader();
+    if (name.endsWith('.txt')) {
+      reader.onload = e => resolve(e.target.result);
+      reader.readAsText(file, 'UTF-8');
+    } else if (name.endsWith('.docx')) {
+      // docxはZIP内のword/document.xmlからテキスト抽出
+      reader.onload = async e => {
+        try {
+          const ab = e.target.result;
+          const { files } = await JSZip.loadAsync(ab);
+          const xmlFile = files['word/document.xml'];
+          if (!xmlFile) { resolve('[docx読み込みエラー]'); return; }
+          const xml = await xmlFile.async('string');
+          const text = xml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+          resolve(text.slice(0, 8000)); // 最大8000文字
+        } catch(err) { resolve('[docx読み込みエラー: ' + err.message + ']'); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // その他（pdf等）はテキストとして試みる
+      reader.onload = e => resolve(String(e.target.result).slice(0, 8000));
+      reader.readAsText(file, 'UTF-8');
+    }
+  });
+
+  const handleRefFileAdd = async (files) => {
+    for (const file of Array.from(files)) {
+      const text = await extractFileText(file);
+      setRefFiles(prev => {
+        if (prev.find(f => f.name === file.name)) return prev;
+        return [...prev, { name: file.name, text, size: file.size }];
+      });
+    }
+  };
+
+  const removeRefFile = (name) => setRefFiles(prev => prev.filter(f => f.name !== name));
+
+  // 全パターン共通のセットアップモーダル管理
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupMode, setSetupMode]           = useState('physical'); // どのパターンのガイドか
+  const [setupStep, setSetupStep]           = useState(0);
 
   const handleMicModeChange = (mode) => {
     setMicMode(mode);
     localStorage.setItem('azure_mic_mode', mode);
-    // VB-Cableモード初回選択時にセットアップモーダルを表示
+    // 全パターンでガイドを表示（VB-Cableは初回のみ、他は毎回任意）
     if (mode === 'vbcable' && !vbSetupDone) {
-      setVbSetupStep(0);
-      setShowVbSetupModal(true);
+      setSetupMode(mode);
+      setSetupStep(0);
+      setShowSetupModal(true);
     }
+  };
+
+  const openSetupGuide = (mode) => {
+    setSetupMode(mode);
+    setSetupStep(0);
+    setShowSetupModal(true);
   };
 
   const completeVbSetup = () => {
     localStorage.setItem('vbcable_setup_done', '1');
     setVbSetupDone(true);
-    setShowVbSetupModal(false);
+    setShowSetupModal(false);
   };
+
+  // パターン別ステップ定義
+  const setupSteps = {
+    physical: [
+      {
+        title: 'Windows音声出力の確認',
+        notice: '対面会議はWindowsの音声出力がスピーカーのままでOKです。',
+        noticeType: 'info',
+        steps: [
+          'タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック',
+          '<strong>スピーカー (Realtek(R) Audio)</strong> が選択されていることを確認',
+          '※ Teams会議後に切り替えた場合は戻してください',
+        ]
+      },
+      {
+        title: 'Chromeのマイク確認',
+        notice: 'マイク配列（内蔵マイク）が使われていることを確認します。',
+        noticeType: 'info',
+        steps: [
+          'Chromeのアドレスバーに <code>chrome://settings/content/microphone</code> を入力',
+          '上部ドロップダウンが <strong>マイク配列（デジタルマイク向けインテル®...）</strong> になっていることを確認',
+          'このタブに戻る',
+        ]
+      },
+      {
+        title: '設定完了',
+        notice: '対面会議の設定が完了しました。録音を開始できます。',
+        noticeType: 'ok',
+        steps: [
+          'PCを参加者に向ける（または近づける）',
+          '「▶ 録音開始」をクリック',
+          '発言後1〜2秒無音にすると文字が確定されます',
+        ]
+      },
+    ],
+    mixed: [
+      {
+        title: 'Windows音声出力の確認',
+        notice: '混在会議もWindowsの音声出力はスピーカーのままでOKです。',
+        noticeType: 'info',
+        steps: [
+          'タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック',
+          '<strong>スピーカー (Realtek(R) Audio)</strong> が選択されていることを確認',
+        ]
+      },
+      {
+        title: 'Chromeのマイク確認',
+        notice: 'マイク配列が使われていることを確認します。',
+        noticeType: 'info',
+        steps: [
+          'Chromeのアドレスバーに <code>chrome://settings/content/microphone</code> を入力',
+          '上部ドロップダウンが <strong>マイク配列（デジタルマイク向けインテル®...）</strong> になっていることを確認',
+          'このタブに戻る',
+        ]
+      },
+      {
+        title: 'Teams会議に参加',
+        notice: 'Teamsのスピーカーはデフォルトのままで構いません。',
+        noticeType: 'info',
+        steps: [
+          'Teams会議に通常通り参加する',
+          'Teamsのスピーカーは <strong>スピーカー (Realtek)</strong> のまま変更不要',
+          '<strong>Teamsのスピーカー音量を最大</strong> にすると物理マイクが拾いやすくなります',
+        ]
+      },
+      {
+        title: '設定完了',
+        notice: '混在会議の設定が完了しました。録音を開始できます。',
+        noticeType: 'ok',
+        steps: [
+          'PCをTeamsのスピーカーに近い位置に置く（推奨）',
+          '「▶ 録音開始」をクリック',
+          'Teams参加者の声はスピーカー経由でマイクが拾います',
+        ]
+      },
+    ],
+    vbcable: [
+      {
+        title: 'CABLE Output「聴く」設定（初回のみ）',
+        notice: '【重要・初回のみ】Teams音声をスピーカーで聞けるようにする設定です。一度設定すれば次回から不要です。',
+        noticeType: 'warn',
+        steps: [
+          '<strong>Windowsキー + R</strong> → <code>mmsys.cpl</code> → Enter',
+          '「<strong>録音</strong>」タブ → 「<strong>CABLE Output</strong>」を右クリック → プロパティ',
+          '「<strong>聴く</strong>」タブ → 「このデバイスを聴く」に <strong>✅チェック</strong>',
+          '再生デバイス → <strong>スピーカー (Realtek(R) Audio)</strong>',
+          '「適用」→「OK」',
+        ],
+        skip: vbSetupDone ? '設定済みのためスキップ' : null,
+      },
+      {
+        title: 'Windows音声出力をCABLE Inputに変更',
+        notice: 'Teams会議の直前に毎回行う設定です。',
+        noticeType: 'warn',
+        steps: [
+          'タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック',
+          '<strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択',
+        ]
+      },
+      {
+        title: 'Chromeのマイク変更',
+        notice: 'ChromeのデフォルトマイクをCABLE Outputに変更します。',
+        noticeType: 'warn',
+        steps: [
+          'Chromeのアドレスバーに <code>chrome://settings/content/microphone</code> を入力',
+          '上部ドロップダウン → <strong>CABLE Output (VB-Audio Virtual Cable)</strong> を選択',
+          'このタブに戻る',
+        ]
+      },
+      {
+        title: 'Teams会議のスピーカー変更',
+        notice: 'Teams会議に参加後、スピーカーをCABLE Inputに変更します。',
+        noticeType: 'warn',
+        steps: [
+          'Teams会議に参加する',
+          '会議画面上部の「<strong>…</strong>」→「<strong>デバイスの設定</strong>」',
+          'スピーカー → <strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択',
+        ]
+      },
+      {
+        title: '設定完了',
+        notice: 'Teamsのみ会議の設定が完了しました。録音を開始できます。',
+        noticeType: 'ok',
+        steps: [
+          '「▶ 録音開始」をクリック',
+          'Teams参加者の音声が文字起こしされます',
+          '※ 会議後はWindowsの出力を <strong>スピーカー (Realtek)</strong> に戻してください',
+        ]
+      },
+    ],
+  };
+
+  const modeLabels = { physical:'🎤 対面のみ', mixed:'🎤💻 混在 対面＋Teams', vbcable:'🔁 VB-Cable Teamsのみ' };
+  const modeColors = { physical:'#1F7A4D', mixed:'#6B3FA0', vbcable:'#C55A11' };
 
   const recognizerRef    = useRef(null);
   const timerRef         = useRef(null);
@@ -2880,6 +3069,11 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     const newText  = lines.slice(analyzedLenRef.current).map(l => `[${l.time}] ${l.text}`).join('\n');
     if (!newText.trim()) return;
 
+    // 参考ファイルのテキストを結合
+    const refText = refFilesRef.current.length > 0
+      ? refFilesRef.current.map(f => `=== ${f.name} ===\n${f.text}`).join('\n\n')
+      : '';
+
     setIsAnalyzing(true);
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2900,6 +3094,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
 
 【前回議事録】
 ${prevMinutes || '（なし）'}
+${refText ? `\n【参考ファイル（事前アップロード）】\n${refText}` : ''}
 
 【今回の会議テキスト全体】
 ${fullText}
@@ -2913,7 +3108,7 @@ ${newText}
     {"type": "根拠不足|矛盾|リスク|課題", "speaker": "発言者(不明な場合は空)", "content": "問題のある発言内容", "reason": "指摘理由（具体的に）"}
   ],
   "questions": ["今すぐ確認すべき質問1", "質問2"],
-  "contradictions": ["前回議事録との矛盾・変化点"],
+  "contradictions": ["前回議事録または参考ファイルとの矛盾・変化点"],
   "summary": "ここまでの会議内容の要約（3〜5行）",
   "exec_summary": "役員が知るべきプロジェクト状況（1〜2行・経営者視点）"
 }`
@@ -3009,14 +3204,22 @@ ${newText}
               </button>
             </div>
             {micMode === 'physical' && (
-              <div style={{fontSize:11,color:'#2B6CB0',background:'#EBF3FB',padding:'4px 8px',borderRadius:4}}>
+              <div style={{fontSize:11,color:'#2B6CB0',background:'#EBF3FB',padding:'6px 8px',borderRadius:4}}>
                 📋 Windows出力：スピーカー(Realtek) ／ デバイス：マイク配列
+                <div style={{marginTop:4}}>
+                  <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
+                    onClick={()=>openSetupGuide('physical')}>📋 会議前チェックリスト</button>
+                </div>
               </div>
             )}
             {micMode === 'mixed' && (
-              <div style={{fontSize:11,color:'#276749',background:'#E8F5E9',padding:'4px 8px',borderRadius:4}}>
+              <div style={{fontSize:11,color:'#276749',background:'#E8F5E9',padding:'6px 8px',borderRadius:4}}>
                 📋 Windows出力：スピーカー(Realtek) ／ デバイス：マイク配列<br/>
-                💡 Teamsのスピーカー音量を上げると相手の声の精度が上がります
+                💡 Teamsのスピーカー音量を上げると相手の声の精度が向上します
+                <div style={{marginTop:4}}>
+                  <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
+                    onClick={()=>openSetupGuide('mixed')}>📋 会議前チェックリスト</button>
+                </div>
               </div>
             )}
             {micMode === 'vbcable' && (
@@ -3024,10 +3227,10 @@ ${newText}
                 📋 Windows出力：CABLE Input ／ Teamsスピーカー：CABLE Input に設定してください
                 <div style={{marginTop:6,display:'flex',gap:6,alignItems:'center'}}>
                   <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
-                    onClick={()=>{setVbSetupStep(0);setShowVbSetupModal(true);}}>
-                    ⚙️ {vbSetupDone ? '設定を再確認' : '初回セットアップ'}
+                    onClick={()=>openSetupGuide('vbcable')}>
+                    📋 {vbSetupDone ? '会議前チェックリスト' : '初回セットアップ＋チェックリスト'}
                   </button>
-                  {vbSetupDone && <span style={{fontSize:11,color:'#38A169'}}>✓ セットアップ済み</span>}
+                  {vbSetupDone && <span style={{fontSize:11,color:'#38A169'}}>✓ 初回設定済み</span>}
                 </div>
               </div>
             )}
@@ -3064,6 +3267,49 @@ ${newText}
                   value={prevPasteText} onChange={e=>setPrevPasteText(e.target.value)}/>
                 <button className="live-btn live-btn-blue" style={{alignSelf:'flex-start'}} onClick={usePastePrevMinutes}>セット</button>
               </div>
+            )}
+          </div>
+
+          {/* 参考ファイルアップロード */}
+          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6,minWidth:220}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>📎 参考ファイル（AI分析に活用）</div>
+            <div style={{fontSize:10,color:'#718096'}}>議事録・報告書・課題台帳など（.txt / .docx）</div>
+            <label style={{cursor:'pointer'}}>
+              <input type="file" multiple accept=".txt,.docx,.doc"
+                style={{display:'none'}}
+                onChange={e=>handleRefFileAdd(e.target.files)}/>
+              <div style={{
+                border:'2px dashed #a0aec0',borderRadius:6,padding:'6px 12px',
+                textAlign:'center',fontSize:12,color:'#2E75B6',background:'#fafbfc',
+                cursor:'pointer',transition:'.15s'
+              }}>
+                ＋ ファイルを追加
+              </div>
+            </label>
+            {refFiles.length > 0 && (
+              <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:120,overflowY:'auto'}}>
+                {refFiles.map(f=>(
+                  <div key={f.name} style={{
+                    display:'flex',alignItems:'center',gap:6,
+                    background:'#EBF3FB',border:'1px solid #bee3f8',
+                    borderRadius:4,padding:'3px 8px',fontSize:11
+                  }}>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1a4a7a'}}>
+                      📄 {f.name}
+                    </span>
+                    <span style={{color:'#a0aec0',fontSize:10,flexShrink:0}}>
+                      {f.text.length}字
+                    </span>
+                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:14,lineHeight:1,padding:'0 2px'}}
+                      onClick={()=>removeRefFile(f.name)}>×</button>
+                  </div>
+                ))}
+                <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px',alignSelf:'flex-start'}}
+                  onClick={()=>setRefFiles([])}>すべて削除</button>
+              </div>
+            )}
+            {refFiles.length === 0 && (
+              <div style={{fontSize:10,color:'#a0aec0'}}>ファイルなし（未設定）</div>
             )}
           </div>
         </div>
@@ -3105,6 +3351,11 @@ ${newText}
             <span style={{marginLeft:'auto',fontSize:11,color:'#a0b4cc'}}>
               {analysis ? `最終分析: ${new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}` : '分析待ち'}
             </span>
+            {refFiles.length > 0 && (
+              <span style={{marginLeft:8,fontSize:10,background:'#2E75B6',color:'#fff',padding:'1px 6px',borderRadius:8}}>
+                📎 {refFiles.length}件
+              </span>
+            )}
           </div>
           <div className="live-panel-body" ref={analysisPanelRef}>
             {!analysis && (
@@ -3172,98 +3423,79 @@ ${newText}
         </div>
       </div>
 
-      {/* VB-Cable 初回セットアップモーダル */}
-      {showVbSetupModal && (
-        <div className="modal-overlay" style={{zIndex:2000}}>
-          <div className="modal" style={{maxWidth:520,width:'94%'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div className="modal-title" style={{margin:0}}>🔁 VB-Cable セットアップ（初回のみ）</div>
-              <button style={{background:'none',border:'none',fontSize:18,cursor:'pointer',color:'#888'}}
-                onClick={()=>setShowVbSetupModal(false)}>✕</button>
-            </div>
-            {/* ステップインジケーター */}
-            <div style={{display:'flex',gap:4,marginBottom:16}}>
-              {[['CABLE Output\n「聴く」設定',0],['Windows\n出力変更',1],['Teams\n設定',2],['Chrome\nマイク変更',3]].map(([s,i])=>(
-                <div key={i} style={{flex:1,textAlign:'center',fontSize:10,whiteSpace:'pre-line',
-                  background:vbSetupStep===i?'#2E75B6':vbSetupStep>i?'#1F7A4D':'#e2e8f0',
-                  color:vbSetupStep>=i?'#fff':'#666',borderRadius:4,padding:'4px 2px',
-                  fontWeight:vbSetupStep===i?700:400}}>
-                  {vbSetupStep>i?'✓ ':`${i+1}. `}{s}
+      {/* 統合セットアップガイドモーダル */}
+      {showSetupModal && (() => {
+        const steps = setupSteps[setupMode] || [];
+        const currentStep = steps[setupStep] || {};
+        const isLast = setupStep === steps.length - 1;
+        const color = modeColors[setupMode] || '#1F3864';
+        return (
+          <div className="modal-overlay" style={{zIndex:2000}}>
+            <div className="modal" style={{maxWidth:540,width:'95%'}}>
+              {/* ヘッダー */}
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                <div style={{fontWeight:700,fontSize:15,color}}>
+                  {modeLabels[setupMode]} — 会議前チェックリスト
                 </div>
-              ))}
+                <button style={{background:'none',border:'none',fontSize:18,cursor:'pointer',color:'#888'}}
+                  onClick={()=>setShowSetupModal(false)}>✕</button>
+              </div>
+
+              {/* ステップインジケーター */}
+              <div style={{display:'flex',gap:3,marginBottom:14}}>
+                {steps.map((s,i)=>(
+                  <div key={i} style={{flex:1,height:6,borderRadius:3,
+                    background: setupStep>i ? color : setupStep===i ? color+'99' : '#e2e8f0',
+                    transition:'.2s'}}/>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:'#888',marginBottom:12}}>
+                ステップ {setupStep+1} / {steps.length}：{currentStep.title}
+              </div>
+
+              {/* 現在のステップ内容 */}
+              <div className={`notice notice-${currentStep.noticeType||'info'}`} style={{marginBottom:12}}>
+                <span dangerouslySetInnerHTML={{__html: currentStep.notice||''}}/>
+              </div>
+
+              <div style={{background:'#f8fafc',borderRadius:8,padding:12,marginBottom:16,fontSize:13,lineHeight:1.9}}>
+                {(currentStep.steps||[]).map((s,i)=>(
+                  <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start'}}>
+                    <span style={{minWidth:20,fontWeight:700,color}}>{i+1}.</span>
+                    <span dangerouslySetInnerHTML={{__html:s}}/>
+                  </div>
+                ))}
+              </div>
+
+              {/* ナビゲーション */}
+              <div style={{display:'flex',gap:8,justifyContent:'space-between',alignItems:'center'}}>
+                <div style={{display:'flex',gap:8}}>
+                  {setupStep > 0 && (
+                    <button className="live-btn live-btn-gray" style={{fontSize:12}}
+                      onClick={()=>setSetupStep(s=>s-1)}>← 戻る</button>
+                  )}
+                  {currentStep.skip && (
+                    <button className="live-btn live-btn-gray" style={{fontSize:12}}
+                      onClick={()=>setSetupStep(s=>s+1)}>{currentStep.skip} →</button>
+                  )}
+                </div>
+                {!isLast ? (
+                  <button className="live-btn live-btn-blue" style={{fontSize:13}}
+                    onClick={()=>setSetupStep(s=>s+1)}>✅ 完了 → 次へ</button>
+                ) : (
+                  <button className="live-btn live-btn-green" style={{fontSize:13}}
+                    onClick={()=>{
+                      if(setupMode==='vbcable') completeVbSetup();
+                      else setShowSetupModal(false);
+                    }}>
+                    🎉 チェック完了！録音を開始する
+                  </button>
+                )}
+              </div>
             </div>
-
-            {/* Step0: CABLE Output聴く設定 */}
-            {vbSetupStep===0 && (<>
-              <div className="notice notice-info">
-                <strong>【重要・初回のみ】</strong> Teams音声をスピーカーで聞けるようにする設定です。一度設定すれば次回から不要です。
-              </div>
-              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
-                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
-                <div>① <strong>Windowsキー + R</strong> → <code style={{background:'#e2e8f0',padding:'1px 6px',borderRadius:3}}>mmsys.cpl</code> → Enter</div>
-                <div>② 「<strong>録音</strong>」タブ → 「<strong>CABLE Output</strong>」を右クリック → プロパティ</div>
-                <div>③ 「<strong>聴く</strong>」タブ → 「このデバイスを聴く」に <strong>✅チェック</strong></div>
-                <div>④ 再生デバイス → <strong>スピーカー (Realtek(R) Audio)</strong></div>
-                <div>⑤ 「適用」→「OK」</div>
-              </div>
-              <div style={{display:'flex',gap:8}}>
-                <button className="live-btn live-btn-blue" onClick={()=>setVbSetupStep(1)}>✅ 設定完了 → 次へ</button>
-                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(1)}>スキップ（設定済み）</button>
-              </div>
-            </>)}
-
-            {/* Step1: Windows出力変更 */}
-            {vbSetupStep===1 && (<>
-              <div className="notice notice-warn">Teams会議の<strong>直前</strong>に毎回行う設定です。</div>
-              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
-                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
-                <div>① タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック</div>
-                <div>② <strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択</div>
-              </div>
-              <div style={{display:'flex',gap:8}}>
-                <button className="live-btn live-btn-blue" onClick={()=>setVbSetupStep(2)}>✅ 変更完了 → 次へ</button>
-                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(0)}>← 戻る</button>
-              </div>
-            </>)}
-
-            {/* Step2: Teams設定 */}
-            {vbSetupStep===2 && (<>
-              <div className="notice notice-warn">Teams会議に参加後、スピーカーを変更します。</div>
-              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
-                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
-                <div>① Teams会議に参加する</div>
-                <div>② 会議画面上部の「<strong>…</strong>」→「<strong>デバイスの設定</strong>」</div>
-                <div>③ スピーカー → <strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択</div>
-              </div>
-              <div style={{display:'flex',gap:8}}>
-                <button className="live-btn live-btn-blue" onClick={()=>setVbSetupStep(3)}>✅ 変更完了 → 次へ</button>
-                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(1)}>← 戻る</button>
-              </div>
-            </>)}
-
-            {/* Step3: Chromeマイク変更 */}
-            {vbSetupStep===3 && (<>
-              <div className="notice notice-warn">ChromeのデフォルトマイクをCABLE Outputに変更します。</div>
-              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
-                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
-                <div>① 新しいタブで <code style={{background:'#e2e8f0',padding:'1px 4px',borderRadius:3,fontSize:12}}>chrome://settings/content/microphone</code> を開く</div>
-                <div>② 上部ドロップダウン → <strong>CABLE Output (VB-Audio Virtual Cable)</strong> を選択</div>
-                <div>③ このタブに戻る</div>
-                <button className="live-btn live-btn-gray" style={{fontSize:12,padding:'3px 10px',marginTop:8}}
-                  onClick={()=>{ try{window.open('chrome://settings/content/microphone','_blank')}catch(e){} }}>
-                  🔗 マイク設定を開く（Chromeのみ）
-                </button>
-              </div>
-              <div style={{display:'flex',gap:8}}>
-                <button className="live-btn live-btn-green" onClick={completeVbSetup}>
-                  🎉 セットアップ完了！録音を開始する
-                </button>
-                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(2)}>← 戻る</button>
-              </div>
-            </>)}
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -3378,7 +3610,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v13</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v14</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
