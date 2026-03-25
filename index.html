@@ -2700,7 +2700,26 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [showPrevPaste, setShowPrevPaste] = useState(false);
   const [micDevices, setMicDevices]       = useState([]);
   const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
-  const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical'); // 'physical'|'vbcable'
+  const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical');
+  const [showVbSetupModal, setShowVbSetupModal] = useState(false);
+  const [vbSetupDone, setVbSetupDone]     = useState(()=>localStorage.getItem('vbcable_setup_done')==='1');
+  const [vbSetupStep, setVbSetupStep]     = useState(0); // 0=intro, 1=step1, 2=step2, 3=done
+
+  const handleMicModeChange = (mode) => {
+    setMicMode(mode);
+    localStorage.setItem('azure_mic_mode', mode);
+    // VB-Cableモード初回選択時にセットアップモーダルを表示
+    if (mode === 'vbcable' && !vbSetupDone) {
+      setVbSetupStep(0);
+      setShowVbSetupModal(true);
+    }
+  };
+
+  const completeVbSetup = () => {
+    localStorage.setItem('vbcable_setup_done', '1');
+    setVbSetupDone(true);
+    setShowVbSetupModal(false);
+  };
 
   const recognizerRef    = useRef(null);
   const timerRef         = useRef(null);
@@ -2972,19 +2991,19 @@ ${newText}
             <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
               <button
                 className={`live-btn ${micMode==='physical'?'live-btn-blue':'live-btn-gray'}`}
-                onClick={()=>setMicMode('physical')}
+                onClick={()=>handleMicModeChange('physical')}
                 title="対面会議：PCの物理マイクで全員の声を取得">
                 🎤 物理マイク<br/><span style={{fontSize:10}}>対面のみ</span>
               </button>
               <button
                 className={`live-btn ${micMode==='mixed'?'live-btn-blue':'live-btn-gray'}`}
-                onClick={()=>setMicMode('mixed')}
+                onClick={()=>handleMicModeChange('mixed')}
                 title="対面＋Teams混在：物理マイク＋Teamsスピーカーから全員の声を取得">
                 🎤💻 混在<br/><span style={{fontSize:10}}>対面＋Teams</span>
               </button>
               <button
                 className={`live-btn ${micMode==='vbcable'?'live-btn-red':'live-btn-gray'}`}
-                onClick={()=>setMicMode('vbcable')}
+                onClick={()=>handleMicModeChange('vbcable')}
                 title="Teamsのみ：VB-Cable経由でTeams参加者の声を取得">
                 🔁 VB-Cable<br/><span style={{fontSize:10}}>Teamsのみ</span>
               </button>
@@ -3001,8 +3020,15 @@ ${newText}
               </div>
             )}
             {micMode === 'vbcable' && (
-              <div style={{fontSize:11,color:'#C53030',background:'#FFF5F5',padding:'4px 8px',borderRadius:4}}>
+              <div style={{fontSize:11,color:'#C53030',background:'#FFF5F5',padding:'6px 8px',borderRadius:4}}>
                 📋 Windows出力：CABLE Input ／ Teamsスピーカー：CABLE Input に設定してください
+                <div style={{marginTop:6,display:'flex',gap:6,alignItems:'center'}}>
+                  <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
+                    onClick={()=>{setVbSetupStep(0);setShowVbSetupModal(true);}}>
+                    ⚙️ {vbSetupDone ? '設定を再確認' : '初回セットアップ'}
+                  </button>
+                  {vbSetupDone && <span style={{fontSize:11,color:'#38A169'}}>✓ セットアップ済み</span>}
+                </div>
               </div>
             )}
             {/* デバイス詳細選択（任意） */}
@@ -3145,6 +3171,99 @@ ${newText}
           </div>
         </div>
       </div>
+
+      {/* VB-Cable 初回セットアップモーダル */}
+      {showVbSetupModal && (
+        <div className="modal-overlay" style={{zIndex:2000}}>
+          <div className="modal" style={{maxWidth:520,width:'94%'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div className="modal-title" style={{margin:0}}>🔁 VB-Cable セットアップ（初回のみ）</div>
+              <button style={{background:'none',border:'none',fontSize:18,cursor:'pointer',color:'#888'}}
+                onClick={()=>setShowVbSetupModal(false)}>✕</button>
+            </div>
+            {/* ステップインジケーター */}
+            <div style={{display:'flex',gap:4,marginBottom:16}}>
+              {[['CABLE Output\n「聴く」設定',0],['Windows\n出力変更',1],['Teams\n設定',2],['Chrome\nマイク変更',3]].map(([s,i])=>(
+                <div key={i} style={{flex:1,textAlign:'center',fontSize:10,whiteSpace:'pre-line',
+                  background:vbSetupStep===i?'#2E75B6':vbSetupStep>i?'#1F7A4D':'#e2e8f0',
+                  color:vbSetupStep>=i?'#fff':'#666',borderRadius:4,padding:'4px 2px',
+                  fontWeight:vbSetupStep===i?700:400}}>
+                  {vbSetupStep>i?'✓ ':`${i+1}. `}{s}
+                </div>
+              ))}
+            </div>
+
+            {/* Step0: CABLE Output聴く設定 */}
+            {vbSetupStep===0 && (<>
+              <div className="notice notice-info">
+                <strong>【重要・初回のみ】</strong> Teams音声をスピーカーで聞けるようにする設定です。一度設定すれば次回から不要です。
+              </div>
+              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
+                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
+                <div>① <strong>Windowsキー + R</strong> → <code style={{background:'#e2e8f0',padding:'1px 6px',borderRadius:3}}>mmsys.cpl</code> → Enter</div>
+                <div>② 「<strong>録音</strong>」タブ → 「<strong>CABLE Output</strong>」を右クリック → プロパティ</div>
+                <div>③ 「<strong>聴く</strong>」タブ → 「このデバイスを聴く」に <strong>✅チェック</strong></div>
+                <div>④ 再生デバイス → <strong>スピーカー (Realtek(R) Audio)</strong></div>
+                <div>⑤ 「適用」→「OK」</div>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="live-btn live-btn-blue" onClick={()=>setVbSetupStep(1)}>✅ 設定完了 → 次へ</button>
+                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(1)}>スキップ（設定済み）</button>
+              </div>
+            </>)}
+
+            {/* Step1: Windows出力変更 */}
+            {vbSetupStep===1 && (<>
+              <div className="notice notice-warn">Teams会議の<strong>直前</strong>に毎回行う設定です。</div>
+              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
+                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
+                <div>① タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック</div>
+                <div>② <strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択</div>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="live-btn live-btn-blue" onClick={()=>setVbSetupStep(2)}>✅ 変更完了 → 次へ</button>
+                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(0)}>← 戻る</button>
+              </div>
+            </>)}
+
+            {/* Step2: Teams設定 */}
+            {vbSetupStep===2 && (<>
+              <div className="notice notice-warn">Teams会議に参加後、スピーカーを変更します。</div>
+              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
+                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
+                <div>① Teams会議に参加する</div>
+                <div>② 会議画面上部の「<strong>…</strong>」→「<strong>デバイスの設定</strong>」</div>
+                <div>③ スピーカー → <strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択</div>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="live-btn live-btn-blue" onClick={()=>setVbSetupStep(3)}>✅ 変更完了 → 次へ</button>
+                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(1)}>← 戻る</button>
+              </div>
+            </>)}
+
+            {/* Step3: Chromeマイク変更 */}
+            {vbSetupStep===3 && (<>
+              <div className="notice notice-warn">ChromeのデフォルトマイクをCABLE Outputに変更します。</div>
+              <div style={{background:'#f8fafc',borderRadius:8,padding:12,margin:'12px 0',fontSize:13,lineHeight:1.8}}>
+                <div style={{fontWeight:700,color:'#1F3864',marginBottom:8}}>手順：</div>
+                <div>① 新しいタブで <code style={{background:'#e2e8f0',padding:'1px 4px',borderRadius:3,fontSize:12}}>chrome://settings/content/microphone</code> を開く</div>
+                <div>② 上部ドロップダウン → <strong>CABLE Output (VB-Audio Virtual Cable)</strong> を選択</div>
+                <div>③ このタブに戻る</div>
+                <button className="live-btn live-btn-gray" style={{fontSize:12,padding:'3px 10px',marginTop:8}}
+                  onClick={()=>{ try{window.open('chrome://settings/content/microphone','_blank')}catch(e){} }}>
+                  🔗 マイク設定を開く（Chromeのみ）
+                </button>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="live-btn live-btn-green" onClick={completeVbSetup}>
+                  🎉 セットアップ完了！録音を開始する
+                </button>
+                <button className="live-btn live-btn-gray" onClick={()=>setVbSetupStep(2)}>← 戻る</button>
+              </div>
+            </>)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
