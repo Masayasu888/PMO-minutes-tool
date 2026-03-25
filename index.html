@@ -786,7 +786,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
 
   const baseIssues = result.issues.map((r,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, '課題内容':r.content||'',
-    'カテゴリ':r.category||'', '担当者':r.owner||'', '解決策・対応内容':r.resolution||'',
+    'カテゴリ':r.category||'', '担当者':r.owner||'', '期日':r.due||'', '解決策・対応内容':r.resolution||'',
     '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
     '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
@@ -794,6 +794,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
   const baseExec = result.exec_report.map((r,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
     '判断要否':r.decision_needed||'', '背景・経緯':r.background||'', '報告先役員':r.recipient||'',
+    '期限':r.deadline||'',
     '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
     '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
@@ -801,6 +802,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
   const baseMgr = result.manager_report.map((r,i) => ({
     'No.':i+1, '会議名':mtg, '会議日':dt, '報告内容':r.content||'',
     '対応要否':r.action_needed||'', '背景・経緯':r.background||'', '担当室長':r.recipient||'',
+    '期限':r.deadline||'',
     '重要度':r.importance||'', '優先度':r.priority||'', '最新進捗日':'', '最新進捗内容':'',
     '共有先':'', '共有\n済未':'未', '類似No.\n・判定':'', '最終\nステータス':'未着手', '行種別':'item'
   }));
@@ -966,8 +968,9 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'会議名',       header:'会議名',       width:22},
       {key:'会議日',       header:'会議日',       width:12, center:true},
       {key:'課題内容',     header:'課題内容',     width:40},
-      {key:'カテゴリ',     header:'カテゴリ',     width:14},
+      {key:'カテゴリ',     header:'カテゴリ',     width:16},
       {key:'担当者',       header:'担当者',       width:12},
+      {key:'期日',         header:'期日',         width:12, center:true},
       {key:'解決策・対応内容', header:'解決策・対応内容', width:30},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
   ], mergeData('課題', baseIssues));
@@ -981,6 +984,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'判断要否',  header:'判断要否',  width:10, type:'yohi', center:true},
       {key:'背景・経緯', header:'背景・経緯', width:34},
       {key:'報告先役員', header:'報告先役員', width:14},
+      {key:'期限',      header:'期限',      width:12, center:true},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
   ], mergeData('役員報告事項', baseExec));
 
@@ -993,6 +997,7 @@ async function generateXlsx(basicInfo, result, xlsxTemplateFile, xlsxDataFile) {
       {key:'対応要否',  header:'対応要否',  width:10, type:'yohi', center:true},
       {key:'背景・経緯', header:'背景・経緯', width:34},
       {key:'担当室長',  header:'担当室長',  width:14},
+      {key:'期限',      header:'期限',      width:12, center:true},
     ]}, SEC_IMP, SEC_PROG, SEC_SHARE, SEC_SIM, SEC_STATUS, SEC_ROWTYPE,
   ], mergeData('室長報告事項', baseMgr));
 
@@ -1031,7 +1036,11 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={})
     return names?`【${o.org}】　${names}`:`【${o.org}】`;
   }).join('\n');
 
-  // 既存の未完了アイテムをシートごとに整形
+  // 組織リスト（ドメインマスターから生成）
+  const domainList = loadDomainMaster();
+  const orgList = [...new Set(domainList.map(d=>d.org))].join('・');
+
+  // 既存の未完了アイテムをシートごとに整形（詳細情報付き）
   const sheetMap = {
     'todos':           'To-Do',
     'risks':           'リスク',
@@ -1051,11 +1060,26 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={})
         : key === 'risks'  ? 'リスク内容'
         : key === 'issues' ? '課題内容'
         : '報告内容';
-      existingSection += `No.${r['No.']}: ${r[contentKey]||''} (担当:${r['担当者']||r['報告先役員']||r['担当室長']||''} 状況:${r['最終\nステータス']||''})\n`;
+      const assigneeKey = key === 'exec_report' ? '報告先役員'
+        : key === 'manager_report' ? '担当室長'
+        : '担当者';
+      const due = r['期日'] ? ` 期日:${r['期日']}` : '';
+      const status = r['最終\nステータス'] || '';
+      const progress = r['最新進捗内容'] ? ` 最新進捗:「${r['最新進捗内容']}」` : '';
+      existingSection += `No.${r['No.']}: ${r[contentKey]||''} (担当:${r[assigneeKey]||''} 状況:${status}${due}${progress})\n`;
     });
   });
 
-  const prompt = `以下の会議情報と文字起こしを分析し、JSON形式で抽出してください。
+  const SYSTEM_PROMPT = `あなたは日本の大手製造業グローバルERP/DXプロジェクト（グローバル経営基盤 将来像実現プロジェクト）のクライアント側PMO専門家です。
+クライアント（KE/国際電気）、SIベンダー（IBM）、PMOベンダー（MSOL・Hopes）、周辺システムベンダーが参加する複数会議の議事録・管理台帳を作成します。
+
+【出力原則】
+- 指定のJSON形式のみで出力すること。説明文・マークダウン・コードブロック不要。
+- 情報は必ず文字起こしの根拠に基づくこと。推測・補完は最小限にとどめる。
+- 文章はビジネス文書として読みやすく整形すること（体言止め多用NG・主語述語を明確に）。
+- 抽出は網羅的に行うこと。「小さな懸念」「曖昧な発言」も含めて漏れなく拾うこと。`;
+
+  const prompt = `以下の会議情報と文字起こしを分析し、管理台帳用データをJSON形式で抽出してください。
 
 【基本情報】
 会議名: ${basicInfo.meetingName}${basicInfo.meetingNo?` 第${basicInfo.meetingNo}回`:''}
@@ -1063,33 +1087,79 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={})
 場所: ${basicInfo.location}
 出席者: ${attendees}
 作成者: ${basicInfo.author}
-配布資料: ${Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name).map(m=>m.url?`${m.name}（${m.url}）`:m.name).join('、'):basicInfo.materials||''}
+配布資料: ${Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name).map(m=>m.url?`${m.name}（${m.url}）`:m.name).join('、'):basicInfo.materials||'（なし）'}
+参加組織: ${orgList}
 
 【文字起こし】
 ${transcript}
 ${existingSection ? existingSection + '\n' : ''}
-重要度・優先度は「緊急」「高」「中」「低」の4段階で判定してください。
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【STEP 1: 抽出前の網羅確認（内部処理・出力不要）】
+文字起こし全体を読み、以下の観点で言及されたすべての事項を心の中でリストアップすること：
+(a) 何らかの作業・対応・確認が発生した発言
+(b) 懸念・問題・障害として言及された発言
+(c) 「〜すべき」「〜が必要」「〜を検討」「〜が課題」「〜リスクがある」といった表現
+(d) 期日・担当者・期限に言及された発言
+(e) 上位者への報告・判断依頼が示唆された発言
+このリストを元に、STEP 2の各項目を漏れなく抽出すること。
 
-【発言者の記載ルール】
-議事内容・ToDo・担当者の記載において発言者を特定する際：
-- 出席者リストや文脈から名前が特定できる場合 → **名前のみ**（例：川鍋、宮守、篠原）
-- 名前が特定できない場合のみ → 「話者X」形式（例：話者3）
-- 出席者リストの氏名（姓のみでも可）と文字起こしの発言者を積極的に照合してください
+【STEP 2: 発言者の特定ルール】
+- 出席者リスト（${attendees}）の氏名と文字起こしの発言者を積極的に照合すること
+- 姓のみでの一致でも採用する（例：「宮守さん」→「宮守」）
+- 名前が特定できない場合のみ「話者A」「話者B」形式を使用（番号ではなくアルファベット）
+- 担当者・決定者は可能な限り実名で記載すること
 
-【既存アイテムの照合ルール】
-既存の未完了アイテムが提供されている場合、文字起こしの内容と照合してください。
-- 同一: 内容・担当者・文脈が明確に一致 → match_type="same", existing_no=該当No.
-- 類似: 関連しているが同一か判断しにくい → match_type="similar", existing_no=該当No.
-- 新規: 既存リストにない → match_type="new"（existing_noは省略）
+【STEP 3: 重要度・優先度の判定基準（4段階）】
+- 緊急: プロジェクト継続・マイルストーンに即時影響。当日〜3営業日以内に対応必要
+- 高: マイルストーンに影響する可能性あり。1〜2週間以内に対応が望ましい
+- 中: 影響はあるが回避策・猶予あり。今月中に対応
+- 低: 軽微・参考情報・中長期の検討事項
+
+【STEP 4: 課題・リスクのカテゴリ分類（必ずこのリストから選択）】
+リスクカテゴリ（8種）: スケジュール | スコープ | リソース | 技術・アーキテクチャ | 予算・コスト | ガバナンス・意思決定 | データ移行・品質 | 外部依存・ベンダー
+課題カテゴリ（9種）: 設計・要件 | 開発・実装 | テスト・品質 | データ・マスタ | インフラ・環境 | プロセス・運用 | ベンダー管理 | ステークホルダー調整 | ライセンス・契約
+
+【STEP 5: 既存アイテムとの照合ルール（重要：精度最優先）】
+既存アイテムが提供されている場合、以下の基準で厳密に判定すること：
+
+■ match_type="same"（同一）の条件 ─ 以下を"すべて"満たす場合のみ
+  ① 対象事項の本質的な内容・目的が既存アイテムと一致する
+  ② 担当者（または担当組織）が同一または合理的に同一人物と判断できる
+  ③ 会議内で当該アイテムへの言及（進捗報告・確認・議論）が明示されている
+  → match_reason に「内容一致の根拠」「発言箇所の要約」を具体的に記載
+
+■ match_type="similar"（類似）の条件 ─ 以下のいずれかを満たす場合
+  ① 内容は関連しているが、担当者や範囲が異なる可能性がある
+  ② 内容は一致しているが、会議内での言及が間接的・曖昧
+  ③ 同一の根本課題から派生した別の事象
+  → match_reason に「類似と判断した理由」「不一致点」を記載
+
+■ match_type="new"（新規）の条件
+  ① 既存リストに類似するものが存在しない
+  ② 明確に新たに発生した事象・要求
+  → existing_no は省略（null）
+
+■ 照合の姿勢：不明確な場合は "similar" または "new" を選択すること。
+  "same" は確証がある場合のみ使用する（誤同一判定はデータ品質を著しく損なう）。
+
+【STEP 6: 議事内容のビジネス文書化ルール】
+minutes_by_agenda の content は以下の基準で作成すること：
+- 各発言を「発言者名: 内容」形式で記載
+- 発言内容は口語・省略表現を補正し、ビジネス文書として適切な表現に整形する
+  （例）「なんか遅れそう」→「スケジュールの遅延リスクが懸念される旨が報告された」
+  （例）「あれ、どうなった?」→「前回課題の対応状況について確認が求められた」
+- 固有名詞（システム名・ベンダー名・フェーズ名）は正確に記載
+- 1議題あたり5〜15行程度を目安とし、議論の流れが伝わるよう構成する
+- 決定に至る経緯・反対意見・条件なども記載する
 
 以下のJSON構造で出力してください（マークダウン不要、JSONのみ）:
-{"agenda_items":["議題1"],"minutes_by_agenda":[{"title":"議題名","content":"発言録（発言者名: 発言内容）"}],"decisions":[{"content":"決定内容","decided_by":"決定者","scope":"影響範囲","importance":"高","priority":"高"}],"todos":[{"content":"アクション","assignee":"担当者","due":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗内容（あれば）","match_reason":"判定の根拠（例: 発言者が進捗を報告、内容が一致）"}],"pending":[{"content":"保留内容","reason":"理由","next_action":"次回の扱い"}],"risks":[{"content":"リスク内容","category":"カテゴリ","impact":"高","probability":"高","response":"対応方針","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容","category":"カテゴリ","owner":"担当者","due":"期日","resolution":"解決策","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"報告内容","decision_needed":"要","background":"背景","recipient":"役員名","deadline":"期限","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"報告内容","action_needed":"要","background":"背景","recipient":"室長名","deadline":"期限","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
+{"agenda_items":["議題1","議題2"],"minutes_by_agenda":[{"title":"議題名","content":"発言者名: ビジネス文書体に整形した発言内容の記録。発言の流れを維持し、決定経緯・懸念点・条件も含める。"}],"decisions":[{"content":"決定内容（主語+述語で明確に）","decided_by":"決定者","scope":"影響範囲・対象システム/フェーズ","importance":"高","priority":"高"}],"todos":[{"content":"アクション内容（何を・誰が・いつまでに、が明確になるよう記載）","assignee":"担当者（実名）","due":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗・対応状況（なければ空文字）","match_reason":"同一・類似と判定した具体的根拠（新規の場合は空文字）"}],"pending":[{"content":"保留事項（具体的に）","reason":"保留理由","next_action":"次回の扱い・期限"}],"risks":[{"content":"リスク内容（影響・発生条件を含めて記述）","category":"スケジュール","impact":"高","probability":"中","response":"対応方針（具体的なアクションを含む）","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容（何が問題か・現状を明確に記述）","category":"設計・要件","owner":"担当者","due":"YYYY/MM/DD","resolution":"解決策・対応内容（未定の場合は「調査中」等）","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"役員への報告内容（背景含む・経営判断が必要な理由を明確に）","decision_needed":"要","background":"背景・経緯","recipient":"報告先役員名","deadline":"YYYY/MM/DD","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"室長への報告内容（対応の方向性を含む）","action_needed":"要","background":"背景・経緯","recipient":"担当室長名","deadline":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
 
-  onLog('🤖 文字起こしを解析・照合中...');
+  onLog('🤖 文字起こしを解析・照合中（高精度モード）...');
   const res = await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:8000,system:'日本のPMO議事録・管理台帳作成の専門家です。指定のJSON形式のみで出力してください。',messages:[{role:'user',content:prompt}]})
+    body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:10000,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]})
   });
   if(!res.ok) throw new Error(`API Error ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -3631,7 +3701,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v15</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v16</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
