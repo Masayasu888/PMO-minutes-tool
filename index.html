@@ -3046,7 +3046,63 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
 }
 
 // ── 会議中モード（LiveMeetingMode） ───────────────────────────
-// ── ブリーフィングテンプレート管理モーダル ──────────────────
+// ── AIアシストフレームワーク設定モーダル ──────────────────
+function FrameworkModal({ fw, onSave, onClose, defaultFw }) {
+  const [data, setData] = React.useState(JSON.parse(JSON.stringify(fw)));
+  const upd = (k,v) => setData(d=>({...d,[k]:v}));
+  const updCat = (i,k,v) => setData(d=>({...d,cats:d.cats.map((c,idx)=>idx===i?{...c,[k]:v}:c)}));
+  const reset = () => { if(window.confirm('初期設定に戻しますか？')) setData(JSON.parse(JSON.stringify(defaultFw))); };
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:580,width:'95%',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">⚙️ AIアシストパネル 分析フレームワーク設定</div>
+        <div className="notice notice-info" style={{marginBottom:12,fontSize:11}}>
+          会議の分析観点・会社DX文脈を設定します。変更はlocalStorageに保存され次回起動時も維持されます。
+        </div>
+
+        <div style={{marginBottom:10}}>
+          <label style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:4,display:'block'}}>会社名</label>
+          <input value={data.companyName} onChange={e=>upd('companyName',e.target.value)}
+            style={{width:'100%',padding:'6px 9px',border:'1.5px solid #d0d8e4',borderRadius:5,fontSize:12,fontFamily:'inherit'}}/>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:4,display:'block'}}>DX目的・文脈（AIプロンプトに組み込まれます）</label>
+          <textarea value={data.dxGoal} onChange={e=>upd('dxGoal',e.target.value)} rows={4}
+            style={{width:'100%',padding:'6px 9px',border:'1.5px solid #d0d8e4',borderRadius:5,fontSize:11,fontFamily:'inherit',resize:'vertical',lineHeight:1.6}}/>
+        </div>
+
+        <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:8,borderBottom:'2px solid #EBF3FB',paddingBottom:4}}>
+          分析カテゴリ（有効/無効・観点文を編集できます）
+        </div>
+        {data.cats.map((cat,i)=>(
+          <div key={i} style={{marginBottom:10,border:`1.5px solid ${cat.enabled?'#2E75B6':'#d0d8e4'}`,borderRadius:6,overflow:'hidden'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:cat.enabled?'#EBF3FB':'#f8fafc'}}>
+              <input type="checkbox" checked={cat.enabled} onChange={e=>updCat(i,'enabled',e.target.checked)} style={{cursor:'pointer'}}/>
+              <span style={{fontSize:12,fontWeight:700,color:cat.enabled?'#1F3864':'#a0aec0'}}>{cat.id} {cat.icon} {cat.name}</span>
+            </div>
+            {cat.enabled && (
+              <div style={{padding:'6px 10px'}}>
+                <label style={{fontSize:10,color:'#718096',marginBottom:2,display:'block'}}>分析観点プロンプト</label>
+                <textarea value={cat.prompt} onChange={e=>updCat(i,'prompt',e.target.value)} rows={2}
+                  style={{width:'100%',padding:'4px 7px',border:'1px solid #d0d8e4',borderRadius:4,fontSize:10,fontFamily:'inherit',resize:'vertical',lineHeight:1.5}}/>
+              </div>
+            )}
+          </div>
+        ))}
+
+        <div className="btn-row" style={{marginTop:16,justifyContent:'space-between'}}>
+          <button className="btn btn-gray" style={{fontSize:12}} onClick={reset}>↩ 初期設定に戻す</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn btn-gray" onClick={onClose}>キャンセル</button>
+            <button className="btn btn-primary" onClick={()=>{ onSave(data); onClose(); }}>保存</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function BriefingManagerModal({ templates, onSave, onClose }) {
   const [list, setList] = React.useState(templates.map(t=>({...t})));
   const [editIdx, setEditIdx] = React.useState(null); // null=新規, number=編集中
@@ -3168,8 +3224,35 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [interimText, setInterimText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [analysis, setAnalysis]       = useState(null);
+  const [analysisHistory, setAnalysisHistory] = useState([]); // 全履歴（新しい順）
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisCount, setAnalysisCount] = useState(0);
+
+  // AIアシストパネル フレームワーク設定
+  const FW_KEY = 'live_ai_framework';
+  const DEFAULT_FW = {
+    companyName: 'KOKUSAI ELECTRIC',
+    dxGoal: '「基幹業務標準化→工場スマート化→開発高度化→供給網最適化」を通じて収益性の高い半導体製造装置メーカーへ進化する取り組み。日本でDX化したプロセスをテンプレートとして海外拠点に横展開する。コアは標準化、差分は最小化が原則。SAP S/4HANAでのFit to Standardアプローチを重視。',
+    cats: [
+      { id:'①', icon:'🌐', name:'DX目的・グローバル整合・先進性', enabled:true,
+        prompt:'日本DXテンプレートとして成立するか。海外展開できる設計か。全社標準か例外か。AI・先進技術の活用余地はあるか。グローバル標準との整合性。' },
+      { id:'②', icon:'🔥', name:'変革・非連続・既成概念の打破', enabled:true,
+        prompt:'既存業務のデジタル化に留まっていないか。業務プロセス自体を再設計しているか。Fit to Standardに対してカスタマイズで逃げていないか。5年後も通用する設計か。' },
+      { id:'③', icon:'⚠️', name:'リスク・課題・未確定事項', enabled:true,
+        prompt:'事実ベースで何が問題か。リスク（潜在的脅威）・課題（顕在化済み問題）・保留（未決定事項）を分類して抽出。グローバル展開の障壁になるか。' },
+      { id:'④', icon:'🔄', name:'実行性・影響範囲', enabled:true,
+        prompt:'現場で本当に回るか。業務・システム・データへの影響。運用定着・受入準備。国内外の業務差異・多言語・法規制対応の必要性。' },
+      { id:'⑤', icon:'📅', name:'進捗・計画・依存関係', enabled:true,
+        prompt:'スケジュールと繋がりは大丈夫か。マイルストーン達成状況・遅延リスク。前提条件・依存関係のリスク。グローバル展開フェーズとの整合。' },
+      { id:'⑥', icon:'👤', name:'ガバナンス・体制・予算・ベンダー', enabled:true,
+        prompt:'役員判断要否／部門長判断（製造・調達・経理等）要否。プロジェクト体制・品質管理。予算規模・確保状況・超過リスク。ベンダー選定の競争性・入札妥当性・契約条件・依存リスク。' },
+    ]
+  };
+  const [framework, setFramework] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem(FW_KEY)||'null') || DEFAULT_FW; } catch(e){ return DEFAULT_FW; }
+  });
+  const [showFwModal, setShowFwModal] = useState(false);
+  const saveFw = (fw) => { setFramework(fw); localStorage.setItem(FW_KEY, JSON.stringify(fw)); };
   const [liveCostTotal, setLiveCostTotal] = useState(0);
   const [liveCostLog, setLiveCostLog]   = useState([]); // [{count, cost, tokens}]
   const [showCostModal, setShowCostModal] = useState(false);
@@ -3215,6 +3298,28 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [refFiles, setRefFiles]           = useState([]);
   const refFilesRef                       = useRef([]);
   useEffect(() => { refFilesRef.current = refFiles; }, [refFiles]);
+
+  // 参考URL（最大5件、優先順位付き）
+  const [refUrls, setRefUrls] = useState(()=>{
+    try { return JSON.parse(localStorage.getItem('live_ref_urls')||'[]'); } catch(e){ return []; }
+  });
+  const saveRefUrls = (list) => { setRefUrls(list); localStorage.setItem('live_ref_urls', JSON.stringify(list)); };
+  const addRefUrl = () => {
+    if(refUrls.length >= 5) return;
+    saveRefUrls([...refUrls, {label:'', url:''}]);
+  };
+  const updateRefUrl = (i, field, val) => {
+    const next = refUrls.map((r,idx)=>idx===i?{...r,[field]:val}:r);
+    saveRefUrls(next);
+  };
+  const removeRefUrl = (i) => saveRefUrls(refUrls.filter((_,idx)=>idx!==i));
+  const moveRefUrl = (i, dir) => {
+    const next=[...refUrls];
+    const j=i+dir;
+    if(j<0||j>=next.length) return;
+    [next[i],next[j]]=[next[j],next[i]];
+    saveRefUrls(next);
+  };
 
   // ── 会議ブリーフィング ──────────────────────────────────────
   // テンプレートはlocalStorage保存、アクティブ入力は毎回リセット
@@ -3649,12 +3754,21 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     const newText  = lines.slice(analyzedLenRef.current).map(l => `[${l.time}] ${l.text}`).join('\n');
     if (!newText.trim()) return;
 
-    // 参考ファイルのテキストを結合
     const refText = refFilesRef.current.length > 0
       ? refFilesRef.current.map(f => `=== ${f.name} ===\n${f.text}`).join('\n\n')
       : '';
+    const refUrlText = refUrls.filter(r=>r.url.trim()).length > 0
+      ? refUrls.filter(r=>r.url.trim()).map((r,i)=>`[参考URL ${i+1}${r.label?` (${r.label})`:''}] ${r.url}`).join('\n')
+      : '';
+
+    // 有効カテゴリのJSON出力定義を動的生成
+    const enabledCats = framework.cats.filter(c=>c.enabled);
+    const catJsonDef = enabledCats.map(c =>
+      `  "${c.id}": { "items": ["${c.id}カテゴリの分析結果1", "分析結果2"], "decision_needed": "役員判断要／部門長判断要／PMO完結／不要", "priority": "高／中／低" }`
+    ).join(',\n');
 
     setIsAnalyzing(true);
+    const analysisTime = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -3666,15 +3780,20 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 1200,
+          max_tokens: 2000,
           messages: [{
             role: 'user',
-            content: `あなたはグローバルERPプロジェクトのクライアント側PMOアシスタントです。
+            content: `あなたは${framework.companyName}のDXプロジェクト（グローバル経営基盤 将来像実現プロジェクト）のクライアント側PMOアシスタントです。
 ベンダー（IBM・MSOL等）との会議をリアルタイムでモニタリングし、PMO担当者（Masa）が見落としなく適切に判断・指摘できるよう支援します。
-${briefing ? `\n【今回の会議ブリーフィング（事前インプット）】\n${briefing}\n↑ このブリーフィングで指定された観点・目的を最優先で意識して分析すること。` : ''}
+
+【${framework.companyName} DXの目的・文脈】
+${framework.dxGoal}
+
+${briefing ? `【今回の会議ブリーフィング（最優先で意識すること）】\n${briefing}\n` : ''}
 【前回議事録】
 ${prevMinutes || '（なし）'}
-${refText ? `\n【参考ファイル（事前アップロード）】\n${refText}` : ''}
+${refText ? `\n【参考ファイル】\n${refText}` : ''}
+${refUrlText ? `\n【参考URL】\n${refUrlText}` : ''}
 
 【今回の会議テキスト全体】
 ${fullText}
@@ -3682,15 +3801,17 @@ ${fullText}
 【最新の新規発言（前回分析以降）】
 ${newText}
 
+━━ 分析カテゴリと観点 ━━
+${enabledCats.map(c=>`${c.id} ${c.icon} ${c.name}：${c.prompt}`).join('\n')}
+
 以下のJSON形式のみで回答してください（説明文・マークダウン不要）：
 {
-  "flags": [
-    {"type": "根拠不足|矛盾|リスク|課題", "speaker": "発言者(不明な場合は空)", "content": "問題のある発言内容", "reason": "指摘理由（具体的に）"}
-  ],
-  "questions": ["今すぐ確認すべき質問1", "質問2"],
-  "contradictions": ["前回議事録または参考ファイルとの矛盾・変化点"],
   "summary": "ここまでの会議内容の要約（3〜5行）",
-  "exec_summary": "役員が知るべきプロジェクト状況（1〜2行・経営者視点）"
+  "exec_summary": "役員・CIOが知るべきプロジェクト状況（1〜2行・経営者視点）",
+  "categories": {
+${catJsonDef}
+  },
+  "top_questions": ["今すぐ確認すべき最重要質問1", "質問2", "質問3"]
 }`
           }]
         })
@@ -3700,16 +3821,16 @@ ${newText}
       const thisCost = calcCost(data.usage);
       try {
         const parsed = JSON.parse(text);
-        setAnalysis(parsed);
+        const entry = { ...parsed, _time: analysisTime, _count: analysisCount+1 };
+        setAnalysis(entry);
+        setAnalysisHistory(prev => [entry, ...prev]); // 新しい順（先頭に追加）
         analyzedLenRef.current = lines.length;
         setAnalysisCount(c => c + 1);
         setLiveCostTotal(prev => prev + thisCost);
         setLiveCostLog(prev => [...prev, {
-          count: prev.length + 1,
-          cost: thisCost,
+          count: prev.length + 1, cost: thisCost,
           tokens: (data.usage?.input_tokens||0) + (data.usage?.output_tokens||0),
-          inp: data.usage?.input_tokens||0,
-          out: data.usage?.output_tokens||0,
+          inp: data.usage?.input_tokens||0, out: data.usage?.output_tokens||0,
         }]);
         if (analysisPanelRef.current) analysisPanelRef.current.scrollTop = 0;
       } catch(e) { console.error('Parse error:', e, text); }
@@ -3753,7 +3874,7 @@ ${newText}
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           {micMode === 'notta' ? (
             <button className="live-btn live-btn-blue"
-              onClick={()=>window.open('https://www.notta.ai/ja', '_blank')}>
+              onClick={()=>window.open('https://app.notta.ai/398793/dashboard', '_blank')}>
               🔗 Nottaを開く
             </button>
           ) : (
@@ -4025,18 +4146,12 @@ ${newText}
                     　・リアルタイムAI分析はAzure録音時のみ動作します</span>
                   </div>
                   <div style={{color:'#444',marginTop:2}}>
-                    💡 <strong>Nottaとは：</strong>AI文字起こしサービス。無料プランあり。
-                    <a href="https://www.notta.ai/ja" target="_blank" rel="noreferrer"
-                      style={{color:'#2E75B6',marginLeft:6,fontWeight:600}}>notta.ai →</a>
+                    💡 <strong>Nottaとは：</strong>AI文字起こしサービス。
                   </div>
                   <div style={{display:'flex',gap:6,marginTop:2,flexWrap:'wrap'}}>
                     <button className="live-btn live-btn-blue" style={{fontSize:11,padding:'5px 14px'}}
-                      onClick={()=>window.open('https://www.notta.ai/ja','_blank')}>
+                      onClick={()=>window.open('https://app.notta.ai/398793/dashboard','_blank')}>
                       🔗 Nottaを開く（別タブ）
-                    </button>
-                    <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'5px 14px'}}
-                      onClick={()=>window.open('https://www.notta.ai/ja/signup','_blank')}>
-                      📝 Notta 無料登録
                     </button>
                   </div>
                 </div>
@@ -4169,77 +4284,94 @@ ${newText}
               onClose={()=>setShowBriefingMgr(false)}/>
           )}
 
-          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>📄 前回議事録</div>
-            <div style={{fontSize:10,color:'#718096'}}>PCのファイルを選択（.txt / .docx）</div>
-            <label style={{cursor:'pointer'}}>
-              <input type="file" accept=".txt,.docx,.doc"
-                style={{display:'none'}}
-                onChange={e=>loadPrevMinutesFromFile(e.target.files[0])}/>
-              <div style={{
-                border:'2px dashed #a0aec0',borderRadius:6,padding:'6px 12px',
-                textAlign:'center',fontSize:12,color:'#2E75B6',background:'#fafbfc',
-                cursor:'pointer',transition:'.15s'
-              }}>
-                📂 ファイルを選択
-              </div>
-            </label>
-            {prevLoaded ? (
-              <div style={{display:'flex',alignItems:'center',gap:6,
-                background:'#E8F5E9',border:'1px solid #A5D6A7',
-                borderRadius:4,padding:'4px 8px',fontSize:11}}>
-                <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1B5E20'}}>
-                  ✅ {prevFileName}
-                </span>
-                <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:13}}
-                  onClick={()=>{setPrevMinutes('');setPrevLoaded(false);setPrevFileName('');}}>×</button>
-              </div>
-            ) : (
-              <div style={{fontSize:10,color:'#a0aec0'}}>未選択</div>
-            )}
-          </div>
+          {/* ── 参考資料パネル（前回議事録・参考ファイル・参考URL 統合） ── */}
+          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6,minWidth:260,flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:2}}>
+              📚 参考資料
+              <span style={{fontSize:9,color:'#718096',fontWeight:400,marginLeft:6}}>優先度順にAIへ提供されます</span>
+            </div>
 
-          {/* 参考ファイルアップロード */}
-          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6,minWidth:220}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>📎 参考ファイル（AI分析に活用）</div>
-            <div style={{fontSize:10,color:'#718096'}}>議事録・報告書・課題台帳など（.txt / .docx）</div>
-            <label style={{cursor:'pointer'}}>
-              <input type="file" multiple accept=".txt,.docx,.doc"
-                style={{display:'none'}}
-                onChange={e=>handleRefFileAdd(e.target.files)}/>
-              <div style={{
-                border:'2px dashed #a0aec0',borderRadius:6,padding:'6px 12px',
-                textAlign:'center',fontSize:12,color:'#2E75B6',background:'#fafbfc',
-                cursor:'pointer',transition:'.15s'
-              }}>
-                ＋ ファイルを追加
+            {/* ① 前回議事録 */}
+            <div style={{border:'1.5px solid #d0d8e4',borderRadius:6,overflow:'hidden',background:'#fafbfc'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'#f0f4f8',borderBottom:'1px solid #e2e8f0'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#2E75B6',minWidth:16}}>①</span>
+                <span style={{fontSize:10,fontWeight:700,color:'#444',flex:1}}>📄 前回議事録</span>
+                <span style={{fontSize:9,color:'#a0aec0'}}>最高優先度</span>
               </div>
-            </label>
-            {refFiles.length > 0 && (
-              <div style={{display:'flex',flexDirection:'column',gap:4,maxHeight:120,overflowY:'auto'}}>
-                {refFiles.map(f=>(
-                  <div key={f.name} style={{
-                    display:'flex',alignItems:'center',gap:6,
-                    background:'#EBF3FB',border:'1px solid #bee3f8',
-                    borderRadius:4,padding:'3px 8px',fontSize:11
-                  }}>
-                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1a4a7a'}}>
-                      📄 {f.name}
-                    </span>
-                    <span style={{color:'#a0aec0',fontSize:10,flexShrink:0}}>
-                      {f.text.length}字
-                    </span>
-                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:14,lineHeight:1,padding:'0 2px'}}
-                      onClick={()=>removeRefFile(f.name)}>×</button>
+              <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:4}}>
+                {prevLoaded ? (
+                  <div style={{display:'flex',alignItems:'center',gap:6,background:'#E8F5E9',border:'1px solid #A5D6A7',borderRadius:4,padding:'3px 8px',fontSize:11}}>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1B5E20'}}>✅ {prevFileName}</span>
+                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:13}} onClick={()=>{setPrevMinutes('');setPrevLoaded(false);setPrevFileName('');}}>×</button>
+                  </div>
+                ) : (
+                  <label style={{cursor:'pointer'}}>
+                    <input type="file" accept=".txt,.docx,.doc" style={{display:'none'}} onChange={e=>loadPrevMinutesFromFile(e.target.files[0])}/>
+                    <div style={{border:'1.5px dashed #a0aec0',borderRadius:5,padding:'5px 10px',textAlign:'center',fontSize:11,color:'#2E75B6',background:'#fff',cursor:'pointer'}}>
+                      📂 ファイルを選択（.txt / .docx）
+                    </div>
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* ② 参考ファイル */}
+            <div style={{border:'1.5px solid #d0d8e4',borderRadius:6,overflow:'hidden',background:'#fafbfc'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'#f0f4f8',borderBottom:'1px solid #e2e8f0'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#2E75B6',minWidth:16}}>②</span>
+                <span style={{fontSize:10,fontWeight:700,color:'#444',flex:1}}>📎 参考ファイル</span>
+                <label style={{cursor:'pointer',fontSize:9,color:'#2E75B6',fontWeight:600,background:'#EBF3FB',border:'1px solid #bee3f8',borderRadius:4,padding:'1px 6px'}}>
+                  ＋追加
+                  <input type="file" multiple accept=".txt,.docx,.doc" style={{display:'none'}} onChange={e=>handleRefFileAdd(e.target.files)}/>
+                </label>
+              </div>
+              <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:3,maxHeight:100,overflowY:'auto'}}>
+                {refFiles.length === 0 && <div style={{fontSize:10,color:'#a0aec0'}}>ファイルなし</div>}
+                {refFiles.map((f,i)=>(
+                  <div key={f.name} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,background:'#EBF3FB',border:'1px solid #bee3f8',borderRadius:3,padding:'2px 6px'}}>
+                    <span style={{color:'#718096',minWidth:14}}>{i+1}.</span>
+                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1a4a7a'}}>📄 {f.name}</span>
+                    <span style={{color:'#a0aec0',fontSize:9,flexShrink:0}}>{f.text.length}字</span>
+                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:12,padding:'0 1px'}} onClick={()=>removeRefFile(f.name)}>×</button>
                   </div>
                 ))}
-                <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px',alignSelf:'flex-start'}}
-                  onClick={()=>setRefFiles([])}>すべて削除</button>
+                {refFiles.length > 1 && (
+                  <button className="live-btn live-btn-gray" style={{fontSize:9,padding:'1px 6px',alignSelf:'flex-start'}} onClick={()=>setRefFiles([])}>すべて削除</button>
+                )}
               </div>
-            )}
-            {refFiles.length === 0 && (
-              <div style={{fontSize:10,color:'#a0aec0'}}>ファイルなし（未設定）</div>
-            )}
+            </div>
+
+            {/* ③ 参考URL */}
+            <div style={{border:'1.5px solid #d0d8e4',borderRadius:6,overflow:'hidden',background:'#fafbfc'}}>
+              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'#f0f4f8',borderBottom:'1px solid #e2e8f0'}}>
+                <span style={{fontSize:10,fontWeight:700,color:'#2E75B6',minWidth:16}}>③</span>
+                <span style={{fontSize:10,fontWeight:700,color:'#444',flex:1}}>🔗 参考URL <span style={{fontSize:9,color:'#a0aec0',fontWeight:400}}>最大5件</span></span>
+                {refUrls.length < 5 && (
+                  <button className="live-btn live-btn-gray" style={{fontSize:9,padding:'1px 6px'}} onClick={addRefUrl}>＋追加</button>
+                )}
+              </div>
+              <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:4}}>
+                {refUrls.length === 0 && <div style={{fontSize:10,color:'#a0aec0'}}>URLなし — ＋追加で登録（最大5件）</div>}
+                {refUrls.map((r,i)=>(
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:4,background:'#fff',border:'1px solid #e2e8f0',borderRadius:4,padding:'3px 6px'}}>
+                    <div style={{display:'flex',flexDirection:'column',gap:1,flexShrink:0}}>
+                      <button style={{background:'none',border:'none',cursor:'pointer',color:'#a0aec0',fontSize:10,lineHeight:1,padding:'1px'}} onClick={()=>moveRefUrl(i,-1)} disabled={i===0}>▲</button>
+                      <span style={{fontSize:9,color:'#2E75B6',fontWeight:700,textAlign:'center'}}>{i+1}</span>
+                      <button style={{background:'none',border:'none',cursor:'pointer',color:'#a0aec0',fontSize:10,lineHeight:1,padding:'1px'}} onClick={()=>moveRefUrl(i,1)} disabled={i===refUrls.length-1}>▼</button>
+                    </div>
+                    <div style={{flex:1,display:'flex',flexDirection:'column',gap:2,minWidth:0}}>
+                      <input value={r.label} onChange={e=>updateRefUrl(i,'label',e.target.value)}
+                        placeholder="ラベル（例：課題台帳、仕様書）"
+                        style={{width:'100%',border:'none',borderBottom:'1px solid #e2e8f0',fontSize:10,fontFamily:'inherit',outline:'none',background:'transparent',padding:'1px 2px',color:'#444'}}/>
+                      <input value={r.url} onChange={e=>updateRefUrl(i,'url',e.target.value)}
+                        placeholder="https://..."
+                        style={{width:'100%',border:'none',borderBottom:'1px solid #e2e8f0',fontSize:10,fontFamily:'inherit',outline:'none',background:'transparent',padding:'1px 2px',color:'#2E75B6'}}/>
+                    </div>
+                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:13,flexShrink:0}} onClick={()=>removeRefUrl(i)}>×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -4314,82 +4446,129 @@ ${newText}
 
         {/* 右：AIアシスト */}
         <div className="live-panel">
-          <div className="live-panel-header" style={{background:'#1F3864'}}>
-            🤖 AIアシストパネル
-            <span style={{marginLeft:'auto',fontSize:11,color:'#a0b4cc'}}>
-              {analysis ? `最終分析: ${new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}` : '分析待ち'}
+          <div className="live-panel-header" style={{background:'#1F3864',flexWrap:'wrap',gap:4}}>
+            <span>🤖 AIアシストパネル</span>
+            <span style={{fontSize:10,color:'#a0b4cc',marginLeft:4}}>
+              {analysisHistory.length > 0 ? `${analysisHistory.length}回分の履歴` : '分析待ち'}
             </span>
-            {refFiles.length > 0 && (
-              <span style={{marginLeft:8,fontSize:10,background:'#2E75B6',color:'#fff',padding:'1px 6px',borderRadius:8}}>
-                📎 {refFiles.length}件
-              </span>
-            )}
+            <span style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
+              {analysis && <span style={{fontSize:10,color:'#68d391'}}>最終: {analysis._time}</span>}
+              <button className="usage-btn" style={{fontSize:10}} onClick={()=>setShowFwModal(true)} title="分析フレームワーク設定">
+                ⚙️ 設定
+              </button>
+            </span>
           </div>
-          <div className="live-panel-body" ref={analysisPanelRef}>
-            {!analysis && (
-              <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13}}>
+          <div className="live-panel-body" ref={analysisPanelRef} style={{padding:0}}>
+            {analysisHistory.length === 0 && (
+              <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13,padding:16}}>
                 会議開始後30秒で自動分析されます<br/>
                 <span style={{fontSize:11}}>または「今すぐ分析」ボタンを押してください</span>
               </div>
             )}
-            {analysis && (
-              <>
-                {/* 役員向けサマリー */}
-                {analysis.exec_summary && (
-                  <div className="ai-section">
-                    <div className="ai-section-title">👔 役員向けサマリー</div>
-                    <div className="ai-exec">{analysis.exec_summary}</div>
-                  </div>
-                )}
 
-                {/* 要約 */}
-                {analysis.summary && (
-                  <div className="ai-section">
-                    <div className="ai-section-title">📋 ここまでの要約</div>
-                    <div className="ai-summary">{analysis.summary}</div>
-                  </div>
-                )}
+            {/* 全履歴を新しい順で表示 */}
+            {analysisHistory.map((entry, ei) => (
+              <div key={ei} style={{
+                borderBottom: ei < analysisHistory.length-1 ? '2px solid #EBF3FB' : 'none',
+                background: ei===0 ? '#fff' : '#F7F9FC',
+              }}>
+                {/* 分析ヘッダー */}
+                <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',
+                  background: ei===0 ? '#1F3864' : '#4A5568',
+                  color:'#fff',fontSize:11}}>
+                  <span style={{fontWeight:700}}>分析 #{entry._count}</span>
+                  <span style={{color:'rgba(255,255,255,.6)'}}>{entry._time}</span>
+                  {ei===0 && <span style={{marginLeft:4,background:'#38A169',borderRadius:8,padding:'1px 7px',fontSize:9,fontWeight:700}}>最新</span>}
+                  <button style={{marginLeft:'auto',background:'none',border:'1px solid rgba(255,255,255,.3)',
+                    color:'rgba(255,255,255,.8)',borderRadius:4,padding:'1px 8px',fontSize:9,cursor:'pointer'}}
+                    onClick={()=>navigator.clipboard.writeText(
+                      `分析 #${entry._count} (${entry._time})\n\n`+
+                      (entry.exec_summary?`【役員サマリー】\n${entry.exec_summary}\n\n`:'')+
+                      (entry.summary?`【要約】\n${entry.summary}\n\n`:'')+
+                      (entry.top_questions?.length?`【確認すべき質問】\n${entry.top_questions.map(q=>`・${q}`).join('\n')}\n\n`:'')+
+                      (entry.categories ? framework.cats.filter(c=>c.enabled).map(c=>
+                        entry.categories[c.id]?.items?.length ?
+                        `【${c.id} ${c.name}】\n${entry.categories[c.id].items.map(x=>`・${x}`).join('\n')}`
+                        :''
+                      ).filter(Boolean).join('\n\n') : '')
+                    )}>
+                    📋 コピー
+                  </button>
+                </div>
 
-                {/* フラグ */}
-                {analysis.flags && analysis.flags.length > 0 && (
-                  <div className="ai-section">
-                    <div className="ai-section-title">🚩 フラグ ({analysis.flags.length}件)</div>
-                    {analysis.flags.map((f, i) => (
-                      <div key={i} className={`ai-flag ${flagClass(f.type)}`}>
-                        <div style={{fontWeight:700,marginBottom:2}}>
-                          [{f.type}] {f.speaker && `(${f.speaker})`}
+                <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:8}}>
+                  {/* 役員サマリー */}
+                  {entry.exec_summary && (
+                    <div style={{background:'#FFF4EB',borderLeft:'3px solid #C55A11',borderRadius:'0 4px 4px 0',padding:'6px 10px',fontSize:11,color:'#7A3B0E',fontWeight:600,lineHeight:1.6}}>
+                      👔 {entry.exec_summary}
+                    </div>
+                  )}
+
+                  {/* 要約 */}
+                  {entry.summary && (
+                    <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:4,padding:'6px 10px',fontSize:11,color:'#333',lineHeight:1.7}}>
+                      📋 {entry.summary}
+                    </div>
+                  )}
+
+                  {/* 6カテゴリ */}
+                  {entry.categories && framework.cats.filter(c=>c.enabled).map(cat => {
+                    const catData = entry.categories[cat.id];
+                    if (!catData || !catData.items || catData.items.length===0) return null;
+                    const catColors = {
+                      '①':['#065A82','#EBF8FF'], '②':['#B7410E','#FFF3ED'],
+                      '③':['#B7791F','#FFFBEB'], '④':['#276749','#E8F5EF'],
+                      '⑤':['#4A3728','#F5F0EB'], '⑥':['#6B3FA0','#F3EEFF'],
+                    };
+                    const [fg,bg] = catColors[cat.id] || ['#444','#f8fafc'];
+                    const decBadge = catData.decision_needed && catData.decision_needed !== '不要'
+                      ? catData.decision_needed : null;
+                    return (
+                      <div key={cat.id} style={{border:`1.5px solid ${fg}33`,borderRadius:6,overflow:'hidden'}}>
+                        <div style={{background:fg,color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+                          <span>{cat.id} {cat.icon} {cat.name}</span>
+                          {decBadge && (
+                            <span style={{marginLeft:'auto',background:'rgba(255,255,255,.25)',borderRadius:8,padding:'1px 8px',fontSize:9}}>
+                              ⚡ {decBadge}
+                            </span>
+                          )}
                         </div>
-                        <div style={{marginBottom:4}}>「{f.content}」</div>
-                        <div style={{fontSize:11,opacity:0.85}}>→ {f.reason}</div>
+                        <div style={{background:bg,padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
+                          {catData.items.map((item,ii)=>(
+                            <div key={ii} style={{display:'flex',gap:5,fontSize:10.5,color:'#333',lineHeight:1.55}}>
+                              <span style={{color:fg,fontWeight:700,flexShrink:0}}>・</span>
+                              <span>{item}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
 
-                {/* 確認すべき質問 */}
-                {analysis.questions && analysis.questions.length > 0 && (
-                  <div className="ai-section">
-                    <div className="ai-section-title">💬 確認すべき質問 ({analysis.questions.length}件)</div>
-                    {analysis.questions.map((q, i) => (
-                      <div key={i} className="ai-question">❓ {q}</div>
-                    ))}
-                  </div>
-                )}
-
-                {/* 前回との矛盾 */}
-                {analysis.contradictions && analysis.contradictions.length > 0 && (
-                  <div className="ai-section">
-                    <div className="ai-section-title">⚠️ 前回議事録との差分・矛盾</div>
-                    {analysis.contradictions.map((c, i) => (
-                      <div key={i} className="ai-contradiction">⚡ {c}</div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
+                  {/* 確認すべき質問 */}
+                  {entry.top_questions && entry.top_questions.length > 0 && (
+                    <div style={{border:'1.5px solid #2E75B633',borderRadius:6,overflow:'hidden'}}>
+                      <div style={{background:'#2E75B6',color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700}}>
+                        💬 今すぐ確認すべき質問
+                      </div>
+                      <div style={{background:'#EBF3FB',padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
+                        {entry.top_questions.map((q,qi)=>(
+                          <div key={qi} style={{fontSize:10.5,color:'#1a4a7a',lineHeight:1.55}}>❓ {q}</div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
+
+      {/* フレームワーク設定モーダル */}
+      {showFwModal && (
+        <FrameworkModal fw={framework} onSave={saveFw} onClose={()=>setShowFwModal(false)} defaultFw={DEFAULT_FW}/>
+      )}
 
       {/* 統合セットアップガイドモーダル */}
       {showSetupModal && (() => {
@@ -4705,7 +4884,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v28</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v30</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
