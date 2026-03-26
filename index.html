@@ -3102,7 +3102,7 @@ function BriefingManagerModal({ templates, onSave, onClose }) {
                   placeholder="テンプレート名" style={{width:'100%',padding:'5px 8px',border:'1.5px solid #2E75B6',borderRadius:5,fontSize:12,fontFamily:'inherit'}}/>
                 <textarea value={editContent} onChange={e=>setEditContent(e.target.value)}
                   rows={5} style={{width:'100%',padding:'6px 8px',border:'1.5px solid #2E75B6',borderRadius:5,fontSize:11,fontFamily:'inherit',resize:'vertical',lineHeight:1.6}}/>
-                <div style={{display:'flex',gap:6'}}>
+                <div style={{display:'flex',gap:6}}>
                   <button className="btn btn-green" style={{fontSize:12,padding:'5px 14px'}} onClick={saveItem}>保存</button>
                   <button className="btn btn-gray" style={{fontSize:12,padding:'5px 14px'}} onClick={cancelEdit}>キャンセル</button>
                 </div>
