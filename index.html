@@ -250,9 +250,10 @@ function generateDocx(basicInfo, result){
     const shade = opts.shade ? `<w:shd w:val="clear" w:color="auto" w:fill="${opts.shade}"/>` : '';
     const span  = opts.span  ? `<w:gridSpan w:val="${opts.span}"/>` : '';
     const vA    = `<w:vAlign w:val="center"/>`;
-    // テンプレート通り：セル個別の罫線は下側白線のみ（ヘッダー色セルのみ）
+    // ヘッダーセルの罫線：全辺を明示指定（未指定だとWordがnilと解釈し左・上・右が消える）
+    // bottom のみ白線（セル間区切り）、他は黒線でテーブル罫線と同一
     const tcBdr = opts.shade === HDR
-      ? `<w:tcBorders><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/></w:tcBorders>`
+      ? `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>`
       : '';
     const mar   = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
     const wElem = w ? `<w:tcW w:w="${w}" w:type="dxa"/>` : '';
@@ -273,7 +274,7 @@ function generateDocx(basicInfo, result){
   const attendeesCell = (basicInfo.attendees||[]).map(o=>{
     const names = Array.isArray(o.names) ? o.names.join('、') : (o.names||'');
     return names ? `【${o.org}】　${names}` : `【${o.org}】`;
-  }).join('\n') || '【KE】\n【IBM】\n【PwC】';
+  }).join('\n') || '';
 
   // 決定事項・ToDo・議事内容は全て同一表内（テンプレート通り改ページなし）
   // テンプレートのtblBordersはcolor=auto（自動色）
@@ -1308,8 +1309,8 @@ function StepIndicator({step,setStep,maxReached}){
     <div className="steps">
       {STEPS.map(s=>(
         <div key={s.n} className={`step-item ${s.n===step?'active':''} ${s.n<step?'done':''}`}
-          onClick={()=>s.n<=maxReached&&setStep(s.n)}
-          style={{cursor:s.n<=maxReached?'pointer':'default'}}>
+          onClick={()=>setStep(s.n)}
+          style={{cursor:'pointer'}}>
           <div className="step-circle">{s.n<step?'✓':s.n}</div>
           <div className="step-label">{s.label}</div>
         </div>
@@ -1650,7 +1651,7 @@ function searchPersonMaster(query, excludeNames=[]) {
 function AttendeesInput({ value, onChange, onOpenPersonMaster }){
   const orgs = (value && value.length > 0)
     ? value
-    : DEFAULT_ORGS.map(function(o){ return {org:o, names:[]}; });
+    : [];
 
   const removeName = function(orgKey, name) {
     onChange(orgs.map(function(o){ return o.org===orgKey ? {org:o.org, names:o.names.filter(function(n){ return n!==name; })} : o; }));
@@ -1987,15 +1988,15 @@ function IcsStepA({ count, onAll, onOwnerOnly, onSkip }) {
   return (
     <div className="modal-overlay">
       <div className="modal" style={{maxWidth:440}}>
-        <div className="modal-title">📅 参加者のインポート</div>
+        <div className="modal-title">📅 出席者のインポート</div>
         <div style={{fontSize:13,color:'#444',marginBottom:16}}>
-          .icsから <strong>{count}名</strong> の参加者が見つかりました。インポート方法を選択してください。
+          .icsから <strong>{count}名</strong> の出席者が見つかりました。インポート方法を選択してください。
         </div>
         <div style={{display:'flex',flexDirection:'column',gap:10}}>
           <button className="btn btn-primary" onClick={onAll}
             style={{justifyContent:'flex-start',gap:10,padding:'12px 16px'}}>
             <span style={{fontSize:18}}>✅</span>
-            <span><strong>全員インポート</strong><br/><span style={{fontSize:11,fontWeight:'normal',opacity:.8}}>全参加者を登録・出席者に追加</span></span>
+            <span><strong>全員インポート</strong><br/><span style={{fontSize:11,fontWeight:'normal',opacity:.8}}>全出席者を登録・出席者に追加</span></span>
           </button>
           <button className="btn btn-gray" onClick={onOwnerOnly}
             style={{justifyContent:'flex-start',gap:10,padding:'12px 16px'}}>
@@ -2003,7 +2004,7 @@ function IcsStepA({ count, onAll, onOwnerOnly, onSkip }) {
             <span><strong>担当者のみ</strong><br/><span style={{fontSize:11,opacity:.8}}>主催者・自分のみ追加（他はスキップ）</span></span>
           </button>
           <button style={{background:'none',border:'none',color:'#999',cursor:'pointer',fontSize:12,padding:'8px'}} onClick={onSkip}>
-            ⏭ 参加者はスキップして手動入力する
+            ⏭ 出席者はスキップして手動入力する
           </button>
         </div>
       </div>
@@ -2056,7 +2057,7 @@ function IcsStepC({ members: initMembers, onComplete, onSkip }) {
   return (
     <div className="modal-overlay">
       <div className="modal" style={{maxWidth:700}}>
-        <div className="modal-title">👥 未登録の参加者</div>
+        <div className="modal-title">👥 未登録の出席者</div>
         <div style={{fontSize:12,color:'#666',marginBottom:8}}>
           氏名を確認・修正して登録してください。チェックを外すと今回はスキップします。
         </div>
@@ -2577,7 +2578,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         <div style={{display:'flex',gap:6}}>
           <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }}
             style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
-            👥 参加者マスター
+            👥 出席者マスター
           </button>
           <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }}
             style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
@@ -2595,7 +2596,6 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       </div>
       <div className="btn-row">
         <button className="btn btn-primary"
-          disabled={!data.meetingName||!data.date}
           onClick={onNext}>次へ →</button>
       </div>
     </div>
@@ -2672,7 +2672,7 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
 
       <div className="btn-row">
         <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-        <button className="btn btn-primary" disabled={!transcript.trim()} onClick={onNext}>AI解析を開始 →</button>
+        <button className="btn btn-primary" onClick={onNext}>AI解析を開始 →</button>
       </div>
     </div>
   );
@@ -2804,9 +2804,20 @@ function MinutesEditor({data,setData}){
 }
 
 // ── Step 4 ─────────────────────────────────────────────────
-function Step4({result,setResult,onNext,onBack}){
+function Step4({result,setResult,onNext,onBack,onReanalyze}){
   const [tab,setTab]=useState('minutes');
-  const upd=(key,val)=>setResult(p=>({...p,[key]:val}));
+  const [hasEdits,setHasEdits]=useState(false);
+  const upd=(key,val)=>{setHasEdits(true);setResult(p=>({...p,[key]:val}));};
+  const handleBack=()=>{
+    if(hasEdits){
+      if(!window.confirm('編集内容が失われる可能性があります。Step3（AI解析）に戻りますか？')) return;
+    }
+    onBack();
+  };
+  const handleReanalyze=()=>{
+    if(!window.confirm('現在の編集内容はリセットされ、AIによる再解析を行います。よろしいですか？')) return;
+    onReanalyze();
+  };
   const IP=[{key:'importance',label:'重要度',type:'select',options:IP_OPTS,w:70},{key:'priority',label:'優先度',type:'select',options:IP_OPTS,w:70}];
   const tabs=[
     {id:'minutes',label:`📝 議事内容`},
@@ -2834,7 +2845,8 @@ function Step4({result,setResult,onNext,onBack}){
         {tab==='pending'&&<TableEditor data={result.pending} setData={v=>upd('pending',v)} cols={[{key:'content',label:'保留内容',w:200,tall:true},{key:'reason',label:'理由',w:150},{key:'next_action',label:'次回の扱い',w:120}]}/>}
       </div>
       <div className="btn-row">
-        <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
+        <button className="btn btn-gray" onClick={handleBack}>← 戻る</button>
+        <button className="btn btn-blue" onClick={handleReanalyze} title="文字起こしデータをもとに再度AI解析を実行します">🔄 AI再解析</button>
         <button className="btn btn-primary" onClick={onNext}>ダウンロードへ →</button>
       </div>
     </div>
@@ -2844,13 +2856,26 @@ function Step4({result,setResult,onNext,onBack}){
 // ── Step 5 ─────────────────────────────────────────────────
 function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,onBack,docVersion,setDocVersion}){
   const [downloading,setDownloading]=useState('');
+
+  // ── ダウンロード前エラーチェック ──────────────────────────
+  const getErrors = () => {
+    const errs = [];
+    if (!basicInfo.meetingName) errs.push('会議名が未入力です（Step 1）');
+    if (!basicInfo.date)        errs.push('開催日が未入力です（Step 1）');
+    if (!result)                errs.push('AI解析が完了していません（Step 3）');
+    return errs;
+  };
+  const validationErrors = getErrors();
+
   const dlWord=async()=>{
+    if(validationErrors.length) return;
     setDownloading('word');
     try{const blob=await generateDocx(basicInfo,result);downloadBlob(blob,makeDocxFilename(basicInfo.meetingName,basicInfo.date,docVersion));setDocVersion(v=>v+1);}
     catch(e){alert('Word生成エラー: '+e.message);}
     setDownloading('');
   };
   const dlExcel=async()=>{
+    if(validationErrors.length) return;
     setDownloading('excel');
     try{
       const blob=await generateXlsx(basicInfo,result,xlsxTemplateFile,xlsxDataFile);
@@ -2870,7 +2895,14 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
   return(
     <div className="card">
       <div className="card-title">⬇️ Step 5 ― ダウンロード</div>
-      <div className="notice notice-ok" style={{marginBottom:16}}>解析完了！ファイルはダウンロードフォルダに保存されます（既存ファイルは上書きされません）。</div>
+      {validationErrors.length > 0 ? (
+        <div className="notice notice-warn" style={{marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>⚠️ ダウンロード前に以下を確認してください</div>
+          {validationErrors.map((e,i)=>(<div key={i} style={{fontSize:12,lineHeight:1.8}}>・{e}</div>))}
+        </div>
+      ) : (
+        <div className="notice notice-ok" style={{marginBottom:16}}>✅ 解析完了！ファイルはダウンロードフォルダに保存されます（既存ファイルは上書きされません）。</div>
+      )}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:20}}>
         {stats.map(([label,count,color])=>(
           <div key={label} style={{textAlign:'center',background:'#f8fafc',borderRadius:8,padding:'10px 4px',border:`2px solid ${color}22`}}>
@@ -2884,17 +2916,17 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
           <div className="dl-name">📄 議事録 .docx</div>
           <div className="dl-desc">{docxTemplateFile?`テンプレート「${docxTemplateFile.name}」の形式で出力。`:'デフォルト形式で出力。'}Meiryo UI / Calibri フォント。室長・役員報告は改ページ分離。</div>
         </div>
-        <button className="btn btn-blue" onClick={dlWord} disabled={!!downloading}>{downloading==='word'?'生成中...':'⬇️ Word'}</button>
+        <button className="btn btn-blue" onClick={dlWord} disabled={!!downloading||validationErrors.length>0}>{downloading==='word'?'生成中...':'⬇️ Word'}</button>
       </div>
       <div className="dl-card">
         <div className="dl-info">
           <div className="dl-name">📊 管理台帳 .xlsx</div>
           <div className="dl-desc">{xlsxDataFile?'既存台帳に追記します。':xlsxTemplateFile?'テンプレートに転記します。':'新規作成します。'}To-Doシート対応。</div>
         </div>
-        <button className="btn btn-green" onClick={dlExcel} disabled={!!downloading}>{downloading==='excel'?'生成中...':'⬇️ Excel'}</button>
+        <button className="btn btn-green" onClick={dlExcel} disabled={!!downloading||validationErrors.length>0}>{downloading==='excel'?'生成中...':'⬇️ Excel'}</button>
       </div>
       <div style={{marginTop:12}}>
-        <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={dlBoth} disabled={!!downloading}>
+        <button className="btn btn-primary" style={{width:'100%',justifyContent:'center'}} onClick={dlBoth} disabled={!!downloading||validationErrors.length>0}>
           {downloading?'生成中...':'⬇️ Word + Excel を両方ダウンロード'}
         </button>
       </div>
@@ -3884,7 +3916,7 @@ function App(){
     startTime:'10:00', endTime:'11:00',
     location:'KE（本社）応接室x、オンライン（Teams）',
     author:'安田 真和',
-    attendees: [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}],
+    attendees: [],
     materials:[{name:'',url:''}]
   });
   const [transcript,setTranscript]=useState('');
@@ -4030,11 +4062,11 @@ function App(){
         xlsxDataFile={xlsxDataFile} setXlsxDataFile={setXlsxDataFile}
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
       {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
-      {step===4&&result&&<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)}/>}
-      {step===5&&result&&<Step5 basicInfo={basicInfo} result={result}
+      {step===4&&(result ? <Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)} onReanalyze={()=>{goTo(3);handleAnalyze();}}/> : <div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
+      {step===5&&(result ? <Step5 basicInfo={basicInfo} result={result}
         docxTemplateFile={docxTemplateFile}
         xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
-        onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>}
+        onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/> : <div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
       </div>)}
 
       {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)} currentAdmin={adminKey} onSaveAdmin={saveAdminKey}/>}
