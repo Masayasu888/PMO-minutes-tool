@@ -2706,7 +2706,48 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
       )}
       {error&&(
         <div>
-          <div className="notice notice-warn">❌ {error}</div>
+          {(()=>{
+            // クレジット残高不足
+            if(error.includes('credit balance is too low')||error.includes('Your credit balance')){
+              return(
+                <div className="notice notice-warn">
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>💳 APIクレジット残高不足</div>
+                  <div style={{fontSize:12,lineHeight:1.7}}>
+                    Anthropic APIのクレジット残高が不足しています。<br/>
+                    <a href="https://console.anthropic.com" target="_blank" rel="noreferrer"
+                      style={{color:'#2E75B6',fontWeight:700}}>console.anthropic.com</a> の
+                    <strong>「Plans &amp; Billing」→「Credits」</strong> でクレジットを追加してください。<br/>
+                    <span style={{color:'#888',fontSize:11}}>追加後は「再試行」ボタンで続行できます。</span>
+                  </div>
+                </div>
+              );
+            }
+            // 認証エラー
+            if(error.includes('401')||error.includes('invalid_api_key')||error.includes('authentication_error')){
+              return(
+                <div className="notice notice-warn">
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>🔑 APIキー認証エラー</div>
+                  <div style={{fontSize:12,lineHeight:1.7}}>
+                    APIキーが無効または未設定です。<br/>
+                    右上の <strong>「🔑 APIキー設定」</strong> から正しいキーを設定してください。
+                  </div>
+                </div>
+              );
+            }
+            // レート制限
+            if(error.includes('429')||error.includes('rate_limit')){
+              return(
+                <div className="notice notice-warn">
+                  <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>⏳ APIレート制限</div>
+                  <div style={{fontSize:12,lineHeight:1.7}}>
+                    リクエストが制限されています。しばらく待ってから再試行してください。
+                  </div>
+                </div>
+              );
+            }
+            // その他エラー
+            return <div className="notice notice-warn">❌ {error}</div>;
+          })()}
           <div className="btn-row">
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
             <button className="btn btn-primary" onClick={onAnalyze}>再試行</button>
