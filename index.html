@@ -29,6 +29,40 @@ body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202
 .step-item.done .step-circle{border-color:#1F7A4D;background:#1F7A4D;color:#fff}
 .step-label{font-size:10px;color:#666;margin-top:4px;text-align:center;line-height:1.3}
 .step-item.active .step-label{color:#2E75B6;font-weight:600}
+
+/* ── AI解析ステップ（独立アクションノード）──────────────── */
+.step-item.ai-action{flex:0.7}
+.step-item.ai-action .step-circle{
+  width:36px;height:36px;border-radius:6px;
+  transform:rotate(45deg);
+  border-color:#38A169;color:#38A169;background:#F0FFF4;
+  font-size:10px;font-weight:900;
+}
+.step-item.ai-action .step-circle .ai-inner{
+  display:flex;align-items:center;justify-content:center;
+  transform:rotate(-45deg);font-size:15px;line-height:1;
+}
+.step-item.ai-action.active .step-circle{
+  background:linear-gradient(135deg,#38A169,#276749);
+  border-color:#276749;color:#fff;
+  box-shadow:0 0 0 4px rgba(56,161,105,.18);
+  animation:ai-node-pulse 2s ease-in-out infinite;
+}
+.step-item.ai-action.done .step-circle{
+  background:#1F7A4D;border-color:#1F7A4D;color:#fff;
+}
+.step-item.ai-action .step-label{color:#38A169;font-weight:600;font-size:10px}
+.step-item.ai-action.active .step-label{color:#276749;font-weight:700}
+@keyframes ai-node-pulse{
+  0%,100%{box-shadow:0 0 0 4px rgba(56,161,105,.18)}
+  50%{box-shadow:0 0 0 8px rgba(56,161,105,.07)}
+}
+/* AI前後のコネクター（緑・破線） */
+.step-item.ai-action:not(:last-child)::after{background:none;border-top:2px dashed #38A169;height:0;top:18px}
+.step-item.ai-action.done:not(:last-child)::after{border-top-color:#1F7A4D;border-style:solid}
+/* step2のコネクターもグリーン系に（AIノードへ向かう） */
+.step-item.ai-pre:not(:last-child)::after{background:none;border-top:2px dashed #a0d4b5;height:0;top:18px}
+.step-item.ai-pre.done:not(:last-child)::after{border-top-color:#38A169;border-style:solid}
 .card{background:#fff;border-radius:10px;padding:24px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px}
 .card-title{font-size:16px;font-weight:700;color:#1F3864;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #EBF3FB}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
@@ -1306,15 +1340,39 @@ function ApiKeyModal({onSave,onClose,current,currentAdmin,onSaveAdmin}){
 
 function StepIndicator({step,setStep,maxReached}){
   return(
-    <div className="steps">
-      {STEPS.map(s=>(
-        <div key={s.n} className={`step-item ${s.n===step?'active':''} ${s.n<step?'done':''}`}
-          onClick={()=>setStep(s.n)}
-          style={{cursor:'pointer'}}>
-          <div className="step-circle">{s.n<step?'✓':s.n}</div>
-          <div className="step-label">{s.label}</div>
-        </div>
-      ))}
+    <div className="steps" style={{alignItems:'center'}}>
+      {STEPS.map((s,idx)=>{
+        const isActive=s.n===step, isDone=s.n<step;
+        const isAI=s.n===3;
+        // step2（AIノードの直前）に ai-pre クラスを付ける
+        const isAIPre=s.n===2;
+        const cls=[
+          'step-item',
+          isAI?'ai-action':'',
+          isAIPre?'ai-pre':'',
+          isActive?'active':'',
+          isDone?'done':''
+        ].filter(Boolean).join(' ');
+        return(
+          <div key={s.n} className={cls} onClick={()=>setStep(s.n)} style={{cursor:'pointer'}}>
+            {isAI?(
+              <>
+                <div className="step-circle">
+                  <span className="ai-inner">{isDone?'✓':'⚡'}</span>
+                </div>
+                <div className="step-label" style={{fontSize:9,letterSpacing:.2}}>
+                  AI解析<br/><span style={{color:'#a0aec0',fontWeight:400,fontSize:8}}>自動処理</span>
+                </div>
+              </>
+            ):(
+              <>
+                <div className="step-circle">{isDone?'✓':s.n<3?s.n:s.n-1}</div>
+                <div className="step-label">{s.label}</div>
+              </>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2681,33 +2739,62 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
 // ── Step 3 ─────────────────────────────────────────────────
 function Step3({onAnalyze,onBack,analyzing,logs,error}){
   return(
-    <div className="card">
-      <div className="card-title">🤖 Step 3 ― AI解析</div>
+    <div className="card" style={{borderTop:'3px solid #38A169'}}>
+      {/* ヘッダー：独立アクションであることを強調 */}
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,paddingBottom:12,borderBottom:'2px solid #F0FFF4'}}>
+        <div style={{
+          width:42,height:42,borderRadius:8,background:'linear-gradient(135deg,#38A169,#276749)',
+          display:'flex',alignItems:'center',justifyContent:'center',fontSize:22,flexShrink:0,
+          boxShadow:'0 2px 8px rgba(56,161,105,.3)'
+        }}>⚡</div>
+        <div>
+          <div style={{fontSize:16,fontWeight:700,color:'#1F3864'}}>AI自動解析</div>
+          <div style={{fontSize:11,color:'#718096',marginTop:2}}>
+            このステップはClaude APIへ自動でリクエストを送信する独立した処理です
+          </div>
+        </div>
+        <div style={{marginLeft:'auto',background:'#F0FFF4',border:'1px solid #9AE6B4',borderRadius:20,
+          padding:'3px 10px',fontSize:10,color:'#276749',fontWeight:700,whiteSpace:'nowrap'}}>
+          ⚙️ 自動処理
+        </div>
+      </div>
+
       {!analyzing&&!error&&(
         <div>
-          <div className="notice notice-info">文字起こしをClaude APIで解析します。決定事項・ToDo・リスク・課題・役員報告・室長報告の抽出と重要度・優先度の自動判定を行います。</div>
-          <div style={{background:'#FFF9E6',border:'1px solid #F0C040',borderRadius:6,padding:'10px 14px',marginTop:8,fontSize:12,color:'#7A5800'}}>
-            🔑 <strong>Claude APIキーを使用します。</strong>
-            解析開始ボタンを押すと、Anthropic社のClaude API（claude-sonnet-4）にリクエストが送信されます。
-            APIキーが未設定の場合は設定画面が表示されます。
+          <div className="notice notice-info" style={{marginBottom:8}}>
+            文字起こしをClaude APIで解析します。決定事項・ToDo・リスク・課題・役員報告・室長報告の抽出と重要度・優先度の自動判定を行います。
+          </div>
+          <div style={{background:'#F0FFF4',border:'1.5px solid #9AE6B4',borderRadius:8,padding:'12px 16px',marginTop:8}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#276749',marginBottom:6}}>🔑 APIリクエスト送信について</div>
+            <div style={{fontSize:12,color:'#2D6A4F',lineHeight:1.7}}>
+              解析開始ボタンを押すと、Anthropic社の <strong>Claude API（claude-sonnet-4）</strong> にリクエストが送信されます。<br/>
+              APIキーが未設定の場合は設定画面が表示されます。
+            </div>
           </div>
           <div className="btn-row" style={{marginTop:20}}>
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-            <button className="btn btn-green" onClick={onAnalyze}>🚀 解析開始</button>
+            <button className="btn" onClick={onAnalyze}
+              style={{background:'linear-gradient(135deg,#38A169,#276749)',color:'#fff',
+                boxShadow:'0 2px 10px rgba(56,161,105,.35)',fontSize:15,padding:'10px 32px'}}>
+              ⚡ AI解析を実行
+            </button>
           </div>
         </div>
       )}
       {analyzing&&(
         <div className="analyzing-wrap">
-          <div className="spinner"/>
-          <div style={{fontSize:14,color:'#444'}}>解析中です。しばらくお待ちください...</div>
+          <div style={{position:'relative',margin:'0 auto 16px',width:56,height:56}}>
+            <div style={{position:'absolute',inset:0,borderRadius:'50%',border:'4px solid #F0FFF4',borderTopColor:'#38A169',animation:'spin .8s linear infinite'}}/>
+            <div style={{position:'absolute',inset:8,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>⚡</div>
+          </div>
+          <div style={{fontSize:14,color:'#276749',fontWeight:600}}>AI解析を実行しています...</div>
+          <div style={{fontSize:12,color:'#718096',marginTop:4,marginBottom:12}}>しばらくお待ちください</div>
           <div className="progress-log">{logs.map((l,i)=><div key={i}>{l}</div>)}</div>
         </div>
       )}
       {error&&(
         <div>
           {(()=>{
-            // クレジット残高不足
             if(error.includes('credit balance is too low')||error.includes('Your credit balance')){
               return(
                 <div className="notice notice-warn">
@@ -2722,7 +2809,6 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
                 </div>
               );
             }
-            // 認証エラー
             if(error.includes('401')||error.includes('invalid_api_key')||error.includes('authentication_error')){
               return(
                 <div className="notice notice-warn">
@@ -2734,7 +2820,6 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
                 </div>
               );
             }
-            // レート制限
             if(error.includes('429')||error.includes('rate_limit')){
               return(
                 <div className="notice notice-warn">
@@ -2745,12 +2830,11 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
                 </div>
               );
             }
-            // その他エラー
             return <div className="notice notice-warn">❌ {error}</div>;
           })()}
           <div className="btn-row">
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-            <button className="btn btn-primary" onClick={onAnalyze}>再試行</button>
+            <button className="btn btn-green" onClick={onAnalyze}>⚡ 再試行</button>
           </div>
         </div>
       )}
@@ -2971,6 +3055,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     setOrgUsageLoading(false);
   };
   const [showSettings, setShowSettings]   = useState(true);
+  const [azureKeyLocked, setAzureKeyLocked] = useState(()=>!!(localStorage.getItem('azure_speech_key')));
   const [micDevices, setMicDevices]       = useState([]);
   const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
   const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical');
@@ -3478,74 +3563,208 @@ ${newText}
       {/* 設定パネル */}
       {showSettings && (
         <div className="live-settings">
-          <div className="live-setting-group" style={{minWidth:220}}>
-            <label>🔷 Azure Speech キー</label>
-            <input type="password" value={azureKey} onChange={e=>setAzureKey(e.target.value)} placeholder="Azure Subscription Key"/>
+          {/* Azure Key / Region ── ロック付き ── */}
+          <div style={{display:'flex',alignItems:'flex-end',gap:8,flexWrap:'wrap'}}>
+            <div className="live-setting-group" style={{minWidth:220}}>
+              <label>🔷 Azure Speech キー</label>
+              {azureKeyLocked ? (
+                <div style={{padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,
+                  fontSize:12,background:'#f8fafc',color:'#718096',letterSpacing:2,
+                  fontFamily:'monospace',userSelect:'none'}}>
+                  {'●'.repeat(Math.min(azureKey.length||20,24))}
+                </div>
+              ) : (
+                <input type="password" value={azureKey} onChange={e=>setAzureKey(e.target.value)} placeholder="Azure Subscription Key"/>
+              )}
+            </div>
+            <div className="live-setting-group" style={{minWidth:120}}>
+              <label>🌏 リージョン</label>
+              {azureKeyLocked ? (
+                <div style={{padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,
+                  fontSize:12,background:'#f8fafc',color:'#555'}}>
+                  {azureRegion}
+                </div>
+              ) : (
+                <input value={azureRegion} onChange={e=>setAzureRegion(e.target.value)} placeholder="japaneast"/>
+              )}
+            </div>
+            {azureKeyLocked ? (
+              <button className="live-btn live-btn-gray"
+                style={{marginBottom:1,whiteSpace:'nowrap'}}
+                onClick={()=>setAzureKeyLocked(false)}
+                title="クリックしてキーを編集">
+                🔐 変更
+              </button>
+            ) : (
+              <button className="live-btn live-btn-green"
+                style={{marginBottom:1,whiteSpace:'nowrap'}}
+                onClick={()=>{
+                  localStorage.setItem('azure_speech_key', azureKey);
+                  localStorage.setItem('azure_speech_region', azureRegion);
+                  setAzureKeyLocked(true);
+                }}>
+                🔒 保存してロック
+              </button>
+            )}
           </div>
-          <div className="live-setting-group" style={{minWidth:140}}>
-            <label>🌏 リージョン</label>
-            <input value={azureRegion} onChange={e=>setAzureRegion(e.target.value)} placeholder="japaneast"/>
           </div>
 
-          {/* マイク選択 */}
-          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444'}}>🎤 会議形式を選択</div>
-            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-              <button
-                className={`live-btn ${micMode==='physical'?'live-btn-blue':'live-btn-gray'}`}
-                onClick={()=>handleMicModeChange('physical')}
-                title="対面会議：PCの物理マイクで全員の声を取得">
-                🎤 物理マイク<br/><span style={{fontSize:10}}>対面のみ</span>
-              </button>
-              <button
-                className={`live-btn ${micMode==='mixed'?'live-btn-blue':'live-btn-gray'}`}
-                onClick={()=>handleMicModeChange('mixed')}
-                title="対面＋Teams混在：物理マイク＋Teamsスピーカーから全員の声を取得">
-                🎤💻 混在<br/><span style={{fontSize:10}}>対面＋Teams</span>
-              </button>
-              <button
-                className={`live-btn ${micMode==='vbcable'?'live-btn-red':'live-btn-gray'}`}
-                onClick={()=>handleMicModeChange('vbcable')}
-                title="Teamsのみ：VB-Cable経由でTeams参加者の声を取得">
-                🔁 VB-Cable<br/><span style={{fontSize:10}}>Teamsのみ</span>
-              </button>
+          {/* マイク選択 ── カード型ガイド付き */}
+          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:8,minWidth:320,flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:2}}>🎤 会議形式を選択</div>
+
+            {/* モード選択ボタン3つ */}
+            <div style={{display:'flex',gap:6}}>
+              {[
+                {id:'physical', icon:'🎤', label:'対面のみ', color:'live-btn-blue'},
+                {id:'mixed',    icon:'🎤💻', label:'対面＋Teams', color:'live-btn-blue'},
+                {id:'vbcable', icon:'🔁', label:'Teamsのみ', color:'live-btn-red'},
+              ].map(m=>(
+                <button key={m.id}
+                  className={`live-btn ${micMode===m.id ? m.color : 'live-btn-gray'}`}
+                  style={{flex:1,flexDirection:'column',gap:1,padding:'6px 4px',fontSize:11,lineHeight:1.4}}
+                  onClick={()=>handleMicModeChange(m.id)}>
+                  <span style={{fontSize:14}}>{m.icon}</span>
+                  <span>{m.label}</span>
+                </button>
+              ))}
             </div>
+
+            {/* モード別ガイドカード */}
             {micMode === 'physical' && (
-              <div style={{fontSize:11,color:'#2B6CB0',background:'#EBF3FB',padding:'6px 8px',borderRadius:4}}>
-                📋 Windows出力：スピーカー(Realtek) ／ デバイス：マイク配列
-                <div style={{marginTop:4}}>
-                  <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
+              <div style={{border:'1.5px solid #90CDF4',borderRadius:8,overflow:'hidden',fontSize:11}}>
+                <div style={{background:'#2E75B6',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
+                  🎤 対面のみモード
+                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>PCマイク使用</span>
+                </div>
+                <div style={{background:'#EBF3FB',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{color:'#1a4a7a'}}>
+                    <span style={{fontWeight:700}}>✅ 文字起こし対象</span><br/>
+                    <span style={{color:'#2c5282'}}>　・同室の全員の声（マイクに入る音）</span>
+                  </div>
+                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>⚠️ イヤホン利用時の注意</span><br/>
+                    <span>　イヤホンをしていても<strong>PCマイクは周囲の声を拾います</strong><br/>
+                    　→ イヤホンマイクではなく<strong>PCマイク（内蔵）を使用</strong>してください</span>
+                  </div>
+                  <div style={{color:'#742a2a',background:'#FFF5F5',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>❌ 文字起こし不可</span><br/>
+                    <span>　・Teams/Zoom等リモート参加者の声（スピーカーから遠いため精度低下）</span>
+                  </div>
+                  <div style={{color:'#444',marginTop:2}}>
+                    💻 <strong>Windows設定：</strong>出力→スピーカー(Realtek)、マイク→マイク配列(内蔵)
+                  </div>
+                  <div style={{background:'#F7FAFC',border:'1px solid #CBD5E0',borderRadius:4,padding:'5px 8px',marginTop:2}}>
+                    <div style={{fontWeight:700,color:'#2D3748',marginBottom:3}}>🌐 ブラウザ</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:2,color:'#4A5568'}}>
+                      <span>✅ <strong>Chrome</strong>　— 推奨。マイク選択・Azure SDK ともに安定動作</span>
+                      <span>🔺 <strong>Edge</strong>　— 動作可。ただし「音声強調」機能がONだと収音が変質することがある<br/>
+                        <span style={{paddingLeft:18,color:'#718096'}}>→ Edge設定 ＞ Cookie/サイトデータ ＞ マイク ＞ 音声処理をOFFに</span>
+                      </span>
+                      <span>❌ <strong>Firefox / Safari</strong>　— Azure Speech SDK 非対応のため使用不可</span>
+                    </div>
+                  </div>
+                  <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px',alignSelf:'flex-start',marginTop:2}}
                     onClick={()=>openSetupGuide('physical')}>📋 会議前チェックリスト</button>
                 </div>
               </div>
             )}
+
             {micMode === 'mixed' && (
-              <div style={{fontSize:11,color:'#276749',background:'#E8F5E9',padding:'6px 8px',borderRadius:4}}>
-                📋 Windows出力：スピーカー(Realtek) ／ デバイス：マイク配列<br/>
-                💡 Teamsのスピーカー音量を上げると相手の声の精度が向上します
-                <div style={{marginTop:4}}>
-                  <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
+              <div style={{border:'1.5px solid #9AE6B4',borderRadius:8,overflow:'hidden',fontSize:11}}>
+                <div style={{background:'#276749',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
+                  🎤💻 対面＋Teamsモード
+                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>PCマイク使用</span>
+                </div>
+                <div style={{background:'#F0FFF4',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{color:'#1B4332'}}>
+                    <span style={{fontWeight:700}}>✅ 文字起こし対象</span><br/>
+                    <span style={{color:'#1B5E20'}}>
+                      　・同室の対面参加者の声<br/>
+                      　・Teams参加者の声（スピーカーから拾う）
+                    </span>
+                  </div>
+                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>⚠️ イヤホン利用時は使用不可</span><br/>
+                    <span>　イヤホンをするとTeams音声がマイクに入らなくなります<br/>
+                    　→ <strong>スピーカー出力にして音量を上げて</strong>ください<br/>
+                    　→ Teams参加者の声が大きいほど文字起こし精度が向上します</span>
+                  </div>
+                  <div style={{color:'#742a2a',background:'#FFF5F5',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>❌ 精度が下がるケース</span><br/>
+                    <span>　・スピーカー音量が小さい場合<br/>
+                    　・PCマイクとスピーカーが遠い場合（ハウリング注意）</span>
+                  </div>
+                  <div style={{color:'#444',marginTop:2}}>
+                    💻 <strong>Windows設定：</strong>出力→スピーカー(Realtek)、マイク→マイク配列(内蔵)
+                  </div>
+                  <div style={{background:'#F7FAFC',border:'1px solid #CBD5E0',borderRadius:4,padding:'5px 8px',marginTop:2}}>
+                    <div style={{fontWeight:700,color:'#2D3748',marginBottom:3}}>🌐 ブラウザ</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:2,color:'#4A5568'}}>
+                      <span>✅ <strong>Chrome</strong>　— 推奨。スピーカーの音をマイクが拾う構成で安定動作</span>
+                      <span>🔺 <strong>Edge</strong>　— 動作可だが「音声強調」がONだと外部音声をノイズとして除去する場合あり<br/>
+                        <span style={{paddingLeft:18,color:'#718096'}}>→ Teams参加者の声が文字起こしされない場合はEdge音声処理をOFFに</span>
+                      </span>
+                      <span>❌ <strong>Firefox / Safari</strong>　— 使用不可</span>
+                    </div>
+                  </div>
+                  <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px',alignSelf:'flex-start',marginTop:2}}
                     onClick={()=>openSetupGuide('mixed')}>📋 会議前チェックリスト</button>
                 </div>
               </div>
             )}
+
             {micMode === 'vbcable' && (
-              <div style={{fontSize:11,color:'#C53030',background:'#FFF5F5',padding:'6px 8px',borderRadius:4}}>
-                📋 Windows出力：CABLE Input ／ Teamsスピーカー：CABLE Input に設定してください
-                <div style={{marginTop:6,display:'flex',gap:6,alignItems:'center'}}>
-                  <button className="live-btn live-btn-gray" style={{fontSize:11,padding:'3px 10px'}}
-                    onClick={()=>openSetupGuide('vbcable')}>
-                    📋 {vbSetupDone ? '会議前チェックリスト' : '初回セットアップ＋チェックリスト'}
-                  </button>
-                  {vbSetupDone && <span style={{fontSize:11,color:'#38A169'}}>✓ 初回設定済み</span>}
+              <div style={{border:'1.5px solid #FEB2B2',borderRadius:8,overflow:'hidden',fontSize:11}}>
+                <div style={{background:'#C53030',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
+                  🔁 Teamsのみモード（VB-Cable）
+                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>仮想ケーブル使用</span>
+                </div>
+                <div style={{background:'#FFF5F5',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{color:'#742a2a'}}>
+                    <span style={{fontWeight:700}}>✅ 文字起こし対象</span><br/>
+                    <span style={{color:'#822727'}}>　・Teamsのすべての参加者の声（クリアに取得）</span>
+                  </div>
+                  <div style={{color:'#276749',background:'#F0FFF4',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>✅ イヤホン利用OK</span><br/>
+                    <span>　VB-CableはPCマイクを使わず仮想ケーブルで音声を取得します<br/>
+                    　→ <strong>イヤホンをしたまま</strong>でTeams音声だけを文字起こしできます</span>
+                  </div>
+                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>❌ 文字起こし不可</span><br/>
+                    <span>　・<strong>同室の対面参加者の声</strong>（PCマイクを使わないため）<br/>
+                    　・自分自身の声</span>
+                  </div>
+                  <div style={{color:'#444',marginTop:2}}>
+                    💻 <strong>Windows設定：</strong>出力→CABLE Input、Teamsスピーカー→CABLE Input
+                  </div>
+                  <div style={{background:'#F7FAFC',border:'1px solid #CBD5E0',borderRadius:4,padding:'5px 8px',marginTop:2}}>
+                    <div style={{fontWeight:700,color:'#2D3748',marginBottom:3}}>🌐 ブラウザ</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:2,color:'#4A5568'}}>
+                      <span>✅ <strong>Chrome</strong>　— 推奨。CABLE Output（仮想デバイス）をマイクとして確実に認識</span>
+                      <span>⚠️ <strong>Edge</strong>　— <strong>仮想デバイスが選択肢に出ないケースあり</strong><br/>
+                        <span style={{paddingLeft:18,color:'#718096'}}>→ edge://flags/ で「Experimental Web Platform features」をEnableにすると改善する場合あり</span><br/>
+                        <span style={{paddingLeft:18,color:'#718096'}}>→ 解決しない場合はChromeに切り替えてください</span>
+                      </span>
+                      <span>❌ <strong>Firefox / Safari</strong>　— 使用不可</span>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4,flexWrap:'wrap'}}>
+                    <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px'}}
+                      onClick={()=>openSetupGuide('vbcable')}>
+                      📋 {vbSetupDone ? '会議前チェックリスト' : '初回セットアップ＋チェックリスト'}
+                    </button>
+                    {vbSetupDone && <span style={{fontSize:10,color:'#38A169'}}>✓ 初回設定済み</span>}
+                  </div>
                 </div>
               </div>
             )}
+
             {/* デバイス詳細選択（任意） */}
             {micDevices.length > 0 && (
-              <div className="live-setting-group" style={{minWidth:220}}>
-                <label style={{fontSize:10}}>デバイス詳細（任意）</label>
-                <select style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:12,fontFamily:'inherit'}}
+              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}}>
+                <span style={{fontSize:10,color:'#718096',whiteSpace:'nowrap'}}>デバイス指定：</span>
+                <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:11,fontFamily:'inherit'}}
                   value={selectedMicId} onChange={e=>setSelectedMicId(e.target.value)}>
                   <option value="default">デフォルト（モードに従う）</option>
                   {micDevices.map(d=>(
@@ -4016,7 +4235,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v16</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v18</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
