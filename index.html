@@ -1491,42 +1491,172 @@ function saveAttendeeHistory(org, names){
 // ── タグ入力コンポーネント ─────────────────────────────────
 
 // ── 配布資料リンク入力コンポーネント ──────────────────────
-// materials: [{name:'', url:''}]
+// materials: [{name:'', url:'', blobUrl:'', isLocal:false}]
 function MaterialsInput({ value, onChange }){
   const [items, setItems] = useState(()=>{
     if(value && Array.isArray(value) && value.length>0) return value;
-    return [{name:'', url:''}];
+    return [{name:'', url:'', blobUrl:'', isLocal:false}];
   });
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [folderName, setFolderName] = useState('');
 
   useEffect(()=>{ onChange(items); }, [items]);
 
   const upd = (i, key, val) => {
-    const next = items.map((it,idx)=>idx===i?{...it,[key]:val}:it);
-    setItems(next);
+    setItems(items.map((it,idx)=>idx===i?{...it,[key]:val}:it));
   };
-  const add = () => setItems([...items, {name:'', url:''}]);
+  const add = () => setItems([...items, {name:'', url:'', blobUrl:'', isLocal:false}]);
   const del = (i) => {
+    // Blob URLを解放
+    if(items[i].blobUrl) URL.revokeObjectURL(items[i].blobUrl);
     const next = items.filter((_,idx)=>idx!==i);
-    setItems(next.length ? next : [{name:'', url:''}]);
+    setItems(next.length ? next : [{name:'', url:'', blobUrl:'', isLocal:false}]);
+  };
+
+  // フォルダを開く（File System Access API）
+  const openFolder = async () => {
+    try {
+      if(!window.showDirectoryPicker) {
+        alert('このブラウザはフォルダ選択に対応していません。\nChrome または Edge をお使いください。');
+        return;
+      }
+      const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+      setFolderName(dirHandle.name);
+      const files = [];
+      for await (const [name, handle] of dirHandle.entries()) {
+        if(handle.kind === 'file') {
+          const ext = name.split('.').pop().toLowerCase();
+          // 一般的な資料ファイルのみ
+          if(['pdf','docx','doc','xlsx','xls','pptx','ppt','txt','png','jpg','jpeg'].includes(ext)) {
+            files.push({ name, handle });
+          }
+        }
+      }
+      files.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+      setFolderFiles(files);
+      setShowFolderPicker(true);
+    } catch(e) {
+      if(e.name !== 'AbortError') alert('フォルダ読み込みエラー: ' + e.message);
+    }
+  };
+
+  // ファイルを選択して追加
+  const pickFile = async (fileInfo, checked) => {
+    if(!checked) return;
+    try {
+      const file = await fileInfo.handle.getFile();
+      const blobUrl = URL.createObjectURL(file);
+      const newItem = { name: fileInfo.name, url: blobUrl, blobUrl, isLocal:true };
+      // 既に同名がある場合は更新
+      const existIdx = items.findIndex(it=>it.name === fileInfo.name);
+      if(existIdx >= 0) {
+        if(items[existIdx].blobUrl) URL.revokeObjectURL(items[existIdx].blobUrl);
+        setItems(items.map((it,i)=>i===existIdx ? newItem : it));
+      } else {
+        // 空行があれば置き換え、なければ追加
+        const emptyIdx = items.findIndex(it=>!it.name && !it.url);
+        if(emptyIdx >= 0) {
+          setItems(items.map((it,i)=>i===emptyIdx ? newItem : it));
+        } else {
+          setItems([...items, newItem]);
+        }
+      }
+    } catch(e) { alert('ファイル読み込みエラー: ' + e.message); }
+  };
+
+  // フォルダ選択でファイルを一括追加
+  const addFromFileInput = (files) => {
+    const newItems = [...items];
+    Array.from(files).forEach(file => {
+      const blobUrl = URL.createObjectURL(file);
+      const newItem = { name: file.name, url: blobUrl, blobUrl, isLocal:true };
+      const emptyIdx = newItems.findIndex(it=>!it.name && !it.url);
+      if(emptyIdx >= 0) newItems[emptyIdx] = newItem;
+      else newItems.push(newItem);
+    });
+    setItems(newItems);
   };
 
   return(
     <div>
       {items.map((item,i)=>(
-        <div key={i} className="material-item">
-          <span className="material-link-icon">📄</span>
+        <div key={i} className="material-item" style={{alignItems:'center'}}>
+          <span className="material-link-icon">{item.isLocal ? '💾' : '📄'}</span>
           <input className="material-name" value={item.name}
             onChange={e=>upd(i,'name',e.target.value)}
             placeholder="資料名（例: アジェンダ_v1.0）"/>
           <span className="material-divider">｜</span>
-          <span className="material-link-icon" style={{color:'#2E75B6'}}>🔗</span>
+          <span className="material-link-icon" style={{color: item.blobUrl?'#38A169':'#2E75B6'}}>🔗</span>
           <input className="material-url" value={item.url}
             onChange={e=>upd(i,'url',e.target.value)}
-            placeholder="URL（任意）"/>
+            placeholder="URL（任意）"
+            style={{color: item.isLocal ? '#38A169' : '#2E75B6'}}/>
+          {item.url && (
+            <a href={item.url} target="_blank" rel="noreferrer"
+              style={{fontSize:11,color:'#2E75B6',textDecoration:'none',flexShrink:0,padding:'0 4px'}}
+              title="開く">↗</a>
+          )}
           <button className="material-del" onClick={()=>del(i)}>🗑</button>
         </div>
       ))}
-      <button className="material-add" onClick={add}>＋ 資料を追加</button>
+
+      {/* アクションボタン行 */}
+      <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
+        <button className="material-add" style={{flex:1,marginTop:0}} onClick={add}>＋ 手入力で追加</button>
+        <button className="material-add" style={{flex:1,marginTop:0,borderColor:'#38A169',color:'#38A169'}}
+          onClick={openFolder}>
+          📁 フォルダから選択
+        </button>
+        <label className="material-add" style={{flex:1,marginTop:0,borderColor:'#9B59B6',color:'#9B59B6',cursor:'pointer',textAlign:'center'}}>
+          📎 ファイルを直接選択
+          <input type="file" multiple style={{display:'none'}}
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.png,.jpg,.jpeg"
+            onChange={e=>addFromFileInput(e.target.files)}/>
+        </label>
+      </div>
+
+      {/* フォルダピッカーモーダル */}
+      {showFolderPicker && (
+        <div className="modal-overlay" onClick={()=>setShowFolderPicker(false)}>
+          <div className="modal" style={{maxWidth:500,width:'95%',maxHeight:'80vh',overflowY:'auto'}}
+            onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">📁 フォルダ: {folderName}</div>
+            <div className="notice notice-info" style={{marginBottom:12,fontSize:11}}>
+              追加したいファイルにチェックを入れてください。Blob URLが自動生成されます（このセッション内のみ有効）。
+              <br/>SharePoint等の公開URLに差し替える場合はURL欄を直接編集してください。
+            </div>
+            {folderFiles.length === 0 && (
+              <div style={{color:'#a0aec0',fontSize:12,textAlign:'center',padding:16}}>
+                対応ファイル（PDF・Office・画像等）が見つかりませんでした
+              </div>
+            )}
+            <div style={{display:'flex',flexDirection:'column',gap:4}}>
+              {folderFiles.map((f,i)=>{
+                const alreadyAdded = items.some(it=>it.name===f.name);
+                const ext = f.name.split('.').pop().toLowerCase();
+                const icon = ext==='pdf'?'📕':ext.startsWith('doc')?'📘':ext.startsWith('xls')?'📗':ext.startsWith('ppt')?'📙':'📄';
+                return(
+                  <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 10px',
+                    border:'1px solid #e2e8f0',borderRadius:6,cursor:'pointer',background:alreadyAdded?'#E8F5E9':'#fff',
+                    transition:'.1s'}}>
+                    <input type="checkbox" defaultChecked={alreadyAdded}
+                      onChange={e=>pickFile(f, e.target.checked)} style={{cursor:'pointer'}}/>
+                    <span style={{fontSize:16}}>{icon}</span>
+                    <span style={{flex:1,fontSize:12,color:'#333',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {f.name}
+                    </span>
+                    {alreadyAdded && <span style={{fontSize:10,color:'#38A169',flexShrink:0}}>✅ 追加済</span>}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="btn-row" style={{marginTop:16}}>
+              <button className="btn btn-primary" onClick={()=>setShowFolderPicker(false)}>完了</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4884,7 +5014,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v30</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v31</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
