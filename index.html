@@ -18,8 +18,14 @@ body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202
 .app-header{background:#1F3864;color:#fff;padding:14px 20px;border-radius:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2)}
 .app-title{font-size:18px;font-weight:700;letter-spacing:.5px}
 .app-sub{font-size:11px;color:#a0b4cc;margin-top:2px}
-.btn-key{background:#2E75B6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer}
+.btn-key{background:#2E75B6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:'Meiryo UI','Meiryo',sans-serif;white-space:nowrap}
 .btn-key:hover{background:#1a5c9e}
+/* ── ヘッダー内サブボタン（半透明ゴースト） ── */
+.btn-header-sub{background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.28);border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'Meiryo UI','Meiryo',sans-serif;transition:.15s}
+.btn-header-sub:hover{background:rgba(255,255,255,0.22);border-color:rgba(255,255,255,0.45)}
+/* ── フォーム内サブアクションボタン（アウトライン） ── */
+.btn-form-sub{background:#fff;color:#2E75B6;border:1.5px solid #2E75B6;border-radius:5px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'Meiryo UI','Meiryo',sans-serif;transition:.15s;display:inline-flex;align-items:center;gap:3px}
+.btn-form-sub:hover{background:#EBF3FB}
 .steps{display:flex;margin-bottom:20px;background:#fff;border-radius:10px;padding:12px 16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 .step-item{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;cursor:pointer}
 .step-item:not(:last-child)::after{content:'';position:absolute;top:18px;left:60%;width:80%;height:2px;background:#d0d8e4}
@@ -2601,8 +2607,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         <div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
             <label style={{margin:0}}>会議名 <span className="req">*</span></label>
-            <button onClick={()=>setShowMaster(true)}
-              style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
+            <button onClick={()=>setShowMaster(true)} className="btn-form-sub">
               ＋ マスター管理
             </button>
           </div>
@@ -2634,12 +2639,10 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <span>出席者</span>
         <div style={{display:'flex',gap:6}}>
-          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }}
-            style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
+          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }} className="btn-form-sub">
             👥 出席者マスター
           </button>
-          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }}
-            style={{background:'none',border:'1px solid #2E75B6',borderRadius:4,padding:'2px 8px',fontSize:11,color:'#2E75B6',cursor:'pointer'}}>
+          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }} className="btn-form-sub">
             🌐 組織マスター
           </button>
         </div>
@@ -3590,10 +3593,11 @@ ${newText}
             </div>
             {azureKeyLocked ? (
               <button className="live-btn live-btn-gray"
-                style={{marginBottom:1,whiteSpace:'nowrap'}}
-                onClick={()=>setAzureKeyLocked(false)}
-                title="クリックしてキーを編集">
-                🔐 変更
+                style={{marginBottom:1,whiteSpace:'nowrap',
+                  opacity:isRecording?0.4:1, cursor:isRecording?'not-allowed':'pointer'}}
+                onClick={()=>{ if(!isRecording) setAzureKeyLocked(false); }}
+                title={isRecording ? '録音中は変更できません。一時停止してください' : 'クリックしてキーを編集'}>
+                {isRecording ? '🔒' : '🔐'} 変更
               </button>
             ) : (
               <button className="live-btn live-btn-green"
@@ -3612,8 +3616,20 @@ ${newText}
           <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:8,minWidth:320,flex:1}}>
             <div style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:2}}>🎤 会議形式を選択</div>
 
+            {/* 録音中ロック警告 */}
+            {isRecording && (
+              <div style={{
+                background:'#FFF3CD',border:'1.5px solid #F6AD55',borderRadius:6,
+                padding:'6px 10px',display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#7D4E00'
+              }}>
+                <span style={{fontSize:14}}>🔒</span>
+                <span><strong>録音中は設定変更できません</strong><br/>
+                一時停止してから変更し、録音を再開してください</span>
+              </div>
+            )}
+
             {/* モード選択ボタン3つ */}
-            <div style={{display:'flex',gap:6}}>
+            <div style={{display:'flex',gap:6,position:'relative'}}>
               {[
                 {id:'physical', icon:'🎤', label:'対面のみ', color:'live-btn-blue'},
                 {id:'mixed',    icon:'🎤💻', label:'対面＋Teams', color:'live-btn-blue'},
@@ -3621,8 +3637,11 @@ ${newText}
               ].map(m=>(
                 <button key={m.id}
                   className={`live-btn ${micMode===m.id ? m.color : 'live-btn-gray'}`}
-                  style={{flex:1,flexDirection:'column',gap:1,padding:'6px 4px',fontSize:11,lineHeight:1.4}}
-                  onClick={()=>handleMicModeChange(m.id)}>
+                  style={{flex:1,flexDirection:'column',gap:1,padding:'6px 4px',fontSize:11,lineHeight:1.4,
+                    opacity: isRecording ? 0.45 : 1,
+                    cursor: isRecording ? 'not-allowed' : 'pointer'}}
+                  onClick={()=>{ if(!isRecording) handleMicModeChange(m.id); }}
+                  disabled={isRecording}>
                   <span style={{fontSize:14}}>{m.icon}</span>
                   <span>{m.label}</span>
                 </button>
@@ -3761,10 +3780,12 @@ ${newText}
 
             {/* デバイス詳細選択（任意） */}
             {micDevices.length > 0 && (
-              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,opacity:isRecording?0.45:1}}>
                 <span style={{fontSize:10,color:'#718096',whiteSpace:'nowrap'}}>デバイス指定：</span>
-                <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:11,fontFamily:'inherit'}}
-                  value={selectedMicId} onChange={e=>setSelectedMicId(e.target.value)}>
+                <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:11,fontFamily:'inherit',
+                  cursor:isRecording?'not-allowed':'pointer'}}
+                  value={selectedMicId} onChange={e=>{ if(!isRecording) setSelectedMicId(e.target.value); }}
+                  disabled={isRecording}>
                   <option value="default">デフォルト（モードに従う）</option>
                   {micDevices.map(d=>(
                     <option key={d.deviceId} value={d.deviceId}>
@@ -4234,7 +4255,7 @@ function App(){
           <div className="app-title">
             {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v19</div>
+          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v21</div>
         </div>
         <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
           {/* モード切り替えボタン */}
@@ -4245,12 +4266,10 @@ function App(){
               onClick={()=>setAppMode('live')}>🔴 会議中モード</button>
           </div>
           {appMode === 'post' && (<>
-            <button onClick={()=>setShowPersonMaster(true)}
-              style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,padding:'5px 10px',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+            <button className="btn-header-sub" onClick={()=>setShowPersonMaster(true)}>
               👥 出席者マスター
             </button>
-            <button onClick={()=>setShowDomainMaster(true)}
-              style={{background:'rgba(255,255,255,0.15)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',borderRadius:6,padding:'5px 10px',fontSize:11,cursor:'pointer',whiteSpace:'nowrap'}}>
+            <button className="btn-header-sub" onClick={()=>setShowDomainMaster(true)}>
               🌐 ドメイン設定
             </button>
           </>)}
