@@ -185,6 +185,33 @@ textarea{resize:vertical;min-height:70px}
 .mode-btn.active{background:#1F3864;color:#fff;border-color:#1F3864}
 .mode-btn.live-active{background:#E53E3E;color:#fff;border-color:#E53E3E}
 @media(max-width:768px){.live-panels{grid-template-columns:1fr;height:auto}}
+
+/* ── APIコスト表示 ───────────────────────────────────────── */
+.cost-bar{background:rgba(0,0,0,.25);padding:4px 16px;display:flex;align-items:center;gap:10px;font-size:11px;color:rgba(255,255,255,.5);border-top:1px solid rgba(255,255,255,.08);flex-shrink:0}
+.cost-bar span{color:rgba(255,255,255,.7)}
+.cost-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:3000}
+.cost-modal{background:#fff;border-radius:12px;padding:24px 28px;width:90%;max-width:380px;box-shadow:0 8px 32px rgba(0,0,0,.2)}
+.cost-modal-title{font-size:16px;font-weight:700;color:#1F3864;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.cost-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f0f4f8;font-size:13px}
+.cost-row:last-of-type{border-bottom:none}
+.cost-total{display:flex;justify-content:space-between;padding:10px 0 0;font-size:15px;font-weight:700;color:#1F3864;border-top:2px solid #EBF3FB;margin-top:4px}
+.cost-note{font-size:11px;color:#a0aec0;margin-top:10px;line-height:1.6}
+
+/* ── Usage Bar（下部統合パネル） ─────────────────────────── */
+.usage-bar{background:rgba(15,20,30,.55);backdrop-filter:blur(4px);padding:6px 16px;display:flex;align-items:center;gap:0;font-size:11px;border-top:1px solid rgba(255,255,255,.07);flex-shrink:0;flex-wrap:wrap}
+.usage-seg{display:flex;align-items:center;gap:5px;padding:0 12px;border-right:1px solid rgba(255,255,255,.12)}
+.usage-seg:first-child{padding-left:0}
+.usage-seg:last-child{border-right:none}
+.usage-label{color:rgba(255,255,255,.35);font-size:10px;letter-spacing:.3px;text-transform:uppercase}
+.usage-val{color:rgba(255,255,255,.75);font-weight:600}
+.usage-val.green{color:#68d391}
+.usage-val.amber{color:#f6ad55}
+.usage-val.red{color:#fc8181}
+.usage-sub{color:rgba(255,255,255,.3);font-size:10px}
+.usage-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.6);border-radius:4px;padding:2px 8px;font-size:10px;cursor:pointer;transition:.15s;white-space:nowrap}
+.usage-btn:hover{background:rgba(255,255,255,.15);color:#fff}
+.usage-btn:disabled{opacity:.4;cursor:not-allowed}
+.usage-spin{display:inline-block;width:10px;height:10px;border:1.5px solid rgba(255,255,255,.2);border-top-color:rgba(255,255,255,.7);border-radius:50%;animation:spin .7s linear infinite}
 </style>
 </head>
 <body>
@@ -1029,6 +1056,65 @@ function makeXlsxFilename(date){
 }
 
 // ── Claude API ────────────────────────────────────────────
+// ── APIコスト計算 ─────────────────────────────────────────
+// Claude Sonnet 4: Input $3/MTok, Output $15/MTok
+const COST_INPUT_PER_TOKEN  = 3  / 1_000_000;
+const COST_OUTPUT_PER_TOKEN = 15 / 1_000_000;
+function calcCost(usage){
+  if (!usage) return 0;
+  const inp = usage.input_tokens  || 0;
+  const out = usage.output_tokens || 0;
+  return inp * COST_INPUT_PER_TOKEN + out * COST_OUTPUT_PER_TOKEN;
+}
+function formatCost(usd){
+  if (usd < 0.001) return `$${(usd * 1000).toFixed(3)}m`;
+  return `$${usd.toFixed(4)}`;
+}
+function formatTokens(usage){
+  if (!usage) return '';
+  const t = (usage.input_tokens||0) + (usage.output_tokens||0);
+  return t >= 1000 ? `${(t/1000).toFixed(1)}K tokens` : `${t} tokens`;
+}
+
+// ── Admin API 利用コスト取得 ──────────────────────────────
+async function fetchOrgUsage(adminKey) {
+  const now = new Date();
+  // 今日（JST → UTC補正済みでISOにする）
+  const todayJST = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const ymd = todayJST.toISOString().slice(0, 10);
+  const startOfDay  = `${ymd}T00:00:00Z`;
+  const endOfDay    = `${ymd}T23:59:59Z`;
+  // 今月
+  const ym = ymd.slice(0, 7);
+  const startOfMonth = `${ym}-01T00:00:00Z`;
+
+  const headers = {
+    'Content-Type': 'application/json',
+    'x-api-key': adminKey,
+    'anthropic-version': '2023-06-01',
+    'anthropic-dangerous-direct-browser-access': 'true',
+  };
+
+  // 今日の消費コスト
+  const [todayRes, monthRes] = await Promise.all([
+    fetch(`https://api.anthropic.com/v1/organizations/cost_report?starting_at=${startOfDay}&ending_at=${endOfDay}`, { headers }),
+    fetch(`https://api.anthropic.com/v1/organizations/cost_report?starting_at=${startOfMonth}&ending_at=${endOfDay}`, { headers }),
+  ]);
+
+  const parseUsd = async (res) => {
+    if (!res.ok) return null;
+    const d = await res.json();
+    // レスポンス形式: {data: [{total_cost: N}, ...]} または {total_cost: N}
+    if (Array.isArray(d.data)) {
+      return d.data.reduce((s, r) => s + (r.total_cost || 0), 0);
+    }
+    return d.total_cost ?? null;
+  };
+
+  const [todayCost, monthCost] = await Promise.all([parseUsd(todayRes), parseUsd(monthRes)]);
+  return { todayCost, monthCost, fetchedAt: now };
+}
+
 async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={}){
   onLog('📡 Claude APIに接続中...');
   const attendees = (basicInfo.attendees||[]).map(o=>{
@@ -1165,24 +1251,51 @@ minutes_by_agenda の content は以下の基準で作成すること：
   const data = await res.json();
   onLog('✅ 解析・照合完了！データを処理中...');
   const text = data.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
-  try { return JSON.parse(text); }
-  catch(e){ const m=text.match(/\{[\s\S]+\}/); if(m) return JSON.parse(m[0]); throw new Error('JSON解析失敗: '+e.message); }
+  const cost = calcCost(data.usage);
+  const usage = data.usage;
+  try {
+    const parsed = JSON.parse(text);
+    parsed._cost  = cost;
+    parsed._usage = usage;
+    return parsed;
+  }
+  catch(e){
+    const m=text.match(/\{[\s\S]+\}/);
+    if(m){
+      const parsed = JSON.parse(m[0]);
+      parsed._cost  = cost;
+      parsed._usage = usage;
+      return parsed;
+    }
+    throw new Error('JSON解析失敗: '+e.message);
+  }
 }
 
 // ══════════════════════════════════════════════════════════
 // Components
 // ══════════════════════════════════════════════════════════
-function ApiKeyModal({onSave,onClose,current}){
+function ApiKeyModal({onSave,onClose,current,currentAdmin,onSaveAdmin}){
   const [key,setKey]=useState(current||'');
+  const [adminKey,setAdminKey]=useState(currentAdmin||'');
   return(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">🔑 Claude API キー設定</div>
+        <div className="modal-title">🔑 API キー設定</div>
         <div className="notice notice-info">APIキーは <strong>console.anthropic.com</strong> で発行できます。入力内容はブラウザのlocalStorageに保存されます。</div>
-        <label>APIキー <span className="req">*</span></label>
+        <label>Claude APIキー <span className="req">*</span></label>
         <input type="password" value={key} onChange={e=>setKey(e.target.value)} placeholder="sk-ant-api03-..." autoFocus/>
+        <div style={{marginTop:14}}>
+          <label>Admin APIキー <span style={{fontSize:11,color:'#718096',fontWeight:400}}>（利用コスト取得用・任意）</span></label>
+          <input type="password" value={adminKey} onChange={e=>setAdminKey(e.target.value)} placeholder="sk-ant-admin01-..." style={{marginTop:4}}/>
+          <div style={{fontSize:11,color:'#718096',marginTop:4}}>
+            コンソール → Settings → Admin API Keys で発行。通常のAPIキーとは別です。
+          </div>
+        </div>
         <div className="btn-row" style={{marginTop:16}}>
-          <button className="btn btn-primary" onClick={()=>{if(key.trim())onSave(key.trim())}}>保存</button>
+          <button className="btn btn-primary" onClick={()=>{
+            if(key.trim()) onSave(key.trim());
+            onSaveAdmin(adminKey.trim());
+          }}>保存</button>
           <button className="btn btn-gray" onClick={onClose}>キャンセル</button>
         </div>
       </div>
@@ -2764,6 +2877,26 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [analysis, setAnalysis]       = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisCount, setAnalysisCount] = useState(0);
+  const [liveCostTotal, setLiveCostTotal] = useState(0);
+  const [liveCostLog, setLiveCostLog]   = useState([]); // [{count, cost, tokens}]
+  const [showCostModal, setShowCostModal] = useState(false);
+  const [orgUsage, setOrgUsage]         = useState(null);  // {todayCost, monthCost, fetchedAt}
+  const [orgUsageLoading, setOrgUsageLoading] = useState(false);
+  const [orgUsageError, setOrgUsageError]     = useState('');
+  const adminKey = localStorage.getItem('claude_admin_api_key') || '';
+
+  const fetchUsage = async () => {
+    if (!adminKey) { setOrgUsageError('Admin APIキー未設定'); return; }
+    setOrgUsageLoading(true);
+    setOrgUsageError('');
+    try {
+      const result = await fetchOrgUsage(adminKey);
+      setOrgUsage(result);
+    } catch(e) {
+      setOrgUsageError('取得失敗');
+    }
+    setOrgUsageLoading(false);
+  };
   const [showSettings, setShowSettings]   = useState(true);
   const [micDevices, setMicDevices]       = useState([]);
   const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
@@ -3056,6 +3189,8 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const startRecording = async () => {
     if (!azureKey || !azureRegion) { alert('Azure Speech Services のキーとリージョンを入力してください'); return; }
     if (!apiKey) { onOpenKeyModal(); return; }
+    // 会議開始時に利用コストを自動取得
+    fetchUsage();
     const SpeechSDK = window.SpeechSDK;
     if (!SpeechSDK) { alert('Azure Speech SDK の読み込みに失敗しました。ページを再読込してください。'); return; }
     try {
@@ -3197,11 +3332,20 @@ ${newText}
       });
       const data = await res.json();
       const text = (data.content?.[0]?.text || '').replace(/```json\n?|\n?```/g,'').trim();
+      const thisCost = calcCost(data.usage);
       try {
         const parsed = JSON.parse(text);
         setAnalysis(parsed);
         analyzedLenRef.current = lines.length;
         setAnalysisCount(c => c + 1);
+        setLiveCostTotal(prev => prev + thisCost);
+        setLiveCostLog(prev => [...prev, {
+          count: prev.length + 1,
+          cost: thisCost,
+          tokens: (data.usage?.input_tokens||0) + (data.usage?.output_tokens||0),
+          inp: data.usage?.input_tokens||0,
+          out: data.usage?.output_tokens||0,
+        }]);
         if (analysisPanelRef.current) analysisPanelRef.current.scrollTop = 0;
       } catch(e) { console.error('Parse error:', e, text); }
     } catch(e) { console.error('Analysis error:', e); }
@@ -3210,6 +3354,16 @@ ${newText}
 
   const handleEndMeeting = () => {
     stopRecording();
+    if (liveCostLog.length > 0) {
+      setShowCostModal(true);
+    } else {
+      const fullText = transcriptRef.current.map(l => `[${l.time}] ${l.text}`).join('\n');
+      onEndMeeting(fullText);
+    }
+  };
+
+  const handleCostModalClose = () => {
+    setShowCostModal(false);
     const fullText = transcriptRef.current.map(l => `[${l.time}] ${l.text}`).join('\n');
     onEndMeeting(fullText);
   };
@@ -3587,6 +3741,89 @@ ${newText}
           </div>
         );
       })()}
+
+      {/* コスト確認モーダル（会議終了時ポップアップ） */}
+      {showCostModal && (
+        <div className="cost-modal-overlay">
+          <div className="cost-modal">
+            <div className="cost-modal-title">💰 今回の会議　APIコスト</div>
+            <div className="cost-row"><span>分析回数</span><span>{liveCostLog.length} 回</span></div>
+            {liveCostLog.map((l,i) => (
+              <div key={i} className="cost-row" style={{fontSize:12,color:'#555'}}>
+                <span>分析 {l.count} 回目</span>
+                <span>{formatCost(l.cost)}<span style={{color:'#a0aec0',fontSize:11,marginLeft:6}}>{l.tokens.toLocaleString()} tokens（入力{l.inp.toLocaleString()} / 出力{l.out.toLocaleString()}）</span></span>
+              </div>
+            ))}
+            <div className="cost-total"><span>合計</span><span>{formatCost(liveCostTotal)}</span></div>
+            <div className="cost-note">
+              ※ Claude Sonnet 4 料金: 入力 $3/MTok・出力 $15/MTok<br/>
+              クレジット残高は <a href="https://console.anthropic.com" target="_blank" style={{color:'#2E75B6'}}>Anthropicコンソール →</a> で確認できます。
+            </div>
+            <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
+              <button className="live-btn live-btn-green" onClick={handleCostModalClose}>
+                ✅ 議事録作成へ進む
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Usage Bar（下部統合パネル） */}
+      <div className="usage-bar">
+        {/* 今回の会議コスト */}
+        <div className="usage-seg">
+          <span className="usage-label">今回</span>
+          <span className={`usage-val ${liveCostTotal === 0 ? '' : liveCostTotal < 0.05 ? 'green' : liveCostTotal < 0.2 ? 'amber' : 'red'}`}>
+            {liveCostLog.length === 0 ? '—' : formatCost(liveCostTotal)}
+          </span>
+          {liveCostLog.length > 0 && <span className="usage-sub">{liveCostLog.length}回</span>}
+        </div>
+
+        {/* 今日の消費（Admin API） */}
+        <div className="usage-seg">
+          <span className="usage-label">今日</span>
+          {orgUsageLoading
+            ? <span className="usage-spin"/>
+            : orgUsageError
+              ? <span className="usage-sub" style={{color:'rgba(252,129,129,.7)'}}>{orgUsageError}</span>
+              : orgUsage
+                ? <><span className="usage-val amber">{formatCost(orgUsage.todayCost ?? 0)}</span>
+                    <span className="usage-sub">{orgUsage.fetchedAt.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}時点</span></>
+                : <span className="usage-sub">—</span>
+          }
+        </div>
+
+        {/* 今月の消費（Admin API） */}
+        <div className="usage-seg">
+          <span className="usage-label">今月</span>
+          {orgUsageLoading
+            ? <span className="usage-spin"/>
+            : orgUsage
+              ? <span className="usage-val" style={{color:'rgba(255,255,255,.6)'}}>{formatCost(orgUsage.monthCost ?? 0)}</span>
+              : <span className="usage-sub">—</span>
+          }
+        </div>
+
+        {/* 更新ボタン */}
+        <div className="usage-seg">
+          <button
+            className="usage-btn"
+            onClick={fetchUsage}
+            disabled={orgUsageLoading || !adminKey}
+            title={!adminKey ? 'Admin APIキーを設定してください' : '利用コストを再取得'}
+          >
+            {orgUsageLoading ? '取得中...' : '↻ 更新'}
+          </button>
+          {!adminKey && <span className="usage-sub" style={{marginLeft:4}}>Adminキー未設定</span>}
+        </div>
+
+        {/* 今回の内訳（分析済みの場合のみ） */}
+        {liveCostLog.length > 0 && (
+          <div className="usage-seg" style={{marginLeft:'auto',borderRight:'none'}}>
+            <span className="usage-sub">{liveCostLog.reduce((a,l)=>a+l.tokens,0).toLocaleString()} tokens</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -3600,6 +3837,7 @@ function App(){
   const [showPersonMaster,setShowPersonMaster]=useState(false);
   const [showDomainMaster,setShowDomainMaster]=useState(false);
   const [apiKey,setApiKey]=useState(()=>localStorage.getItem('claude_api_key')||'');
+  const [adminKey,setAdminKey]=useState(()=>localStorage.getItem('claude_admin_api_key')||'');
   const [basicInfo,setBasicInfo]=useState({
     meetingName:'', meetingNo:'', date:todayStr(),
     startTime:'10:00', endTime:'11:00',
@@ -3619,6 +3857,7 @@ function App(){
   const [docVersion,setDocVersion]=useState(1);
 
   const saveApiKey=(key)=>{setApiKey(key);localStorage.setItem('claude_api_key',key);setShowKeyModal(false);};
+  const saveAdminKey=(key)=>{setAdminKey(key);if(key)localStorage.setItem('claude_admin_api_key',key);else localStorage.removeItem('claude_admin_api_key');};
   const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));};
 
   // 会議中モード終了 → 議事録作成モードへ
@@ -3686,6 +3925,9 @@ function App(){
       }
       const r=await callClaude(apiKey,basicInfo,transcript,addLog,existingData);
       addLog('📊 データを整理・照合中...');
+      if(r._cost !== undefined){
+        addLog(`💰 APIコスト: ${formatCost(r._cost)}（${formatTokens(r._usage)}）`);
+      }
       setResult({...EMPTY,...r,_existingData:existingData});
       goTo(4);
     }catch(e){setError(e.message);}
@@ -3754,7 +3996,7 @@ function App(){
         onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>}
       </div>)}
 
-      {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)}/>}
+      {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)} currentAdmin={adminKey} onSaveAdmin={saveAdminKey}/>}
       {showPersonMaster&&<PersonMasterModal onClose={()=>setShowPersonMaster(false)}/>}
       {showDomainMaster&&<DomainMasterModal onClose={()=>setShowDomainMaster(false)} icsRaws={basicInfo._icsRaws||[]}/>}
     </div>
