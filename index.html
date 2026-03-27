@@ -348,7 +348,7 @@ ${row(454,  cell('場所', 2178,{shade:HDR}) + cell(basicInfo.location||'',3685)
 ${row(1021, cell('出席者\n(敬称略) (順不同)',2178,{shade:HDR}) + cell(attendeesCell,7769,{span:3}))}
 ${(()=>{
     const mats=Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name):[];
-    if(!mats.length) return row(1021,cell('【配布資料/投影資料】\\n・',W,{span:4}));
+    if(!mats.length) return row(1021,cell('【配布資料/投影資料】\n・なし',W,{span:4}));
     const matParas=mats.map(m=>{
       if(m.url){
         const rId='rMat'+materialRels.length;
@@ -362,7 +362,7 @@ ${(()=>{
       return '<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">・'+esc(m.name)+'</w:t></w:r></w:p>';
     }).join('');
     const hdr='<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t>【配布資料/投影資料】</w:t></w:r></w:p>';
-    const bdr='<w:tcBorders><w:top w:val="single" w:sz="4" w:color="auto"/><w:left w:val="single" w:sz="4" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:color="auto"/><w:right w:val="single" w:sz="4" w:color="auto"/></w:tcBorders>';
+    const bdr='<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>';
     const mar='<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
     return '<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="'+W+'" w:type="dxa"/><w:gridSpan w:val="4"/>'+bdr+'<w:vAlign w:val="center"/>'+mar+'</w:tcPr>'+hdr+matParas+'</w:tc></w:tr>';
   })()}
@@ -1369,37 +1369,67 @@ function ApiKeyModal({onSave,onClose,current,currentAdmin,onSaveAdmin}){
   );
 }
 
-function StepIndicator({step,setStep,maxReached,hasResult}){
+function StepIndicator({step,setStep,maxReached,hasResult,validation}){
+  // validation: { 1: {ok:bool, warnings:[]}, 2: {ok:bool, warnings:[]}, ... }
   return(
     <div className="steps" style={{alignItems:'center'}}>
       {STEPS.map((s,idx)=>{
-        const isActive=s.n===step;
-        // AI解析(3)のdone判定はresultの有無で行う。他は通常通りstep番号で判定
-        const isDone = s.n===3 ? !!hasResult : s.n<step;
-        const isAI=s.n===3;
-        const isAIPre=s.n===2;
-        const cls=[
+        const isActive = s.n === step;
+        const isAI = s.n === 3;
+        const isAIPre = s.n === 2;
+        const visited = s.n <= maxReached;
+        const v = validation && validation[s.n];
+        // バリデーション状態の判定
+        const hasError   = visited && v && !v.ok;
+        const hasOk      = visited && v && v.ok;
+        const isAIDone   = isAI && !!hasResult;
+        const cls = [
           'step-item',
-          isAI?'ai-action':'',
-          isAIPre?'ai-pre':'',
-          isActive?'active':'',
-          isDone?'done':''
+          isAI ? 'ai-action' : '',
+          isAIPre ? 'ai-pre' : '',
+          isActive ? 'active' : '',
+          // done は AI完了時のみ（他はvalidation表示に切り替え）
+          isAIDone ? 'done' : '',
         ].filter(Boolean).join(' ');
+
+        // ステップ円のコンテンツと色
+        let circleContent, circleStyle={};
+        if (isAI) {
+          circleContent = <span className="ai-inner">{isAIDone ? '✓' : '⚡'}</span>;
+        } else if (isActive) {
+          circleContent = s.n < 3 ? s.n : s.n - 1;
+        } else if (hasError) {
+          circleContent = '!';
+          circleStyle = {borderColor:'#E53E3E', background:'#FFF5F5', color:'#E53E3E'};
+        } else if (hasOk) {
+          circleContent = '✓';
+          circleStyle = {borderColor:'#38A169', background:'#F0FFF4', color:'#38A169'};
+        } else {
+          circleContent = s.n < 3 ? s.n : s.n - 1;
+        }
+
         return(
           <div key={s.n} className={cls} onClick={()=>setStep(s.n)} style={{cursor:'pointer'}}>
-            {isAI?(
+            {isAI ? (
               <>
                 <div className="step-circle">
-                  <span className="ai-inner">{isDone?'✓':'⚡'}</span>
+                  <span className="ai-inner">{isAIDone ? '✓' : '⚡'}</span>
                 </div>
                 <div className="step-label" style={{fontSize:9,letterSpacing:.2}}>
                   AI解析<br/><span style={{color:'#a0aec0',fontWeight:400,fontSize:8}}>自動処理</span>
                 </div>
               </>
-            ):(
+            ) : (
               <>
-                <div className="step-circle">{isDone?'✓':s.n<3?s.n:s.n-1}</div>
-                <div className="step-label">{s.label}</div>
+                <div className="step-circle" style={circleStyle}>{circleContent}</div>
+                <div className="step-label" style={hasError?{color:'#E53E3E'}:hasOk&&!isActive?{color:'#38A169'}:{}}>
+                  {s.label}
+                  {hasError && v.warnings && v.warnings.length > 0 && (
+                    <div style={{fontSize:8,color:'#E53E3E',fontWeight:600,marginTop:2,lineHeight:1.3,whiteSpace:'normal',maxWidth:72}}>
+                      {v.warnings[0]}
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1407,6 +1437,26 @@ function StepIndicator({step,setStep,maxReached,hasResult}){
       })}
     </div>
   );
+}
+
+// ── ステップバリデーション ─────────────────────────────────
+function buildValidation(basicInfo, transcript, result) {
+  const step1Warnings = [];
+  if (!basicInfo.meetingName) step1Warnings.push('会議名が未入力');
+  if (!basicInfo.date)        step1Warnings.push('日付が未入力');
+  if (!basicInfo.startTime)   step1Warnings.push('開始時刻が未入力');
+  if ((basicInfo.attendees||[]).length === 0) step1Warnings.push('出席者が未入力');
+
+  const step2Warnings = [];
+  if (!transcript) step2Warnings.push('文字起こしが未入力');
+
+  return {
+    1: { ok: step1Warnings.length === 0, warnings: step1Warnings },
+    2: { ok: step2Warnings.length === 0, warnings: step2Warnings },
+    3: { ok: !!result, warnings: result ? [] : ['未解析'] },
+    4: { ok: !!result, warnings: [] },
+    5: { ok: !!result, warnings: [] },
+  };
 }
 
 // ── 会議名マスター管理 ────────────────────────────────────
@@ -1525,25 +1575,17 @@ function MaterialsInput({ value, onChange }){
     input.type = 'file';
     input.webkitdirectory = true;
     input.multiple = true;
-    input.accept = '.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.png,.jpg,.jpeg';
+    // ※ accept は指定しない → ブラウザによってフォルダ内ファイルが非表示になるため
     input.onchange = (e) => {
       const allFiles = Array.from(e.target.files || []);
       if (allFiles.length === 0) return;
-      const allowed = ['pdf','docx','doc','xlsx','xls','pptx','ppt','txt','png','jpg','jpeg'];
-      const filtered = allFiles.filter(f => {
-        const ext = f.name.split('.').pop().toLowerCase();
-        return allowed.includes(ext);
-      });
-      if (filtered.length === 0) {
-        alert('対応ファイル（PDF・Office・画像等）が見つかりませんでした');
-        return;
-      }
       // フォルダ名を取得（webkitRelativePath の最初のセグメント）
-      const folderPath = filtered[0].webkitRelativePath || '';
+      const folderPath = (allFiles[0].webkitRelativePath || allFiles[0].name);
       const detectedFolder = folderPath.split('/')[0] || 'フォルダ';
       setFolderName(detectedFolder);
-      // File オブジェクトをそのまま持たせる（handle の代わり）
-      const fileEntries = filtered
+      // 全ファイルを表示（隠しファイル・システムファイルのみ除外）
+      const fileEntries = allFiles
+        .filter(f => !f.name.startsWith('.') && f.name !== 'Thumbs.db' && f.name !== 'desktop.ini')
         .sort((a,b) => a.name.localeCompare(b.name, 'ja'))
         .map(f => ({ name: f.name, file: f, handle: null }));
       setFolderFiles(fileEntries);
@@ -2457,7 +2499,7 @@ function parseIcs(text) {
 
 
   const summary  = get('SUMMARY')  .replace(/^全体/,'全体').replace(/\\,/g,',').replace(/\\n/g,' ');
-  const location = get('LOCATION').replace(/\\,/g,',').replace(/\\n/g,' ').replace(/\\;/g,' ').replace(/%23/g,'').replace(/#/g,'').replace(/\s{2,}/g,' ').trim();
+  const location = get('LOCATION').replace(/\\,/g,',').replace(/\\n/g,' ').replace(/\\;/g,' ').replace(/\\#/g,'').replace(/%23/g,'').replace(/#/g,'').replace(/\s{2,}/g,' ').trim();
   const dtStart  = parseDate(get('DTSTART'));
   const dtEnd    = parseDate(get('DTEND'));
 
@@ -2543,7 +2585,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           date:        parsed.date        || p.date,
           startTime:   parsed.startTime   || p.startTime,
           endTime:     parsed.endTime     || p.endTime,
-          location:    (parsed.location || p.location).replace(/#/g,'').trim(),
+          location:    (parsed.location || p.location).replace(/\\#/g,'').replace(/#/g,'').replace(/\s{2,}/g,' ').trim(),
         }));
         const rawAll = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
         // メールアドレスで重複排除
@@ -2872,11 +2914,42 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 }
 
 // ── Step 2 ─────────────────────────────────────────────────
-function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack,liveHandoff}){
+function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack,liveHandoff,attendees}){
   const txtRef=useRef(),docxTplRef=useRef(),xlsTplRef=useRef(),xlsDatRef=useRef();
   const [drag,setDrag]=useState(false);
   const [importSource,setImportSource]=useState(liveHandoff?'live':'');
   const loadTxt=(file)=>{const r=new FileReader();r.onload=e=>{setTranscript(e.target.result);setImportSource('file');};r.readAsText(file,'UTF-8');};
+
+  // 文字起こしから話者名を抽出し、出席者リストにない話者を検出
+  const unknownSpeakers = React.useMemo(() => {
+    if (!transcript) return [];
+    // 既知の名前リストを構築（出席者の名前を分割・正規化）
+    const knownNames = [];
+    (attendees||[]).forEach(org => {
+      (Array.isArray(org.names)?org.names:[]).forEach(n => {
+        if (n) knownNames.push(n.trim());
+      });
+    });
+    // 話者パターン：行頭の「名前:」または「名前：」
+    const speakerRe = /^([^:\uff1a\n]{1,20})[\uff1a:]/gm;
+    const foundSpeakers = new Set();
+    let m;
+    while ((m = speakerRe.exec(transcript)) !== null) {
+      const sp = m[1].trim();
+      if (sp && !/^\s*$/.test(sp) && !/^[\d\-\[\(（【]/.test(sp)) {
+        foundSpeakers.add(sp);
+      }
+    }
+    // knownNamesに含まれない話者を抽出
+    const unknown = [...foundSpeakers].filter(sp => {
+      return !knownNames.some(kn =>
+        kn === sp || kn.includes(sp) || sp.includes(kn) ||
+        // 姓のみ一致でもOK
+        (kn.length >= 2 && sp.length >= 2 && (kn.startsWith(sp) || sp.startsWith(kn)))
+      );
+    });
+    return unknown;
+  }, [transcript, attendees]);
 
   const sources=[
     {id:'live',  icon:'🔴', label:'会議中ツール',     desc:'自動引き渡し'},
@@ -2949,6 +3022,23 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
           {transcript && (
             <div style={{fontSize:11,color:'#38A169',marginTop:4}}>
               ✅ {transcript.length.toLocaleString()}文字 読み込み済み
+            </div>
+          )}
+          {transcript && unknownSpeakers.length > 0 && (
+            <div style={{marginTop:8,padding:'10px 14px',background:'#FFF5F5',border:'1.5px solid #FC8181',borderRadius:8}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#C53030',marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+                ⚠️ 出席者リストにいない話者が検出されました
+              </div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {unknownSpeakers.map((sp,i)=>(
+                  <span key={i} style={{background:'#FED7D7',color:'#C53030',padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:700,border:'1px solid #FC8181'}}>
+                    {sp}
+                  </span>
+                ))}
+              </div>
+              <div style={{fontSize:11,color:'#718096',marginTop:6}}>
+                Step 1の出席者に追加するか、文字起こしの話者名を修正してください。
+              </div>
             </div>
           )}
         </div>
@@ -3459,7 +3549,8 @@ function App(){
           onOpenPerson={()=>setShowPersonMaster(true)} onOpenDomain={()=>setShowDomainMaster(true)}/>
       </div>
 
-      <StepIndicator step={step} setStep={setStep} maxReached={maxReached} hasResult={!!result}/>
+      <StepIndicator step={step} setStep={setStep} maxReached={maxReached} hasResult={!!result}
+        validation={buildValidation(basicInfo,transcript,result)}/>
       {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}
         onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
@@ -3467,6 +3558,7 @@ function App(){
         xlsxTemplateFile={xlsxTemplateFile} setXlsxTemplateFile={setXlsxTemplateFile}
         xlsxDataFile={xlsxDataFile} setXlsxDataFile={setXlsxDataFile}
         liveHandoff={liveHandoff}
+        attendees={basicInfo.attendees||[]}
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
       {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
       {step===4&&(result
