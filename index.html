@@ -2457,7 +2457,7 @@ function parseIcs(text) {
 
 
   const summary  = get('SUMMARY')  .replace(/^全体/,'全体').replace(/\\,/g,',').replace(/\\n/g,' ');
-  const location = get('LOCATION').replace(/\\,/g,',').replace(/\\n/g,' ').replace(/\\;/g,' ').replace(/#/g,'').replace(/\s{2,}/g,' ').trim();
+  const location = get('LOCATION').replace(/\\,/g,',').replace(/\\n/g,' ').replace(/\\;/g,' ').replace(/%23/g,'').replace(/#/g,'').replace(/\s{2,}/g,' ').trim();
   const dtStart  = parseDate(get('DTSTART'));
   const dtEnd    = parseDate(get('DTEND'));
 
@@ -2543,7 +2543,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           date:        parsed.date        || p.date,
           startTime:   parsed.startTime   || p.startTime,
           endTime:     parsed.endTime     || p.endTime,
-          location:    parsed.location    || p.location,
+          location:    (parsed.location || p.location).replace(/#/g,'').trim(),
         }));
         const rawAll = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
         // メールアドレスで重複排除
@@ -3338,7 +3338,7 @@ function App(){
   const [showDomainMaster,setShowDomainMaster]=useState(false);
   const [step,setStep]=useState(1);
   const [maxReached,setMaxReached]=useState(1);
-  const [basicInfo,setBasicInfo]=useState({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'',attendees:[],materials:[{name:'',url:''}]});
+  const [basicInfo,setBasicInfo]=useState({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'安田 真和',attendees:[],materials:[{name:'',url:''}]});
   const [transcript,setTranscript]=useState('');
   const [docxTemplateFile,setDocxTemplateFile]=useState(null);
   const [xlsxTemplateFile,setXlsxTemplateFile]=useState(null);
