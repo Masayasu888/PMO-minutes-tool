@@ -1519,38 +1519,47 @@ function MaterialsInput({ value, onChange }){
     setItems(next.length ? next : [{name:'', url:'', blobUrl:'', isLocal:false}]);
   };
 
-  // フォルダを開く（File System Access API）
-  const openFolder = async () => {
-    try {
-      if(!window.showDirectoryPicker) {
-        alert('このブラウザはフォルダ選択に対応していません。\nChrome または Edge をお使いください。');
+  // フォルダを開く（webkitdirectory 方式 ─ ローカルフォルダでも動作）
+  const openFolder = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.webkitdirectory = true;
+    input.multiple = true;
+    input.accept = '.pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.png,.jpg,.jpeg';
+    input.onchange = (e) => {
+      const allFiles = Array.from(e.target.files || []);
+      if (allFiles.length === 0) return;
+      const allowed = ['pdf','docx','doc','xlsx','xls','pptx','ppt','txt','png','jpg','jpeg'];
+      const filtered = allFiles.filter(f => {
+        const ext = f.name.split('.').pop().toLowerCase();
+        return allowed.includes(ext);
+      });
+      if (filtered.length === 0) {
+        alert('対応ファイル（PDF・Office・画像等）が見つかりませんでした');
         return;
       }
-      const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
-      setFolderName(dirHandle.name);
-      const files = [];
-      for await (const [name, handle] of dirHandle.entries()) {
-        if(handle.kind === 'file') {
-          const ext = name.split('.').pop().toLowerCase();
-          // 一般的な資料ファイルのみ
-          if(['pdf','docx','doc','xlsx','xls','pptx','ppt','txt','png','jpg','jpeg'].includes(ext)) {
-            files.push({ name, handle });
-          }
-        }
-      }
-      files.sort((a,b)=>a.name.localeCompare(b.name,'ja'));
-      setFolderFiles(files);
+      // フォルダ名を取得（webkitRelativePath の最初のセグメント）
+      const folderPath = filtered[0].webkitRelativePath || '';
+      const detectedFolder = folderPath.split('/')[0] || 'フォルダ';
+      setFolderName(detectedFolder);
+      // File オブジェクトをそのまま持たせる（handle の代わり）
+      const fileEntries = filtered
+        .sort((a,b) => a.name.localeCompare(b.name, 'ja'))
+        .map(f => ({ name: f.name, file: f, handle: null }));
+      setFolderFiles(fileEntries);
       setShowFolderPicker(true);
-    } catch(e) {
-      if(e.name !== 'AbortError') alert('フォルダ読み込みエラー: ' + e.message);
-    }
+    };
+    input.click();
   };
 
   // ファイルを選択して追加
   const pickFile = async (fileInfo, checked) => {
     if(!checked) return;
     try {
-      const file = await fileInfo.handle.getFile();
+      // webkitdirectory 方式（fileInfo.file）と旧 handle 方式の両対応
+      const file = fileInfo.file
+        ? fileInfo.file
+        : await fileInfo.handle.getFile();
       const blobUrl = URL.createObjectURL(file);
       const newItem = { name: fileInfo.name, url: blobUrl, blobUrl, isLocal:true };
       // 既に同名がある場合は更新
