@@ -347,15 +347,17 @@ function generateDocx(basicInfo, result){
     return names ? `【${o.org}】　${names}` : `【${o.org}】`;
   }).join('\n') || '';
 
-  // テーブル外枠のみ定義。insideV/insideH は各セルで明示制御してWordの幽霊線を防ぐ
+  // テーブル外枠・横線のみ定義。insideV=nil でWordの幽霊縦線を抑制
+  // tblLook で自動書式を完全無効化
   const tblBdr = `<w:tblBorders>
-<w:top w:val="single" w:sz="4" w:color="000000"/>
-<w:left w:val="single" w:sz="4" w:color="000000"/>
+<w:top    w:val="single" w:sz="4" w:color="000000"/>
+<w:left   w:val="single" w:sz="4" w:color="000000"/>
 <w:bottom w:val="single" w:sz="4" w:color="000000"/>
-<w:right w:val="single" w:sz="4" w:color="000000"/>
+<w:right  w:val="single" w:sz="4" w:color="000000"/>
 <w:insideH w:val="single" w:sz="4" w:color="000000"/>
-<w:insideV w:val="nil"/>
+<w:insideV w:val="nil" w:sz="0" w:color="auto"/>
 </w:tblBorders>`;
+  const tblLook = `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>`;
 
   // 議事内容は文字起こしから抽出した内容を全て1セルに詰める
   const minutesContent = result.minutes_by_agenda.length
@@ -365,7 +367,7 @@ function generateDocx(basicInfo, result){
   // ── ヘッダー表（実測: 2178/3685/1673/2411、空Row8は除外）────
   const materialRels = []; // ハイパーリンク用リレーションシップ
   const headerTableXml = `<w:tbl>
-<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/>${tblBdr}</w:tblPr>
+<w:tblPr><w:tblW w:w="${W}" w:type="dxa"/>${tblBdr}${tblLook}</w:tblPr>
 <w:tblGrid><w:gridCol w:w="2178"/><w:gridCol w:w="3685"/><w:gridCol w:w="1673"/><w:gridCol w:w="2411"/></w:tblGrid>
 ${row(454,  cell('議題', 2178,{shade:HDR}) + cell(meetingTitle,3685,{bold:true}) + cell('回数',1673,{shade:HDR}) + cell(basicInfo.meetingNo?`第${basicInfo.meetingNo}回`:'',2411))}
 ${row(454,  cell('日時', 2178,{shade:HDR}) + cell(`${date} ${basicInfo.startTime||''}〜${basicInfo.endTime||''}`,3685) + cell('作成日',1673,{shade:HDR}) + cell(todayStr,2411))}
@@ -1627,7 +1629,7 @@ function MaterialsInput({ value, onChange }){
         ? fileInfo.file
         : await fileInfo.handle.getFile();
       const blobUrl = URL.createObjectURL(file);
-      const newItem = { name: fileInfo.name, url: blobUrl, blobUrl, isLocal:true };
+      const newItem = { name: fileInfo.name, url: '', blobUrl, isLocal:true };
       const emptyIdx = items.findIndex(it=>!it.name && !it.url);
       if(emptyIdx >= 0) {
         setItems(items.map((it,i)=>i===emptyIdx ? newItem : it));
@@ -1646,7 +1648,8 @@ function MaterialsInput({ value, onChange }){
       const already = newItems.some(it => it.name === file.name && it.name);
       if(already){ dups.push(file.name); return; }
       const blobUrl = URL.createObjectURL(file);
-      const newItem = { name: file.name, url: blobUrl, blobUrl, isLocal:true };
+      // blobUrl はローカル開封用。url（Word埋め込みリンク）は別管理
+      const newItem = { name: file.name, url: '', blobUrl, isLocal:true };
       const emptyIdx = newItems.findIndex(it=>!it.name && !it.url);
       if(emptyIdx >= 0) newItems[emptyIdx] = newItem;
       else newItems.push(newItem);
@@ -1658,23 +1661,30 @@ function MaterialsInput({ value, onChange }){
   return(
     <div>
       {items.map((item,i)=>(
-        <div key={i} className="material-item" style={{alignItems:'center'}}>
-          <span className="material-link-icon">{item.isLocal ? '💾' : '📄'}</span>
-          <input className="material-name" value={item.name}
-            onChange={e=>upd(i,'name',e.target.value)}
-            placeholder="資料名（例: アジェンダ_v1.0）"/>
-          <span className="material-divider">｜</span>
-          <span className="material-link-icon" style={{color: item.blobUrl?'#38A169':'#2E75B6'}}>🔗</span>
-          <input className="material-url" value={item.url}
-            onChange={e=>upd(i,'url',e.target.value)}
-            placeholder="URL（任意）"
-            style={{color: item.isLocal ? '#38A169' : '#2E75B6'}}/>
-          {item.url && (
-            <a href={item.url} target="_blank" rel="noreferrer"
-              style={{fontSize:11,color:'#2E75B6',textDecoration:'none',flexShrink:0,padding:'0 4px'}}
-              title="開く">↗</a>
+        <div key={i} style={{marginBottom:4}}>
+          <div className="material-item" style={{alignItems:'center'}}>
+            <span className="material-link-icon">{item.isLocal ? '💾' : '📄'}</span>
+            <input className="material-name" value={item.name}
+              onChange={e=>upd(i,'name',e.target.value)}
+              placeholder="資料名（例: アジェンダ_v1.0）"/>
+            <span className="material-divider">｜</span>
+            <span className="material-link-icon" style={{color: item.url?'#2E75B6':'#a0aec0'}}>🔗</span>
+            <input className="material-url" value={item.url}
+              onChange={e=>upd(i,'url',e.target.value)}
+              placeholder={item.isLocal ? 'BOX/SharePoint URL（Word文書に埋め込み）' : 'URL（任意）'}
+              style={{color:'#2E75B6'}}/>
+            {item.url && (
+              <a href={item.url} target="_blank" rel="noreferrer"
+                style={{fontSize:11,color:'#2E75B6',textDecoration:'none',flexShrink:0,padding:'0 4px'}}
+                title="開く">↗</a>
+            )}
+            <button className="material-del" onClick={()=>del(i)}>🗑</button>
+          </div>
+          {item.isLocal && !item.url && (
+            <div style={{fontSize:10,color:'#E6A817',paddingLeft:28,marginTop:1}}>
+              💡 Word文書にリンクを埋め込むには BOX/SharePoint の共有URLを上のURL欄に入力してください
+            </div>
           )}
-          <button className="material-del" onClick={()=>del(i)}>🗑</button>
         </div>
       ))}
 
@@ -3679,7 +3689,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v14</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v15</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
