@@ -1569,29 +1569,19 @@ function MaterialsInput({ value, onChange }){
     setItems(next.length ? next : [{name:'', url:'', blobUrl:'', isLocal:false}]);
   };
 
-  // フォルダを開く（webkitdirectory 方式 ─ ローカルフォルダでも動作）
-  const openFolder = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.webkitdirectory = true;
-    input.multiple = true;
-    // ※ accept は指定しない → ブラウザによってフォルダ内ファイルが非表示になるため
-    input.onchange = (e) => {
-      const allFiles = Array.from(e.target.files || []);
-      if (allFiles.length === 0) return;
-      // フォルダ名を取得（webkitRelativePath の最初のセグメント）
-      const folderPath = (allFiles[0].webkitRelativePath || allFiles[0].name);
-      const detectedFolder = folderPath.split('/')[0] || 'フォルダ';
-      setFolderName(detectedFolder);
-      // 全ファイルを表示（隠しファイル・システムファイルのみ除外）
-      const fileEntries = allFiles
-        .filter(f => !f.name.startsWith('.') && f.name !== 'Thumbs.db' && f.name !== 'desktop.ini')
-        .sort((a,b) => a.name.localeCompare(b.name, 'ja'))
-        .map(f => ({ name: f.name, file: f, handle: null }));
-      setFolderFiles(fileEntries);
-      setShowFolderPicker(true);
-    };
-    input.click();
+  const folderInputRef = useRef();
+
+  const handleFolderChange = (e) => {
+    const allFiles = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (allFiles.length === 0) return;
+    const fileEntries = allFiles
+      .filter(f => !f.name.startsWith('.') && f.name !== 'Thumbs.db' && f.name !== 'desktop.ini')
+      .sort((a,b) => a.name.localeCompare(b.name, 'ja'))
+      .map(f => ({ name: f.name, file: f, handle: null }));
+    setFolderName(`${allFiles.length}件選択`);
+    setFolderFiles(fileEntries);
+    setShowFolderPicker(true);
   };
 
   // ファイルを選択して追加
@@ -1660,10 +1650,11 @@ function MaterialsInput({ value, onChange }){
       {/* アクションボタン行 */}
       <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
         <button className="material-add" style={{flex:1,marginTop:0}} onClick={add}>＋ 手入力で追加</button>
-        <button className="material-add" style={{flex:1,marginTop:0,borderColor:'#38A169',color:'#38A169'}}
-          onClick={openFolder}>
+        <label className="material-add" style={{flex:1,marginTop:0,borderColor:'#38A169',color:'#38A169',cursor:'pointer',textAlign:'center'}}>
           📁 フォルダから選択
-        </button>
+          <input ref={folderInputRef} type="file" multiple
+            style={{display:'none'}} onChange={handleFolderChange}/>
+        </label>
         <label className="material-add" style={{flex:1,marginTop:0,borderColor:'#9B59B6',color:'#9B59B6',cursor:'pointer',textAlign:'center'}}>
           📎 ファイルを直接選択
           <input type="file" multiple style={{display:'none'}}
@@ -1677,10 +1668,10 @@ function MaterialsInput({ value, onChange }){
         <div className="modal-overlay" onClick={()=>setShowFolderPicker(false)}>
           <div className="modal" style={{maxWidth:500,width:'95%',maxHeight:'80vh',overflowY:'auto'}}
             onClick={e=>e.stopPropagation()}>
-            <div className="modal-title">📁 フォルダ: {folderName}</div>
+            <div className="modal-title">📁 ファイル確認: {folderName}</div>
             <div className="notice notice-info" style={{marginBottom:12,fontSize:11}}>
-              追加したいファイルにチェックを入れてください。Blob URLが自動生成されます（このセッション内のみ有効）。
-              <br/>SharePoint等の公開URLに差し替える場合はURL欄を直接編集してください。
+              追加したいファイルにチェックを入れて「完了」を押してください。<br/>
+              💡 フォルダ内のファイルを選ぶには、ダイアログでフォルダを開き <strong>Ctrl+A</strong> で全選択できます。
             </div>
             {folderFiles.length === 0 && (
               <div style={{color:'#a0aec0',fontSize:12,textAlign:'center',padding:16}}>
@@ -2499,7 +2490,7 @@ function parseIcs(text) {
 
 
   const summary  = get('SUMMARY')  .replace(/^全体/,'全体').replace(/\\,/g,',').replace(/\\n/g,' ');
-  const location = get('LOCATION').replace(/\\,/g,',').replace(/\\n/g,' ').replace(/\\;/g,' ').replace(/\\#/g,'').replace(/%23/g,'').replace(/#/g,'').replace(/\s{2,}/g,' ').trim();
+  const location = get('LOCATION').replace(/\\,/g,',').replace(/\\n/g,' ').replace(/\\;/g,' ').replace(/\\#/g,'').replace(/%23/g,'').replace(/[#＃]/g,'').replace(/\s{2,}/g,' ').trim();
   const dtStart  = parseDate(get('DTSTART'));
   const dtEnd    = parseDate(get('DTEND'));
 
@@ -2585,7 +2576,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           date:        parsed.date        || p.date,
           startTime:   parsed.startTime   || p.startTime,
           endTime:     parsed.endTime     || p.endTime,
-          location:    (parsed.location || p.location).replace(/\\#/g,'').replace(/#/g,'').replace(/\s{2,}/g,' ').trim(),
+          location:    (parsed.location || p.location).replace(/\\#/g,'').replace(/[#＃]/g,'').replace(/\s{2,}/g,' ').trim(),
         }));
         const rawAll = (parsed.attendeeRaws || []).filter(r => r.email || r.name);
         // メールアドレスで重複排除
@@ -3534,7 +3525,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#4A5568'}}>v1.0</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v1</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
