@@ -3488,6 +3488,16 @@ function App(){
   const handleAnalyze=async()=>{
     setAnalyzing(true);setLogs([]);setError('');
     if(!apiKey){setShowKeyModal(true);setAnalyzing(false);return;}
+    // 必須項目チェック
+    const missing=[];
+    if(!basicInfo.meetingName) missing.push('会議名（Step 1）');
+    if(!basicInfo.date)        missing.push('日付（Step 1）');
+    if(!basicInfo.startTime)   missing.push('開始時刻（Step 1）');
+    if(!transcript)            missing.push('文字起こし（Step 2）');
+    if(missing.length>0){
+      setError('以下の必須項目が未入力です：\n・'+missing.join('\n・'));
+      setAnalyzing(false);return;
+    }
     try{
       addLog('🔍 解析を開始します...');
       let existingData={};
@@ -3549,7 +3559,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v1</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v8</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
