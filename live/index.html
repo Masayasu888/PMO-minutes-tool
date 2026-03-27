@@ -804,6 +804,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [transcript, setTranscript]   = useState([]);
   const [interimText, setInterimText] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false); // Web Speech APIフォールバック中フラグ
   const [analysis, setAnalysis]       = useState(null);
   const [analysisHistory, setAnalysisHistory] = useState([]); // 全履歴（新しい順）
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -837,6 +838,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [liveCostTotal, setLiveCostTotal] = useState(0);
   const [liveCostLog, setLiveCostLog]   = useState([]); // [{count, cost, tokens}]
   const [showCostModal, setShowCostModal] = useState(false);
+  const [quotaDialog, setQuotaDialog]     = useState(false); // Quota超過ダイアログ
   const [orgUsage, setOrgUsage]         = useState(null);
   const [orgUsageLoading, setOrgUsageLoading] = useState(false);
   const [orgUsageError, setOrgUsageError]     = useState('');
@@ -1138,6 +1140,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
 
   const recognizerRef    = useRef(null);
   const recognizerRef2   = useRef(null); // デュアルモード用（VB-Cable側）
+  const webSpeechRef     = useRef(null); // Web Speech APIフォールバック用
   const timerRef         = useRef(null);
   const transcriptRef    = useRef([]);
   const analyzedLenRef   = useRef(0);
@@ -1200,7 +1203,115 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     }
   };
 
+  // ── Web Speech APIフォールバック（Azure クォータ超過時）──────────
+  const startWebSpeechFallback = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      alert('Azure Speech の無料枠（月5時間）が上限に達しました。\nブラウザ組み込みの音声認識も使用できません（ChromeまたはEdgeを推奨）。\nAzureポータルでクォータをご確認ください。');
+      return;
+    }
+    const sr = new SR();
+    sr.lang = 'ja-JP';
+    sr.continuous = true;
+    sr.interimResults = true;
+
+    sr.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const res = event.results[i];
+        if (res.isFinal) {
+          const time = new Date().toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+          const text = res[0].transcript;
+          setTranscript(prev => {
+            const next = [...prev, { time, text }];
+            transcriptRef.current = next;
+            return next;
+          });
+          setInterimText('');
+        } else {
+          interim += res[0].transcript;
+        }
+      }
+      if (interim) setInterimText(interim);
+    };
+
+    sr.onerror = (e) => {
+      if (e.error !== 'aborted' && e.error !== 'no-speech') {
+        console.warn('Web Speech error:', e.error);
+      }
+    };
+
+    // continuous=trueでも自動停止することがあるので再起動
+    sr.onend = () => {
+      if (webSpeechRef.current) {
+        try { webSpeechRef.current.start(); } catch(err) {}
+      }
+    };
+
+    webSpeechRef.current = sr;
+    try {
+      sr.start();
+    } catch(e) {
+      alert('ブラウザ音声認識の開始に失敗しました: ' + e.message);
+      return;
+    }
+    setIsRecording(true);
+    setUsingFallback(true);
+    setShowSettings(false);
+    recordingStartRef.current = Date.now();
+    azureTimerRef.current = setInterval(() => setAzureRecordingSec(s => s + 1), 1000);
+    timerRef.current = setInterval(() => { runAnalysis(); }, 30000);
+  };
+
   const startRecording = async () => {
+    // ── ブラウザ内蔵STTモード（Azure不要） ──────────────────
+    if (micMode === 'browser') {
+      if (!apiKey) { onOpenKeyModal(); return; }
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        alert('ブラウザ内蔵STTはChromeまたはEdgeでのみ使用できます。\nブラウザを切り替えてお試しください。');
+        return;
+      }
+      const sr = new SR();
+      sr.lang = 'ja-JP';
+      sr.continuous = true;
+      sr.interimResults = true;
+      sr.onresult = (event) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const res = event.results[i];
+          if (res.isFinal) {
+            const time = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            setTranscript(prev => {
+              const next = [...prev, {time, text: res[0].transcript}];
+              transcriptRef.current = next;
+              return next;
+            });
+            setInterimText('');
+          } else { interim += res[0].transcript; }
+        }
+        if (interim) setInterimText(interim);
+      };
+      sr.onerror = (e) => {
+        if (e.error === 'not-allowed') {
+          alert('マイクのアクセス許可が必要です。\nブラウザのアドレスバーのマイクアイコンから許可してください。');
+        } else if (e.error !== 'no-speech' && e.error !== 'aborted') {
+          console.warn('Browser STT error:', e.error);
+        }
+      };
+      sr.onend = () => { if (webSpeechRef.current) { try { webSpeechRef.current.start(); } catch(e){} } };
+      webSpeechRef.current = sr;
+      try { sr.start(); } catch(e) { alert('ブラウザ音声認識の開始に失敗しました: ' + e.message); return; }
+      setIsRecording(true);
+      setUsingFallback(false); // 手動モードなのでフォールバックバナーは出さない
+      setShowSettings(false);
+      setAzureStreams(1);
+      recordingStartRef.current = Date.now();
+      azureTimerRef.current = setInterval(() => setAzureRecordingSec(s => s+1), 1000);
+      timerRef.current = setInterval(() => { runAnalysis(); }, 30000);
+      return;
+    }
+
     if (!azureKey || !azureRegion) { alert('Azure Speech Services のキーとリージョンを入力してください'); return; }
     if (!apiKey) { onOpenKeyModal(); return; }
     fetchUsage();
@@ -1240,8 +1351,31 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
       };
       rec.canceled = (_, e) => {
         if (e.reason === SpeechSDK.CancellationReason.Error) {
-          alert('Azure Speech エラー: ' + e.errorDetails + '\nキーとリージョンを確認してください。');
-          stopRecording();
+          const details = e.errorDetails || '';
+          const isQuota = details.includes('Quota') || details.includes('quota') || details.includes('exceeded') || details.includes('1007') || details.includes('429');
+          const isAuth  = details.includes('401') || details.toLowerCase().includes('unauthorized') || details.toLowerCase().includes('authentication');
+          if (isQuota) {
+            stopRecording();
+            const ok = window.confirm(
+              '⚠️ Azure Speech クォータ（利用上限）を超過しました。\n\n' +
+              '【今すぐ対処】\n' +
+              '「OK」→ ブラウザ内蔵STT（無料・Chrome/Edge対応）に切り替えて録音を継続\n' +
+              '「キャンセル」→ 録音を停止（Azureポータルで上限確認後に再開）\n\n' +
+              '※ブラウザSTTはAzureより精度が低い場合があります。'
+            );
+            if (ok) {
+              setMicMode('browser');
+              localStorage.setItem('azure_mic_mode', 'browser');
+              // 少し待ってから開始（state更新を待つ）
+              setTimeout(() => { startWebSpeechFallback(); }, 100);
+            }
+          } else if (isAuth) {
+            stopRecording();
+            alert('🔑 Azure Speech 認証エラー: キーまたはリージョンが正しくありません。\n設定パネルで確認してください。\n\n詳細: ' + details);
+          } else {
+            stopRecording();
+            alert('Azure Speech エラー: ' + details + '\nキーとリージョンを確認してください。');
+          }
         }
       };
     };
@@ -1322,9 +1456,15 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
       recognizerRef2.current.stopContinuousRecognitionAsync();
       recognizerRef2.current = null;
     }
+    if (webSpeechRef.current) {
+      webSpeechRef.current.onend = null; // 自動再起動を防止
+      try { webSpeechRef.current.stop(); } catch(e) {}
+      webSpeechRef.current = null;
+    }
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     if (azureTimerRef.current) { clearInterval(azureTimerRef.current); azureTimerRef.current = null; }
     setIsRecording(false);
+    setUsingFallback(false);
     setInterimText('');
   };
 
@@ -1450,7 +1590,9 @@ ${catJsonDef}
           {isRecording && micMode === 'mixed'    && <span style={{fontSize:11,marginLeft:6,color:'#9AE6B4'}}>🎤💻 混在</span>}
           {isRecording && micMode === 'vbcable'  && <span style={{fontSize:11,marginLeft:6,color:'#FEB2B2'}}>🔁 Teams</span>}
           {isRecording && micMode === 'dual'     && <span style={{fontSize:11,marginLeft:6,color:'#68d391'}}>🎤🔁 全員</span>}
+          {isRecording && micMode === 'browser' && <span style={{fontSize:11,marginLeft:6,color:'#9CA3AF'}}>🆓 ブラウザSTT</span>}
           {micMode === 'notta' && <span style={{fontSize:11,marginLeft:6,color:'#F6AD55'}}>👂 聞くだけ</span>}
+          {usingFallback && <span style={{fontSize:11,marginLeft:6,background:'#C05621',color:'#fff',padding:'1px 8px',borderRadius:10,fontWeight:700}}>⚠️ ブラウザ音声</span>}
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
           {micMode === 'notta' ? (
@@ -1476,6 +1618,32 @@ ${catJsonDef}
         {isAnalyzing && <span className="analyzing-badge">⏳ AI分析中...</span>}
         {analysisCount > 0 && !isAnalyzing && <span style={{fontSize:11,color:'#68d391'}}>✓ 分析 {analysisCount}回完了</span>}
       </div>
+
+      {/* ブラウザSTT使用中バナー */}
+      {(usingFallback || (isRecording && micMode === 'browser')) && (
+        <div style={{
+          background: usingFallback ? '#FFFBEB' : '#F0FFF4',
+          border: `1.5px solid ${usingFallback ? '#F6AD55' : '#9AE6B4'}`,
+          borderRadius:8,
+          padding:'10px 16px',fontSize:12,
+          color: usingFallback ? '#7D4E00' : '#276749',
+          margin:'0 0 10px',display:'flex',alignItems:'flex-start',gap:10
+        }}>
+          <span style={{fontSize:18,lineHeight:1.2}}>{usingFallback ? '⚠️' : '🆓'}</span>
+          <div>
+            <div style={{fontWeight:700,marginBottom:3}}>
+              {usingFallback
+                ? 'Azure Speechクォータ超過のため、ブラウザ内蔵STTに自動切り替えしました'
+                : 'ブラウザ内蔵STTモードで録音中（Chrome / Edge 対応・無料）'}
+            </div>
+            <div style={{color: usingFallback ? '#92400E' : '#1B5E20'}}>
+              {usingFallback
+                ? <>文字起こしは継続できます（精度はAzureより低い場合があります）。Azureポータルで上限確認：<a href="https://portal.azure.com/" target="_blank" rel="noopener noreferrer" style={{color:'#C05621',fontWeight:700,marginLeft:4}}>portal.azure.com →</a></>
+                : '設定パネルの「🆓 ブラウザSTT」を選択中です。Azureに戻すには設定パネルで別モードに切り替えてください。'}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 設定パネル */}
       {showSettings && (
@@ -1542,28 +1710,29 @@ ${catJsonDef}
               </div>
             )}
 
-            {/* モード選択ボタン5つ */}
+            {/* モード選択ボタン */}
             <div style={{display:'flex',gap:6,position:'relative',flexWrap:'wrap'}}>
               {[
-                {id:'physical', icon:'🎤',   label:'対面のみ',    color:'live-btn-blue'},
-                {id:'mixed',    icon:'🎤💻', label:'対面＋Teams', color:'live-btn-blue'},
-                {id:'vbcable',  icon:'🔁',   label:'Teamsのみ',   color:'live-btn-red'},
-                {id:'dual',     icon:'🎤🔁', label:'全員',        color:'live-btn-green'},
-                {id:'notta',    icon:'👂',   label:'聞くだけ',    color:'live-btn-gray'},
+                {id:'physical', icon:'🎤',   label:'対面のみ',    color:'live-btn-blue',  badge:null},
+                {id:'mixed',    icon:'🎤💻', label:'対面＋Teams', color:'live-btn-blue',  badge:null},
+                {id:'vbcable',  icon:'🔁',   label:'Teamsのみ',   color:'live-btn-red',   badge:null},
+                {id:'dual',     icon:'🎤🔁', label:'全員',        color:'live-btn-green', badge:{text:'推奨',activeColor:'rgba(255,255,255,.8)',inactiveColor:'#38A169'}},
+                {id:'browser',  icon:'🆓',   label:'ブラウザSTT', color:'live-btn-gray',  badge:{text:'無料',activeColor:'rgba(255,255,255,.8)',inactiveColor:'#718096'}},
+                {id:'notta',    icon:'👂',   label:'聞くだけ',    color:'live-btn-gray',  badge:{text:'Notta',activeColor:'rgba(255,255,255,.8)',inactiveColor:'#D69E2E'}},
               ].map(m=>(
                 <button key={m.id}
                   className={`live-btn ${micMode===m.id ? m.color : 'live-btn-gray'}`}
                   style={{flex:1,flexDirection:'column',gap:1,padding:'6px 4px',fontSize:11,lineHeight:1.4,
-                    minWidth:56,
+                    minWidth:52,
                     opacity: isRecording ? 0.45 : 1,
                     cursor: isRecording ? 'not-allowed' : 'pointer',
-                    ...(micMode===m.id && m.id==='notta' ? {background:'#D69E2E',color:'#fff'} : {})}}
+                    ...(micMode===m.id && m.id==='notta'   ? {background:'#D69E2E',color:'#fff'} : {}),
+                    ...(micMode===m.id && m.id==='browser' ? {background:'#4B5563',color:'#fff'} : {})}}
                   onClick={()=>{ if(!isRecording) handleMicModeChange(m.id); }}
                   disabled={isRecording}>
                   <span style={{fontSize:14}}>{m.icon}</span>
                   <span>{m.label}</span>
-                  {m.id==='dual'  && <span style={{fontSize:9,color:micMode==='dual' ?'rgba(255,255,255,.8)':'#38A169',fontWeight:700}}>推奨</span>}
-                  {m.id==='notta' && <span style={{fontSize:9,color:micMode==='notta'?'rgba(255,255,255,.8)':'#D69E2E',fontWeight:700}}>Notta</span>}
+                  {m.badge && <span style={{fontSize:9,fontWeight:700,color:micMode===m.id?m.badge.activeColor:m.badge.inactiveColor}}>{m.badge.text}</span>}
                 </button>
               ))}
             </div>
@@ -1693,6 +1862,42 @@ ${catJsonDef}
                       📋 {vbSetupDone ? '会議前チェックリスト' : '初回セットアップ＋チェックリスト'}
                     </button>
                     {vbSetupDone && <span style={{fontSize:10,color:'#38A169'}}>✓ 初回設定済み</span>}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ブラウザSTTモード ガイドカード */}
+            {micMode === 'browser' && (
+              <div style={{border:'1.5px solid #9CA3AF',borderRadius:8,overflow:'hidden',fontSize:11}}>
+                <div style={{background:'#4B5563',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
+                  🆓 ブラウザ内蔵STTモード
+                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>Azure不要・無料</span>
+                </div>
+                <div style={{background:'#F9FAFB',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{color:'#1F2937'}}>
+                    <span style={{fontWeight:700}}>✅ このモードでできること</span><br/>
+                    <span style={{color:'#374151'}}>
+                      　・ChromeまたはEdgeの内蔵音声認識で文字起こし（完全無料）<br/>
+                      　・AzureのAPIキーやクォータが不要<br/>
+                      　・クォータ超過時・Azureキー未取得時のフォールバックに最適
+                    </span>
+                  </div>
+                  <div style={{color:'#276749',background:'#F0FFF4',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>🌐 対応ブラウザ</span><br/>
+                    <span>
+                      　✅ <strong>Chrome</strong>　— 完全対応・推奨<br/>
+                      　✅ <strong>Edge</strong>　— 対応（ChromiumベースでChromeと同等）<br/>
+                      　❌ <strong>Firefox / Safari</strong>　— 非対応
+                    </span>
+                  </div>
+                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
+                    <span style={{fontWeight:700}}>⚠️ 制限事項</span><br/>
+                    <span>
+                      　・精度はAzure Speech Servicesより低い場合があります<br/>
+                      　・インターネット接続が必要（Googleサーバーで処理）<br/>
+                      　・録音開始時にマイクの許可ダイアログが表示される場合があります
+                    </span>
                   </div>
                 </div>
               </div>
