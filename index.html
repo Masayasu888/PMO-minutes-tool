@@ -1681,21 +1681,27 @@ function MaterialsInput({ value, onChange }){
             <div style={{display:'flex',flexDirection:'column',gap:4}}>
               {folderFiles.map((f,i)=>{
                 const alreadyAdded = items.some(it=>it.name===f.name);
-                const ext = f.name.split('.').pop().toLowerCase();
+                const ext = (f.name||'').split('.').pop().toLowerCase();
                 const icon = ext==='pdf'?'📕':ext.startsWith('doc')?'📘':ext.startsWith('xls')?'📗':ext.startsWith('ppt')?'📙':'📄';
+                const checkId = `fpick-${i}`;
                 return(
-                  <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 10px',
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',
                     width:'100%',boxSizing:'border-box',
-                    border:'1px solid #e2e8f0',borderRadius:6,cursor:'pointer',background:alreadyAdded?'#E8F5E9':'#fff',
-                    transition:'.1s'}}>
-                    <input type="checkbox" defaultChecked={alreadyAdded}
-                      onChange={e=>pickFile(f, e.target.checked)} style={{cursor:'pointer',flexShrink:0}}/>
-                    <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
-                    <span style={{flex:1,minWidth:0,fontSize:12,color:'#333',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      {f.name}
+                    border:'1.5px solid '+(alreadyAdded?'#9AE6B4':'#e2e8f0'),
+                    borderRadius:6,cursor:'pointer',
+                    background:alreadyAdded?'#F0FFF4':'#fff',transition:'.1s'}}
+                    onClick={()=>{const cb=document.getElementById(checkId);if(cb){cb.checked=!cb.checked;pickFile(f,cb.checked);}}}>
+                    <input id={checkId} type="checkbox" defaultChecked={alreadyAdded}
+                      onClick={e=>e.stopPropagation()}
+                      onChange={e=>pickFile(f, e.target.checked)}
+                      style={{cursor:'pointer',flexShrink:0,width:15,height:15}}/>
+                    <span style={{fontSize:16,flexShrink:0,lineHeight:1}}>{icon}</span>
+                    <span style={{flex:1,minWidth:0,fontSize:12,fontWeight:400,color:'#222',
+                      overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',lineHeight:1.5}}>
+                      {f.name || '(名前なし)'}
                     </span>
-                    {alreadyAdded && <span style={{fontSize:10,color:'#38A169',flexShrink:0}}>✅ 追加済</span>}
-                  </label>
+                    {alreadyAdded && <span style={{fontSize:10,color:'#38A169',flexShrink:0,fontWeight:600}}>✅ 追加済</span>}
+                  </div>
                 );
               })}
             </div>
