@@ -1939,6 +1939,26 @@ function orgFromEmail(email) {
   return def ? def.org : '';
 }
 
+// ドメイン名から組織名を推測する
+function guessOrgFromDomain(domain) {
+  if (!domain) return '';
+  let d = domain.toLowerCase();
+  // 地域・サブドメインプレフィックスを除去（jp., cn., us. など）
+  d = d.replace(/^(www|mail|smtp|ftp|jp|us|cn|uk|kr|de|fr|au|sg|hk|tw|in|eu)\./i, '');
+  // TLDサフィックスを除去
+  d = d.replace(/\.(co\.jp|co\.uk|ne\.jp|ac\.jp|or\.jp|com|net|org|jp|biz|io|gov|edu|info)$/, '');
+  // ドットで分割し最初のセグメントをメインドメインとして使用
+  const main = d.split('.')[0] || d;
+  // ハイフン区切りの各単語を処理
+  const words = main.split('-');
+  return words.map(w => {
+    if (!w) return '';
+    // 4文字以下の単語は略語とみなし大文字に
+    if (w.length <= 4) return w.toUpperCase();
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(' ').trim();
+}
+
 // 英字名を「名 姓」→「姓 名」に変換
 function reverseEnglishName(rawName) {
   if (!rawName) return '';
@@ -2236,13 +2256,17 @@ function IcsStepA({ count, onAll, onOwnerOnly, onSkip }) {
 function IcsStepB({ domains, onComplete, onSkip }) {
   const [list, setList] = React.useState(domains.map(d => ({...d})));
   const upd = (i, key, val) => setList(list.map((d,idx) => idx===i ? {...d,[key]:val} : d));
+  const isGuessed = (d, i) => d.org && d.org === guessOrgFromDomain(d.domain);
 
   return (
     <div className="modal-overlay">
       <div className="modal" style={{maxWidth:560}}>
         <div className="modal-title">🌐 未登録の組織ドメイン</div>
-        <div style={{fontSize:12,color:'#666',marginBottom:12}}>
-          以下のドメインが未登録です。組織名を入力して登録してください。
+        <div style={{fontSize:12,color:'#666',marginBottom:8}}>
+          以下のドメインが未登録です。組織名を確認・修正して登録してください。
+        </div>
+        <div style={{fontSize:11,color:'#2E75B6',background:'#EBF3FB',padding:'6px 10px',borderRadius:6,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
+          <span>💡</span> <span>ドメイン名から組織名を自動推測しました。必要に応じて修正してください。</span>
         </div>
         <div style={{border:'1px solid #e2e8f0',borderRadius:6,overflow:'hidden',marginBottom:12}}>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',background:'#1F3864',color:'#fff',padding:'8px 12px',fontSize:12,fontWeight:600}}>
@@ -2251,9 +2275,14 @@ function IcsStepB({ domains, onComplete, onSkip }) {
           {list.map((d,i) => (
             <div key={i} style={{display:'grid',gridTemplateColumns:'1fr 1fr',padding:'8px 12px',borderTop:'1px solid #f0f0f0',alignItems:'center',gap:8}}>
               <span style={{fontSize:12,color:'#444'}}>@{d.domain}<br/><span style={{fontSize:10,color:'#999'}}>{d.emails.length}名</span></span>
-              <input value={d.org} onChange={e=>upd(i,'org',e.target.value)}
-                placeholder="例: 日鉄ソリューションズ"
-                style={{padding:'5px 8px',border:'1.5px solid #d0d8e4',borderRadius:4,fontSize:12,fontFamily:'inherit',outline:'none'}}/>
+              <div style={{position:'relative'}}>
+                <input value={d.org} onChange={e=>upd(i,'org',e.target.value)}
+                  placeholder="例: 日鉄ソリューションズ"
+                  style={{padding:'5px 8px',border:'1.5px solid '+(isGuessed(d,i)?'#90CDF4':'#d0d8e4'),borderRadius:4,fontSize:12,fontFamily:'inherit',outline:'none',width:'100%',boxSizing:'border-box',background:isGuessed(d,i)?'#EBF8FF':'#fff'}}/>
+                {isGuessed(d,i) && (
+                  <span style={{position:'absolute',top:-8,right:2,fontSize:9,background:'#2E75B6',color:'#fff',padding:'1px 5px',borderRadius:8,whiteSpace:'nowrap'}}>推測</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -2542,7 +2571,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       }
     });
     const domainList = Object.entries(unknownDomains).map(([domain, emailSet]) => ({
-      domain, emails: [...emailSet], org: '', confirmed: false
+      domain, emails: [...emailSet], org: guessOrgFromDomain(domain), confirmed: false
     }));
     if (domainList.length > 0) {
       setPendingDomains(domainList);
