@@ -3,14 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>会議議事録・管理台帳 自動生成ツール</title>
+<title>議事録・管理台帳 自動生成ツール</title>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <script src="exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/microsoft-cognitiveservices-speech-sdk@1.41.0/distrib/browser/microsoft.cognitiveservices.speech.sdk.bundle-min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202c;min-height:100vh}
@@ -262,10 +261,9 @@ textarea{resize:vertical;min-height:70px}
 .usage-btn:disabled{opacity:.4;cursor:not-allowed}
 .usage-spin{display:inline-block;width:10px;height:10px;border:1.5px solid rgba(255,255,255,.2);border-top-color:rgba(255,255,255,.7);border-radius:50%;animation:spin .7s linear infinite}
 </style>
-</head>
-<body>
-<div id="root"></div>
 <script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
 const { useState, useEffect, useRef } = React;
 
 // ── 今日の日付 ─────────────────────────────────────────────
@@ -2824,30 +2822,87 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 }
 
 // ── Step 2 ─────────────────────────────────────────────────
-function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack}){
+function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xlsxTemplateFile,setXlsxTemplateFile,xlsxDataFile,setXlsxDataFile,onNext,onBack,liveHandoff}){
   const txtRef=useRef(),docxTplRef=useRef(),xlsTplRef=useRef(),xlsDatRef=useRef();
   const [drag,setDrag]=useState(false);
-  const loadTxt=(file)=>{const r=new FileReader();r.onload=e=>setTranscript(e.target.result);r.readAsText(file,'UTF-8');};
+  const [importSource,setImportSource]=useState(liveHandoff?'live':'');
+  const loadTxt=(file)=>{const r=new FileReader();r.onload=e=>{setTranscript(e.target.result);setImportSource('file');};r.readAsText(file,'UTF-8');};
+
+  const sources=[
+    {id:'live',  icon:'🔴', label:'会議中ツール',     desc:'自動引き渡し'},
+    {id:'file',  icon:'📄', label:'テキストファイル',  desc:'.txt'},
+    {id:'paste', icon:'📋', label:'直接貼り付け',      desc:'Notta等からコピー'},
+  ];
+
   return(
     <div className="card">
       <div className="card-title">📁 Step 2 ― ファイルアップロード</div>
 
       <div className="section-divider">📄 文字起こし <span className="req">*</span></div>
-      <div className={`upload-area ${drag?'drag':''}`}
-        onClick={()=>txtRef.current.click()}
-        onDragOver={e=>{e.preventDefault();setDrag(true)}}
-        onDragLeave={()=>setDrag(false)}
-        onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)loadTxt(f);}}>
-        <input ref={txtRef} type="file" accept=".txt" onChange={e=>{if(e.target.files[0])loadTxt(e.target.files[0]);}}/>
-        <div className="upload-icon">📄</div>
-        <div style={{fontSize:13,color:'#444'}}>クリックまたはドラッグ＆ドロップ（.txt）</div>
+
+      {liveHandoff && (
+        <div className="notice notice-ok" style={{marginBottom:12,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:18}}>✅</span>
+          <div style={{flex:1}}>
+            <strong>会議中支援ツールから文字起こしを受け取りました</strong><br/>
+            <span style={{fontSize:11}}>受取日時: {new Date(liveHandoff.timestamp).toLocaleString('ja-JP')}</span>
+          </div>
+          <button className="btn btn-gray" style={{fontSize:11,padding:'4px 10px'}}
+            onClick={()=>{setTranscript('');setImportSource('');}}>クリア</button>
+        </div>
+      )}
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:12}}>
+        {sources.map(s=>(
+          <div key={s.id}
+            onClick={()=>{ if(s.id==='file') txtRef.current.click(); else setImportSource(s.id); }}
+            style={{
+              border:'1.5px solid '+(importSource===s.id?'#2E75B6':'#d0d8e4'),
+              borderRadius:8,padding:'10px 12px',cursor:'pointer',
+              background:importSource===s.id?'#EBF3FB':'#fafbfc',
+              textAlign:'center',transition:'.15s'
+            }}>
+            <div style={{fontSize:22,marginBottom:4}}>{s.icon}</div>
+            <div style={{fontSize:12,fontWeight:700,color:importSource===s.id?'#2E75B6':'#444'}}>{s.label}</div>
+            <div style={{fontSize:10,color:'#a0aec0',marginTop:2}}>{s.desc}</div>
+          </div>
+        ))}
       </div>
-      {transcript && <div className="file-chip">✅ 読み込み済み（{transcript.length.toLocaleString()}文字）</div>}
-      <div style={{marginTop:10}}>
-        <label style={{fontSize:12,fontWeight:600,color:'#444',marginBottom:4,display:'block'}}>または、文字起こしを直接貼り付け</label>
-        <textarea value={transcript} onChange={e=>setTranscript(e.target.value)}
-          placeholder="文字起こしテキストをここに貼り付け..." style={{minHeight:120,fontSize:12}}/>
-      </div>
+      <input ref={txtRef} type="file" accept=".txt" style={{display:'none'}} onChange={e=>{if(e.target.files[0])loadTxt(e.target.files[0]);}}/>
+
+      {importSource === 'live' && !transcript && (
+        <div className="notice notice-warn" style={{marginBottom:12}}>
+          会議中支援ツールで「会議終了→議事録作成」を押すと自動的にここに文字起こしが届きます。<br/>
+          <a href="./live/" style={{color:'#2E75B6',fontWeight:600}}>🔴 会議中支援ツールを開く →</a>
+        </div>
+      )}
+
+      {(importSource==='paste' || importSource==='file' || transcript) && (
+        <div>
+          <div style={{fontSize:11,color:'#718096',marginBottom:4}}>
+            {importSource==='paste' ? '📋 Notta・Teams・Zoom等の文字起こしをここに貼り付けてください' :
+             importSource==='file'  ? '📄 読み込んだテキストを確認・編集できます' :
+             '📝 文字起こし内容'}
+          </div>
+          {!transcript && (
+            <div className={`upload-area ${drag?'drag':''}`}
+              onClick={()=>txtRef.current.click()}
+              onDragOver={e=>{e.preventDefault();setDrag(true)}}
+              onDragLeave={()=>setDrag(false)}
+              onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)loadTxt(f);}}>
+              <div className="upload-icon">📄</div>
+              <div style={{fontSize:13,color:'#444'}}>クリックまたはドラッグ＆ドロップ（.txt）</div>
+            </div>
+          )}
+          <textarea value={transcript} onChange={e=>setTranscript(e.target.value)}
+            placeholder="文字起こしテキストをここに貼り付け..." style={{minHeight:140,fontSize:12}}/>
+          {transcript && (
+            <div style={{fontSize:11,color:'#38A169',marginTop:4}}>
+              ✅ {transcript.length.toLocaleString()}文字 読み込み済み
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="section-divider" style={{marginTop:16}}>📝 議事録テンプレート（.docx）</div>
       <div className="notice notice-warn">
@@ -2893,7 +2948,7 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
 
       <div className="btn-row">
         <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-        <button className="btn btn-primary" onClick={onNext}>AI解析を開始 →</button>
+        <button className="btn btn-primary" disabled={!transcript} onClick={onNext}>AI解析を開始 →</button>
       </div>
     </div>
   );
@@ -3186,1782 +3241,8 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
 
 // ── 会議中モード（LiveMeetingMode） ───────────────────────────
 // ── 分析エントリ（折りたたみ対応） ──────────────────────────
-function AnalysisEntry({ entry, ei, total, framework, onDelete }) {
-  const [collapsed, setCollapsed] = React.useState(ei !== 0); // 最新以外は初期折りたたみ
-  const catColors = {
-    '①':['#065A82','#EBF8FF'], '②':['#B7410E','#FFF3ED'],
-    '③':['#B7791F','#FFFBEB'], '④':['#276749','#E8F5EF'],
-    '⑤':['#4A3728','#F5F0EB'], '⑥':['#6B3FA0','#F3EEFF'],
-  };
-  const copyText = `分析 #${entry._count} (${entry._time})\n\n`+
-    (entry.exec_summary?`【役員サマリー】\n${entry.exec_summary}\n\n`:'')+
-    (entry.summary?`【要約】\n${entry.summary}\n\n`:'')+
-    (entry.top_questions?.length?`【確認すべき質問】\n${entry.top_questions.map(q=>`・${q}`).join('\n')}\n\n`:'')+
-    (entry.categories ? framework.cats.filter(c=>c.enabled).map(c=>
-      entry.categories[c.id]?.items?.length ?
-      `【${c.id} ${c.name}】\n${entry.categories[c.id].items.map(x=>`・${x}`).join('\n')}` : ''
-    ).filter(Boolean).join('\n\n') : '');
 
-  return (
-    <div style={{borderBottom: ei < total-1 ? '2px solid #EBF3FB' : 'none', background: ei===0 ? '#fff' : '#F7F9FC'}}>
-      {/* 分析ヘッダー（クリックで折りたたみ） */}
-      <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',
-        background: ei===0 ? '#1F3864' : '#4A5568', color:'#fff', fontSize:11, cursor:'pointer'}}
-        onClick={()=>setCollapsed(c=>!c)}>
-        <span style={{fontWeight:700}}>分析 #{entry._count}</span>
-        <span style={{color:'rgba(255,255,255,.6)'}}>{entry._time}</span>
-        {ei===0 && <span style={{background:'#38A169',borderRadius:8,padding:'1px 7px',fontSize:9,fontWeight:700}}>最新</span>}
-        {collapsed && entry.exec_summary && (
-          <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:10,color:'rgba(255,255,255,.6)',marginLeft:4}}>
-            {entry.exec_summary.slice(0,40)}…
-          </span>
-        )}
-        <span style={{marginLeft:'auto',display:'flex',gap:4,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
-          <button style={{background:'none',border:'1px solid rgba(255,255,255,.3)',color:'rgba(255,255,255,.8)',
-            borderRadius:4,padding:'1px 7px',fontSize:9,cursor:'pointer'}}
-            onClick={()=>navigator.clipboard.writeText(copyText)}>📋</button>
-          <button style={{background:'none',border:'1px solid rgba(252,129,129,.4)',color:'rgba(252,129,129,.8)',
-            borderRadius:4,padding:'1px 7px',fontSize:9,cursor:'pointer'}}
-            onClick={()=>{ if(window.confirm('この分析を削除しますか？')) onDelete(); }}>🗑</button>
-        </span>
-        <span style={{fontSize:12,color:'rgba(255,255,255,.6)',marginLeft:4}}>{collapsed ? '▶' : '▼'}</span>
-      </div>
-
-      {/* 折りたたみコンテンツ */}
-      {!collapsed && (
-        <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:8}}>
-          {entry.exec_summary && (
-            <div style={{background:'#FFF4EB',borderLeft:'3px solid #C55A11',borderRadius:'0 4px 4px 0',
-              padding:'6px 10px',fontSize:11,color:'#7A3B0E',fontWeight:600,lineHeight:1.6}}>
-              👔 {entry.exec_summary}
-            </div>
-          )}
-          {entry.summary && (
-            <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:4,
-              padding:'6px 10px',fontSize:11,color:'#333',lineHeight:1.7}}>
-              📋 {entry.summary}
-            </div>
-          )}
-          {entry.categories && framework.cats.filter(c=>c.enabled).map(cat => {
-            const catData = entry.categories[cat.id];
-            if (!catData || !catData.items || catData.items.length===0) return null;
-            const [fg,bg] = catColors[cat.id] || ['#444','#f8fafc'];
-            const decBadge = catData.decision_needed && catData.decision_needed !== '不要' ? catData.decision_needed : null;
-            return (
-              <div key={cat.id} style={{border:`1.5px solid ${fg}33`,borderRadius:6,overflow:'hidden'}}>
-                <div style={{background:fg,color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-                  <span>{cat.id} {cat.icon} {cat.name}</span>
-                  {decBadge && <span style={{marginLeft:'auto',background:'rgba(255,255,255,.25)',borderRadius:8,padding:'1px 8px',fontSize:9}}>⚡ {decBadge}</span>}
-                </div>
-                <div style={{background:bg,padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
-                  {catData.items.map((item,ii)=>(
-                    <div key={ii} style={{display:'flex',gap:5,fontSize:10.5,color:'#333',lineHeight:1.55}}>
-                      <span style={{color:fg,fontWeight:700,flexShrink:0}}>・</span><span>{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          {entry.top_questions && entry.top_questions.length > 0 && (
-            <div style={{border:'1.5px solid #2E75B633',borderRadius:6,overflow:'hidden'}}>
-              <div style={{background:'#2E75B6',color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700}}>💬 今すぐ確認すべき質問</div>
-              <div style={{background:'#EBF3FB',padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
-                {entry.top_questions.map((q,qi)=>(
-                  <div key={qi} style={{fontSize:10.5,color:'#1a4a7a',lineHeight:1.55}}>❓ {q}</div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── AIアシストフレームワーク設定モーダル ──────────────────
-function FrameworkModal({ fw, onSave, onClose, defaultFw }) {
-  const [data, setData] = React.useState(JSON.parse(JSON.stringify(fw)));
-  const upd = (k,v) => setData(d=>({...d,[k]:v}));
-  const updCat = (i,k,v) => setData(d=>({...d,cats:d.cats.map((c,idx)=>idx===i?{...c,[k]:v}:c)}));
-  const reset = () => { if(window.confirm('初期設定に戻しますか？')) setData(JSON.parse(JSON.stringify(defaultFw))); };
-  return (
-    <div className="modal-overlay" style={{zIndex:5000}} onClick={onClose}>
-      <div className="modal" style={{maxWidth:580,width:'95%',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-          <div className="modal-title" style={{margin:0}}>⚙️ AIアシストパネル 分析フレームワーク設定</div>
-          <button onClick={onClose}
-            style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'#888',lineHeight:1,padding:'0 4px'}}>✕</button>
-        </div>
-        <div className="notice notice-info" style={{marginBottom:12,fontSize:11}}>
-          会議の分析観点・会社DX文脈を設定します。変更はlocalStorageに保存され次回起動時も維持されます。
-        </div>
-
-        <div style={{marginBottom:10}}>
-          <label style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:4,display:'block'}}>会社名</label>
-          <input value={data.companyName} onChange={e=>upd('companyName',e.target.value)}
-            style={{width:'100%',padding:'6px 9px',border:'1.5px solid #d0d8e4',borderRadius:5,fontSize:12,fontFamily:'inherit'}}/>
-        </div>
-        <div style={{marginBottom:14}}>
-          <label style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:4,display:'block'}}>DX目的・文脈（AIプロンプトに組み込まれます）</label>
-          <textarea value={data.dxGoal} onChange={e=>upd('dxGoal',e.target.value)} rows={4}
-            style={{width:'100%',padding:'6px 9px',border:'1.5px solid #d0d8e4',borderRadius:5,fontSize:11,fontFamily:'inherit',resize:'vertical',lineHeight:1.6}}/>
-        </div>
-
-        <div style={{fontSize:11,fontWeight:700,color:'#1F3864',marginBottom:8,borderBottom:'2px solid #EBF3FB',paddingBottom:4}}>
-          分析カテゴリ（有効/無効・観点文を編集できます）
-        </div>
-        {data.cats.map((cat,i)=>(
-          <div key={i} style={{marginBottom:10,border:`1.5px solid ${cat.enabled?'#2E75B6':'#d0d8e4'}`,borderRadius:6,overflow:'hidden'}}>
-            <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:cat.enabled?'#EBF3FB':'#f8fafc'}}>
-              <input type="checkbox" checked={cat.enabled} onChange={e=>updCat(i,'enabled',e.target.checked)} style={{cursor:'pointer'}}/>
-              <span style={{fontSize:12,fontWeight:700,color:cat.enabled?'#1F3864':'#a0aec0'}}>{cat.id} {cat.icon} {cat.name}</span>
-            </div>
-            {cat.enabled && (
-              <div style={{padding:'6px 10px'}}>
-                <label style={{fontSize:10,color:'#718096',marginBottom:2,display:'block'}}>分析観点プロンプト</label>
-                <textarea value={cat.prompt} onChange={e=>updCat(i,'prompt',e.target.value)} rows={2}
-                  style={{width:'100%',padding:'4px 7px',border:'1px solid #d0d8e4',borderRadius:4,fontSize:10,fontFamily:'inherit',resize:'vertical',lineHeight:1.5}}/>
-              </div>
-            )}
-          </div>
-        ))}
-
-        <div className="btn-row" style={{marginTop:16,justifyContent:'space-between'}}>
-          <button className="btn btn-gray" style={{fontSize:12}} onClick={reset}>↩ 初期設定に戻す</button>
-          <div style={{display:'flex',gap:8}}>
-            <button className="btn btn-gray" onClick={onClose}>キャンセル</button>
-            <button className="btn btn-primary" onClick={()=>{ onSave(data); onClose(); }}>保存</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-function BriefingManagerModal({ templates, onSave, onClose }) {
-  const [list, setList] = React.useState(templates.map(t=>({...t})));
-  const [editIdx, setEditIdx] = React.useState(null); // null=新規, number=編集中
-  const [editName, setEditName] = React.useState('');
-  const [editContent, setEditContent] = React.useState('');
-  const [importing, setImporting] = React.useState(false);
-
-  const startNew = () => { setEditIdx(null); setEditName(''); setEditContent(''); setImporting(false); };
-  const startEdit = (i) => { setEditIdx(i); setEditName(list[i].name); setEditContent(list[i].content); };
-  const cancelEdit = () => { setEditIdx(undefined); setEditName(''); setEditContent(''); };
-
-  const saveItem = () => {
-    if(!editName.trim() || !editContent.trim()) return;
-    const next = [...list];
-    if(editIdx === null) next.push({name:editName.trim(), content:editContent.trim()});
-    else next[editIdx] = {name:editName.trim(), content:editContent.trim()};
-    setList(next); cancelEdit();
-  };
-  const deleteItem = (i) => {
-    if(!window.confirm(`「${list[i].name}」を削除しますか？`)) return;
-    setList(list.filter((_,idx)=>idx!==i));
-  };
-
-  const handleFileImport = (file) => {
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = e => {
-      const text = e.target.result;
-      setEditContent(text);
-      if(!editName) setEditName(file.name.replace(/\.[^.]+$/, ''));
-    };
-    reader.readAsText(file, 'UTF-8');
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" style={{maxWidth:520,width:'95%',maxHeight:'85vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">📋 ブリーフィングテンプレート管理</div>
-        <div className="notice notice-info" style={{marginBottom:12,fontSize:11}}>
-          会議パターンごとに「AIへの指示内容」を登録しておき、会議前にプルダウンで選択して使います。毎回の入力内容はリセットされます。
-        </div>
-
-        {/* テンプレート一覧 */}
-        {list.length === 0 && editIdx === undefined && (
-          <div style={{color:'#a0aec0',fontSize:12,textAlign:'center',padding:'12px 0'}}>テンプレートなし</div>
-        )}
-        {list.map((t,i)=>(
-          <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'8px 10px',
-            border:'1px solid #e2e8f0',borderRadius:6,marginBottom:6,background:'#fafbfc'}}>
-            {editIdx===i ? (
-              <div style={{flex:1,display:'flex',flexDirection:'column',gap:6}}>
-                <input value={editName} onChange={e=>setEditName(e.target.value)}
-                  placeholder="テンプレート名" style={{width:'100%',padding:'5px 8px',border:'1.5px solid #2E75B6',borderRadius:5,fontSize:12,fontFamily:'inherit'}}/>
-                <textarea value={editContent} onChange={e=>setEditContent(e.target.value)}
-                  rows={5} style={{width:'100%',padding:'6px 8px',border:'1.5px solid #2E75B6',borderRadius:5,fontSize:11,fontFamily:'inherit',resize:'vertical',lineHeight:1.6}}/>
-                <div style={{display:'flex',gap:6}}>
-                  <button className="btn btn-green" style={{fontSize:12,padding:'5px 14px'}} onClick={saveItem}>保存</button>
-                  <button className="btn btn-gray" style={{fontSize:12,padding:'5px 14px'}} onClick={cancelEdit}>キャンセル</button>
-                </div>
-              </div>
-            ):(
-              <>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:2}}>{t.name}</div>
-                  <div style={{fontSize:11,color:'#718096',whiteSpace:'pre-wrap',lineHeight:1.5,
-                    maxHeight:48,overflow:'hidden'}}>{t.content.slice(0,100)}{t.content.length>100?'…':''}</div>
-                </div>
-                <div style={{display:'flex',gap:4,flexShrink:0}}>
-                  <button className="btn-form-sub" onClick={()=>startEdit(i)}>✏️</button>
-                  <button className="btn-form-sub" style={{color:'#e53e3e',borderColor:'#e53e3e'}} onClick={()=>deleteItem(i)}>🗑</button>
-                </div>
-              </>
-            )}
-          </div>
-        ))}
-
-        {/* 新規追加フォーム */}
-        {editIdx === null && (
-          <div style={{border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 12px',marginTop:8,background:'#EBF3FB'}}>
-            <div style={{fontSize:12,fontWeight:700,color:'#1F3864',marginBottom:8}}>＋ 新規テンプレート</div>
-            <input value={editName} onChange={e=>setEditName(e.target.value)}
-              placeholder="テンプレート名（例：ステコミ、定例PMO、RFP評価）"
-              style={{width:'100%',padding:'6px 9px',border:'1.5px solid #90CDF4',borderRadius:5,fontSize:12,fontFamily:'inherit',marginBottom:6}}/>
-            <textarea value={editContent} onChange={e=>setEditContent(e.target.value)}
-              rows={6} placeholder={`AIへの指示内容を入力（例）：\n・今日はサプライヤーポータルRFP最終評価会議\n・GDPR対応と価格根拠を必ず確認すること\n・前回宿題への回答を全件チェックすること\n・次回ステコミ報告事項を漏れなく抽出すること`}
-              style={{width:'100%',padding:'6px 9px',border:'1.5px solid #90CDF4',borderRadius:5,fontSize:11,fontFamily:'inherit',resize:'vertical',lineHeight:1.6,marginBottom:6}}/>
-            <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
-              <button className="btn btn-blue" style={{fontSize:12,padding:'5px 14px'}} onClick={saveItem}>追加</button>
-              <button className="btn btn-gray" style={{fontSize:12,padding:'5px 14px'}} onClick={cancelEdit}>キャンセル</button>
-              <label style={{cursor:'pointer',display:'inline-flex',alignItems:'center',gap:4,
-                fontSize:11,color:'#2E75B6',border:'1px solid #2E75B6',borderRadius:5,padding:'4px 10px',background:'#fff'}}>
-                📄 テキストファイルから読み込み
-                <input type="file" accept=".txt" style={{display:'none'}} onChange={e=>handleFileImport(e.target.files[0])}/>
-              </label>
-            </div>
-          </div>
-        )}
-
-        {editIdx === undefined && (
-          <button className="btn btn-blue" style={{fontSize:12,marginTop:10,width:'100%'}} onClick={startNew}>＋ 新規テンプレートを追加</button>
-        )}
-
-        <div className="btn-row" style={{marginTop:16}}>
-          <button className="btn btn-primary" onClick={()=>{ onSave(list); onClose(); }}>保存して閉じる</button>
-          <button className="btn btn-gray" onClick={onClose}>キャンセル</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
-  const [azureKey, setAzureKey]       = useState(() => localStorage.getItem('azure_speech_key') || '');
-  const [azureRegion, setAzureRegion] = useState(() => localStorage.getItem('azure_speech_region') || 'japaneast');
-  const [prevMinutes, setPrevMinutes] = useState('');
-  const [prevLoaded, setPrevLoaded]   = useState(false);
-  const [prevFileName, setPrevFileName] = useState('');
-  const [transcript, setTranscript]   = useState([]);
-  const [interimText, setInterimText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
-  const [analysis, setAnalysis]       = useState(null);
-  const [analysisHistory, setAnalysisHistory] = useState([]); // 全履歴（新しい順）
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisCount, setAnalysisCount] = useState(0);
-
-  // AIアシストパネル フレームワーク設定
-  const FW_KEY = 'live_ai_framework';
-  const DEFAULT_FW = {
-    companyName: 'KOKUSAI ELECTRIC',
-    dxGoal: '「基幹業務標準化→工場スマート化→開発高度化→供給網最適化」を通じて収益性の高い半導体製造装置メーカーへ進化する取り組み。日本でDX化したプロセスをテンプレートとして海外拠点に横展開する。コアは標準化、差分は最小化が原則。SAP S/4HANAでのFit to Standardアプローチを重視。',
-    cats: [
-      { id:'①', icon:'🌐', name:'DX目的・グローバル整合・先進性', enabled:true,
-        prompt:'日本DXテンプレートとして成立するか。海外展開できる設計か。全社標準か例外か。AI・先進技術の活用余地はあるか。グローバル標準との整合性。' },
-      { id:'②', icon:'🔥', name:'変革・非連続・既成概念の打破', enabled:true,
-        prompt:'既存業務のデジタル化に留まっていないか。業務プロセス自体を再設計しているか。Fit to Standardに対してカスタマイズで逃げていないか。5年後も通用する設計か。' },
-      { id:'③', icon:'⚠️', name:'リスク・課題・未確定事項', enabled:true,
-        prompt:'事実ベースで何が問題か。リスク（潜在的脅威）・課題（顕在化済み問題）・保留（未決定事項）を分類して抽出。グローバル展開の障壁になるか。' },
-      { id:'④', icon:'🔄', name:'実行性・影響範囲', enabled:true,
-        prompt:'現場で本当に回るか。業務・システム・データへの影響。運用定着・受入準備。国内外の業務差異・多言語・法規制対応の必要性。' },
-      { id:'⑤', icon:'📅', name:'進捗・計画・依存関係', enabled:true,
-        prompt:'スケジュールと繋がりは大丈夫か。マイルストーン達成状況・遅延リスク。前提条件・依存関係のリスク。グローバル展開フェーズとの整合。' },
-      { id:'⑥', icon:'👤', name:'ガバナンス・体制・予算・ベンダー', enabled:true,
-        prompt:'役員判断要否／部門長判断（製造・調達・経理等）要否。プロジェクト体制・品質管理。予算規模・確保状況・超過リスク。ベンダー選定の競争性・入札妥当性・契約条件・依存リスク。' },
-    ]
-  };
-  const [framework, setFramework] = useState(()=>{
-    try { return JSON.parse(localStorage.getItem(FW_KEY)||'null') || DEFAULT_FW; } catch(e){ return DEFAULT_FW; }
-  });
-  const [showFwModal, setShowFwModal] = useState(false);
-  const saveFw = (fw) => { setFramework(fw); localStorage.setItem(FW_KEY, JSON.stringify(fw)); };
-  const [liveCostTotal, setLiveCostTotal] = useState(0);
-  const [liveCostLog, setLiveCostLog]   = useState([]); // [{count, cost, tokens}]
-  const [showCostModal, setShowCostModal] = useState(false);
-  const [orgUsage, setOrgUsage]         = useState(null);
-  const [orgUsageLoading, setOrgUsageLoading] = useState(false);
-  const [orgUsageError, setOrgUsageError]     = useState('');
-  const adminKey = localStorage.getItem('claude_admin_api_key') || '';
-
-  // Azure Speech コスト追跡
-  const AZURE_STT_RATE = 1.00 / 3600; // $1.00/時間 → 秒単価
-  const [azureRecordingSec, setAzureRecordingSec] = useState(0); // 累計録音秒数
-  const [azureStreams, setAzureStreams]           = useState(1);  // 同時ストリーム数
-  const recordingStartRef = useRef(null); // 録音開始時刻
-  const azureTimerRef     = useRef(null); // 秒カウントタイマー
-
-  const azureCostTotal = azureRecordingSec * AZURE_STT_RATE * azureStreams;
-  const formatAzureCost = (usd) => usd < 0.01 ? `$${(usd*100).toFixed(2)}¢` : `$${usd.toFixed(4)}`;
-  const formatAzureSec = (s) => {
-    const m = Math.floor(s/60), sec = s%60;
-    return m > 0 ? `${m}分${sec}秒` : `${sec}秒`;
-  };
-
-  const fetchUsage = async () => {
-    if (!adminKey) { setOrgUsageError('Admin APIキー未設定'); return; }
-    setOrgUsageLoading(true);
-    setOrgUsageError('');
-    try {
-      const result = await fetchOrgUsage(adminKey);
-      setOrgUsage(result);
-    } catch(e) {
-      setOrgUsageError('取得失敗');
-    }
-    setOrgUsageLoading(false);
-  };
-  const [showSettings, setShowSettings]   = useState(true);
-  const [azureKeyLocked, setAzureKeyLocked] = useState(()=>!!(localStorage.getItem('azure_speech_key')));
-  const [micDevices, setMicDevices]       = useState([]);
-  const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
-  const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical');
-  const [showVbSetupModal, setShowVbSetupModal] = useState(false);
-  const [vbSetupDone, setVbSetupDone]     = useState(()=>localStorage.getItem('vbcable_setup_done')==='1');
-  const [vbSetupStep, setVbSetupStep]     = useState(0);
-  const [refFiles, setRefFiles]           = useState([]);
-  const refFilesRef                       = useRef([]);
-  useEffect(() => { refFilesRef.current = refFiles; }, [refFiles]);
-
-  // 参考URL（最大5件、優先順位付き）
-  const [refUrls, setRefUrls] = useState(()=>{
-    try { return JSON.parse(localStorage.getItem('live_ref_urls')||'[]'); } catch(e){ return []; }
-  });
-  const saveRefUrls = (list) => { setRefUrls(list); localStorage.setItem('live_ref_urls', JSON.stringify(list)); };
-  const addRefUrl = () => {
-    if(refUrls.length >= 5) return;
-    saveRefUrls([...refUrls, {label:'', url:''}]);
-  };
-  const updateRefUrl = (i, field, val) => {
-    const next = refUrls.map((r,idx)=>idx===i?{...r,[field]:val}:r);
-    saveRefUrls(next);
-  };
-  const removeRefUrl = (i) => saveRefUrls(refUrls.filter((_,idx)=>idx!==i));
-  const moveRefUrl = (i, dir) => {
-    const next=[...refUrls];
-    const j=i+dir;
-    if(j<0||j>=next.length) return;
-    [next[i],next[j]]=[next[j],next[i]];
-    saveRefUrls(next);
-  };
-
-  // ── 会議ブリーフィング ──────────────────────────────────────
-  // テンプレートはlocalStorage保存、アクティブ入力は毎回リセット
-  const BRIEFING_TMPL_KEY = 'live_briefing_templates';
-  const loadBriefingTemplates = () => { try { return JSON.parse(localStorage.getItem(BRIEFING_TMPL_KEY)||'[]'); } catch(e){ return []; } };
-  const [briefing, setBriefing]               = useState(''); // 毎回クリア（localStorageに保存しない）
-  const [briefingTemplates, setBriefingTemplates] = useState(()=>loadBriefingTemplates());
-  const [showBriefing, setShowBriefing]       = useState(false);
-  const [showBriefingMgr, setShowBriefingMgr] = useState(false);
-  const [selectedTmplIdx, setSelectedTmplIdx] = useState('');
-
-  const saveBriefingTemplates = (list) => {
-    setBriefingTemplates(list);
-    localStorage.setItem(BRIEFING_TMPL_KEY, JSON.stringify(list));
-  };
-  const applyTemplate = (idx) => {
-    setSelectedTmplIdx(idx);
-    if(idx !== '' && briefingTemplates[idx]) setBriefing(briefingTemplates[idx].content);
-  };
-
-  // ファイルテキスト抽出
-  const extractFileText = (file) => new Promise((resolve) => {
-    const name = file.name.toLowerCase();
-    const reader = new FileReader();
-    if (name.endsWith('.txt')) {
-      reader.onload = e => resolve(e.target.result);
-      reader.readAsText(file, 'UTF-8');
-    } else if (name.endsWith('.docx')) {
-      // docxはZIP内のword/document.xmlからテキスト抽出
-      reader.onload = async e => {
-        try {
-          const ab = e.target.result;
-          const { files } = await JSZip.loadAsync(ab);
-          const xmlFile = files['word/document.xml'];
-          if (!xmlFile) { resolve('[docx読み込みエラー]'); return; }
-          const xml = await xmlFile.async('string');
-          const text = xml.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-          resolve(text.slice(0, 8000)); // 最大8000文字
-        } catch(err) { resolve('[docx読み込みエラー: ' + err.message + ']'); }
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      // その他（pdf等）はテキストとして試みる
-      reader.onload = e => resolve(String(e.target.result).slice(0, 8000));
-      reader.readAsText(file, 'UTF-8');
-    }
-  });
-
-  const handleRefFileAdd = async (files) => {
-    for (const file of Array.from(files)) {
-      const text = await extractFileText(file);
-      setRefFiles(prev => {
-        if (prev.find(f => f.name === file.name)) return prev;
-        return [...prev, { name: file.name, text, size: file.size }];
-      });
-    }
-  };
-
-  const removeRefFile = (name) => setRefFiles(prev => prev.filter(f => f.name !== name));
-
-  // 前回議事録をローカルファイルから読み込む
-  const loadPrevMinutesFromFile = async (file) => {
-    if (!file) return;
-    try {
-      const text = await extractFileText(file);
-      setPrevMinutes(text);
-      setPrevLoaded(true);
-      setPrevFileName(file.name);
-    } catch(e) {
-      alert('ファイルの読み込みに失敗しました: ' + e.message);
-    }
-  };
-
-  // 全パターン共通のセットアップモーダル管理
-  const [showSetupModal, setShowSetupModal] = useState(false);
-  const [setupMode, setSetupMode]           = useState('physical'); // どのパターンのガイドか
-  const [setupStep, setSetupStep]           = useState(0);
-
-  const handleMicModeChange = (mode) => {
-    setMicMode(mode);
-    localStorage.setItem('azure_mic_mode', mode);
-    // 全パターンでガイドを表示（VB-Cableは初回のみ、他は毎回任意）
-    if (mode === 'vbcable' && !vbSetupDone) {
-      setSetupMode(mode);
-      setSetupStep(0);
-      setShowSetupModal(true);
-    }
-  };
-
-  const openSetupGuide = (mode) => {
-    setSetupMode(mode);
-    setSetupStep(0);
-    setShowSetupModal(true);
-  };
-
-  const completeVbSetup = () => {
-    localStorage.setItem('vbcable_setup_done', '1');
-    setVbSetupDone(true);
-    setShowSetupModal(false);
-  };
-
-  // パターン別ステップ定義
-  const setupSteps = {
-    physical: [
-      {
-        title: 'Windows音声出力の確認',
-        notice: '対面会議はWindowsの音声出力がスピーカーのままでOKです。',
-        noticeType: 'info',
-        steps: [
-          'タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック',
-          '<strong>スピーカー (Realtek(R) Audio)</strong> が選択されていることを確認',
-          '※ Teams会議後に切り替えた場合は戻してください',
-        ]
-      },
-      {
-        title: 'Chromeのマイク確認',
-        notice: 'マイク配列（内蔵マイク）が使われていることを確認します。',
-        noticeType: 'info',
-        steps: [
-          'Chromeのアドレスバーに <code>chrome://settings/content/microphone</code> を入力',
-          '上部ドロップダウンが <strong>マイク配列（デジタルマイク向けインテル®...）</strong> になっていることを確認',
-          'このタブに戻る',
-        ]
-      },
-      {
-        title: '設定完了',
-        notice: '対面会議の設定が完了しました。録音を開始できます。',
-        noticeType: 'ok',
-        steps: [
-          'PCを参加者に向ける（または近づける）',
-          '「▶ 録音開始」をクリック',
-          '発言後1〜2秒無音にすると文字が確定されます',
-        ]
-      },
-    ],
-    mixed: [
-      {
-        title: 'Windows音声出力の確認',
-        notice: '混在会議もWindowsの音声出力はスピーカーのままでOKです。',
-        noticeType: 'info',
-        steps: [
-          'タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック',
-          '<strong>スピーカー (Realtek(R) Audio)</strong> が選択されていることを確認',
-        ]
-      },
-      {
-        title: 'Chromeのマイク確認',
-        notice: 'マイク配列が使われていることを確認します。',
-        noticeType: 'info',
-        steps: [
-          'Chromeのアドレスバーに <code>chrome://settings/content/microphone</code> を入力',
-          '上部ドロップダウンが <strong>マイク配列（デジタルマイク向けインテル®...）</strong> になっていることを確認',
-          'このタブに戻る',
-        ]
-      },
-      {
-        title: 'Teams会議に参加',
-        notice: 'Teamsのスピーカーはデフォルトのままで構いません。',
-        noticeType: 'info',
-        steps: [
-          'Teams会議に通常通り参加する',
-          'Teamsのスピーカーは <strong>スピーカー (Realtek)</strong> のまま変更不要',
-          '<strong>Teamsのスピーカー音量を最大</strong> にすると物理マイクが拾いやすくなります',
-        ]
-      },
-      {
-        title: '設定完了',
-        notice: '混在会議の設定が完了しました。録音を開始できます。',
-        noticeType: 'ok',
-        steps: [
-          'PCをTeamsのスピーカーに近い位置に置く（推奨）',
-          '「▶ 録音開始」をクリック',
-          'Teams参加者の声はスピーカー経由でマイクが拾います',
-        ]
-      },
-    ],
-    vbcable: [
-      {
-        title: 'CABLE Output「聴く」設定（初回のみ）',
-        notice: '【重要・初回のみ】Teams音声をスピーカーで聞けるようにする設定です。一度設定すれば次回から不要です。',
-        noticeType: 'warn',
-        steps: [
-          '<strong>Windowsキー + R</strong> → <code>mmsys.cpl</code> → Enter',
-          '「<strong>録音</strong>」タブ → 「<strong>CABLE Output</strong>」を右クリック → プロパティ',
-          '「<strong>聴く</strong>」タブ → 「このデバイスを聴く」に <strong>✅チェック</strong>',
-          '再生デバイス → <strong>スピーカー (Realtek(R) Audio)</strong>',
-          '「適用」→「OK」',
-        ],
-        skip: vbSetupDone ? '設定済みのためスキップ' : null,
-      },
-      {
-        title: 'Windows音声出力をCABLE Inputに変更',
-        notice: 'Teams会議の直前に毎回行う設定です。',
-        noticeType: 'warn',
-        steps: [
-          'タスクバー右下の <strong>🔊スピーカーアイコン</strong> をクリック',
-          '<strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択',
-        ]
-      },
-      {
-        title: 'Chromeのマイク変更',
-        notice: 'ChromeのデフォルトマイクをCABLE Outputに変更します。',
-        noticeType: 'warn',
-        steps: [
-          'Chromeのアドレスバーに <code>chrome://settings/content/microphone</code> を入力',
-          '上部ドロップダウン → <strong>CABLE Output (VB-Audio Virtual Cable)</strong> を選択',
-          'このタブに戻る',
-        ]
-      },
-      {
-        title: 'Teams会議のスピーカー変更',
-        notice: 'Teams会議に参加後、スピーカーをCABLE Inputに変更します。',
-        noticeType: 'warn',
-        steps: [
-          'Teams会議に参加する',
-          '会議画面上部の「<strong>…</strong>」→「<strong>デバイスの設定</strong>」',
-          'スピーカー → <strong>CABLE Input (VB-Audio Virtual Cable)</strong> を選択',
-        ]
-      },
-      {
-        title: '設定完了',
-        notice: 'Teamsのみ会議の設定が完了しました。録音を開始できます。',
-        noticeType: 'ok',
-        steps: [
-          '「▶ 録音開始」をクリック',
-          'Teams参加者の音声が文字起こしされます',
-          '※ 会議後はWindowsの出力を <strong>スピーカー (Realtek)</strong> に戻してください',
-        ]
-      },
-    ],
-  };
-
-  const modeLabels = { physical:'🎤 対面のみ', mixed:'🎤💻 混在 対面＋Teams', vbcable:'🔁 VB-Cable Teamsのみ' };
-  const modeColors = { physical:'#1F7A4D', mixed:'#6B3FA0', vbcable:'#C55A11' };
-
-  const recognizerRef    = useRef(null);
-  const recognizerRef2   = useRef(null); // デュアルモード用（VB-Cable側）
-  const timerRef         = useRef(null);
-  const transcriptRef    = useRef([]);
-  const analyzedLenRef   = useRef(0);
-  const transcriptBodyRef = useRef(null);
-  const analysisPanelRef  = useRef(null);
-
-  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
-
-  // マイクデバイス一覧を取得
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
-      navigator.mediaDevices.enumerateDevices().then(devices => {
-        const mics = devices.filter(d => d.kind === 'audioinput');
-        setMicDevices(mics);
-        // VB-Cableを自動検出してmicModeに反映
-        const vb = mics.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio'));
-        if (vb && selectedMicId === 'default') {
-          // VB-Cableが存在する場合、IDだけ保持（モードは手動で切り替え）
-        }
-      });
-    }).catch(() => {});
-  }, []);
-
-  // 自動スクロール（新しいものが上なのでtopに戻す）
-  useEffect(() => {
-    if (transcriptBodyRef.current) {
-      transcriptBodyRef.current.scrollTop = 0;
-    }
-  }, [transcript, interimText]);
-
-  const saveAzureSettings = () => {
-    localStorage.setItem('azure_speech_key', azureKey);
-    localStorage.setItem('azure_speech_region', azureRegion);
-    localStorage.setItem('azure_mic_id', selectedMicId);
-    localStorage.setItem('azure_mic_mode', micMode);
-  };
-
-  const loadBoxPrevMinutes = async () => {
-    if (!boxFileId || !boxToken) { alert('BoxファイルIDとアクセストークンを入力してください'); return; }
-    try {
-      localStorage.setItem('box_token_live', boxToken);
-      localStorage.setItem('box_fileid_live', boxFileId);
-      const res = await fetch(`https://api.box.com/2.0/files/${boxFileId}/content`, {
-        headers: { 'Authorization': `Bearer ${boxToken}` }
-      });
-      if (!res.ok) throw new Error('Box APIエラー: ' + res.status + ' - トークンを確認してください');
-      const text = await res.text();
-      setPrevMinutes(text);
-      setPrevLoaded(true);
-      alert(`✅ 前回議事録を読み込みました（${text.length}文字）`);
-    } catch(e) { alert('⚠️ Box読み込みエラー: ' + e.message); }
-  };
-
-  const usePastePrevMinutes = () => {
-    if (prevPasteText.trim()) {
-      setPrevMinutes(prevPasteText.trim());
-      setPrevLoaded(true);
-      setShowPrevPaste(false);
-      alert(`✅ 前回議事録をセットしました（${prevPasteText.trim().length}文字）`);
-    }
-  };
-
-  const startRecording = async () => {
-    if (!azureKey || !azureRegion) { alert('Azure Speech Services のキーとリージョンを入力してください'); return; }
-    if (!apiKey) { onOpenKeyModal(); return; }
-    fetchUsage();
-    const SpeechSDK = window.SpeechSDK;
-    if (!SpeechSDK) { alert('Azure Speech SDK の読み込みに失敗しました。ページを再読込してください。'); return; }
-
-    // 認識器を生成するヘルパー
-    const createRecognizer = (deviceId) => {
-      const cfg = SpeechSDK.SpeechConfig.fromSubscription(azureKey, azureRegion);
-      cfg.speechRecognitionLanguage = 'ja-JP';
-      const audio = (deviceId && deviceId !== 'default')
-        ? SpeechSDK.AudioConfig.fromMicrophoneInput(deviceId)
-        : SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-      const rec = new SpeechSDK.SpeechRecognizer(cfg, audio);
-      const pl = SpeechSDK.PhraseListGrammar.fromRecognizer(rec);
-      ['PMO','PgMO','ステコミ','IBM','MSOL','KE','KOKUSAI Electric','SAP','S/4HANA',
-       'ERP','CRM','Salesforce','ARAS','PLM','Sfotes','サプライヤーポータル',
-       'スコープ','マイルストーン','ガバナンス','エスカレーション','リスク','課題台帳'
-      ].forEach(t => pl.addPhrase(t));
-      return rec;
-    };
-
-    // 発話をトランスクリプトに追記するハンドラー（ラベル付き）
-    const makeHandlers = (rec, label) => {
-      rec.recognizing = (_, e) => { if(!label) setInterimText(e.result.text); };
-      rec.recognized  = (_, e) => {
-        if (e.result.reason === SpeechSDK.ResultReason.RecognizedSpeech && e.result.text) {
-          const time = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-          const text = label ? `[${label}] ${e.result.text}` : e.result.text;
-          setTranscript(prev => {
-            const next = [...prev, { time, text }];
-            transcriptRef.current = next;
-            return next;
-          });
-          setInterimText('');
-        }
-      };
-      rec.canceled = (_, e) => {
-        if (e.reason === SpeechSDK.CancellationReason.Error) {
-          alert('Azure Speech エラー: ' + e.errorDetails + '\nキーとリージョンを確認してください。');
-          stopRecording();
-        }
-      };
-    };
-
-    try {
-      saveAzureSettings();
-
-      // デバイスIDを解決
-      const vbDevice   = micDevices.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio'));
-      const physDevice = micDevices.find(d => d.label.includes('マイク配列') || d.label.toLowerCase().includes('array'));
-      const vbId   = vbDevice   ? vbDevice.deviceId   : null;
-      const physId = (selectedMicId && selectedMicId !== 'default')
-        ? selectedMicId : (physDevice ? physDevice.deviceId : null);
-
-      if (micMode === 'dual') {
-        // ── デュアルモード：物理マイク＋VB-Cable ──
-        if (!vbId) { alert('VB-Cable（CABLE Output）デバイスが見つかりません。\nデバイスを接続してから再試行してください。'); return; }
-        const rec1 = createRecognizer(physId);
-        const rec2 = createRecognizer(vbId);
-        makeHandlers(rec1, null);
-        makeHandlers(rec2, 'Teams');
-        rec1.startContinuousRecognitionAsync(
-          () => {
-            rec2.startContinuousRecognitionAsync(
-              () => {
-                setIsRecording(true); setShowSettings(false);
-                setAzureStreams(2);
-                recordingStartRef.current = Date.now();
-                azureTimerRef.current = setInterval(() => setAzureRecordingSec(s => s+1), 1000);
-              },
-              (err) => { alert('録音開始エラー（VB-Cable）: ' + err); rec1.stopContinuousRecognitionAsync(); }
-            );
-          },
-          (err) => { alert('録音開始エラー（物理マイク）: ' + err); }
-        );
-        recognizerRef.current  = rec1;
-        recognizerRef2.current = rec2;
-
-      } else if (micMode === 'vbcable') {
-        const rec = createRecognizer(vbId || selectedMicId);
-        makeHandlers(rec, 'Teams');
-        rec.startContinuousRecognitionAsync(
-          () => {
-            setIsRecording(true); setShowSettings(false);
-            setAzureStreams(1);
-            recordingStartRef.current = Date.now();
-            azureTimerRef.current = setInterval(() => setAzureRecordingSec(s => s+1), 1000);
-          },
-          (err) => { alert('録音開始エラー: ' + err); }
-        );
-        recognizerRef.current = rec;
-
-      } else {
-        const rec = createRecognizer(physId);
-        makeHandlers(rec, null);
-        rec.startContinuousRecognitionAsync(
-          () => {
-            setIsRecording(true); setShowSettings(false);
-            setAzureStreams(1);
-            recordingStartRef.current = Date.now();
-            azureTimerRef.current = setInterval(() => setAzureRecordingSec(s => s+1), 1000);
-          },
-          (err) => { alert('録音開始エラー: ' + err); }
-        );
-        recognizerRef.current = rec;
-      }
-
-      timerRef.current = setInterval(() => { runAnalysis(); }, 30000);
-    } catch(e) { alert('エラー: ' + e.message); }
-  };
-
-  const stopRecording = () => {
-    if (recognizerRef.current) {
-      recognizerRef.current.stopContinuousRecognitionAsync();
-      recognizerRef.current = null;
-    }
-    if (recognizerRef2.current) {
-      recognizerRef2.current.stopContinuousRecognitionAsync();
-      recognizerRef2.current = null;
-    }
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    if (azureTimerRef.current) { clearInterval(azureTimerRef.current); azureTimerRef.current = null; }
-    setIsRecording(false);
-    setInterimText('');
-  };
-
-  const runAnalysis = async () => {
-    const lines = transcriptRef.current;
-    if (!lines.length || !apiKey) return;
-    const fullText = lines.map(l => `[${l.time}] ${l.text}`).join('\n');
-    const newText  = lines.slice(analyzedLenRef.current).map(l => `[${l.time}] ${l.text}`).join('\n');
-    if (!newText.trim()) return;
-
-    const refText = refFilesRef.current.length > 0
-      ? refFilesRef.current.map(f => `=== ${f.name} ===\n${f.text}`).join('\n\n')
-      : '';
-    const refUrlText = refUrls.filter(r=>r.url.trim()).length > 0
-      ? refUrls.filter(r=>r.url.trim()).map((r,i)=>`[参考URL ${i+1}${r.label?` (${r.label})`:''}] ${r.url}`).join('\n')
-      : '';
-
-    // 有効カテゴリのJSON出力定義を動的生成
-    const enabledCats = framework.cats.filter(c=>c.enabled);
-    const catJsonDef = enabledCats.map(c =>
-      `  "${c.id}": { "items": ["${c.id}カテゴリの分析結果1", "分析結果2"], "decision_needed": "役員判断要／部門長判断要／PMO完結／不要", "priority": "高／中／低" }`
-    ).join(',\n');
-
-    setIsAnalyzing(true);
-    const analysisTime = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 2000,
-          messages: [{
-            role: 'user',
-            content: `あなたは${framework.companyName}のDXプロジェクト（グローバル経営基盤 将来像実現プロジェクト）のクライアント側PMOアシスタントです。
-ベンダー（IBM・MSOL等）との会議をリアルタイムでモニタリングし、PMO担当者（Masa）が見落としなく適切に判断・指摘できるよう支援します。
-
-【${framework.companyName} DXの目的・文脈】
-${framework.dxGoal}
-
-${briefing ? `【今回の会議ブリーフィング（最優先で意識すること）】\n${briefing}\n` : ''}
-【前回議事録】
-${prevMinutes || '（なし）'}
-${refText ? `\n【参考ファイル】\n${refText}` : ''}
-${refUrlText ? `\n【参考URL】\n${refUrlText}` : ''}
-
-【今回の会議テキスト全体】
-${fullText}
-
-【最新の新規発言（前回分析以降）】
-${newText}
-
-━━ 分析カテゴリと観点 ━━
-${enabledCats.map(c=>`${c.id} ${c.icon} ${c.name}：${c.prompt}`).join('\n')}
-
-以下のJSON形式のみで回答してください（説明文・マークダウン不要）：
-{
-  "summary": "ここまでの会議内容の要約（3〜5行）",
-  "exec_summary": "役員・CIOが知るべきプロジェクト状況（1〜2行・経営者視点）",
-  "categories": {
-${catJsonDef}
-  },
-  "top_questions": ["今すぐ確認すべき最重要質問1", "質問2", "質問3"]
-}`
-          }]
-        })
-      });
-      const data = await res.json();
-      const text = (data.content?.[0]?.text || '').replace(/```json\n?|\n?```/g,'').trim();
-      const thisCost = calcCost(data.usage);
-      try {
-        const parsed = JSON.parse(text);
-        const entry = { ...parsed, _time: analysisTime, _count: analysisCount+1 };
-        setAnalysis(entry);
-        setAnalysisHistory(prev => [entry, ...prev]); // 新しい順（先頭に追加）
-        analyzedLenRef.current = lines.length;
-        setAnalysisCount(c => c + 1);
-        setLiveCostTotal(prev => prev + thisCost);
-        setLiveCostLog(prev => [...prev, {
-          count: prev.length + 1, cost: thisCost,
-          tokens: (data.usage?.input_tokens||0) + (data.usage?.output_tokens||0),
-          inp: data.usage?.input_tokens||0, out: data.usage?.output_tokens||0,
-        }]);
-        if (analysisPanelRef.current) analysisPanelRef.current.scrollTop = 0;
-      } catch(e) { console.error('Parse error:', e, text); }
-    } catch(e) { console.error('Analysis error:', e); }
-    setIsAnalyzing(false);
-  };
-
-  const handleEndMeeting = () => {
-    stopRecording();
-    if (liveCostLog.length > 0) {
-      setShowCostModal(true);
-    } else {
-      const fullText = transcriptRef.current.map(l => `[${l.time}] ${l.text}`).join('\n');
-      onEndMeeting(fullText);
-    }
-  };
-
-  const handleCostModalClose = () => {
-    setShowCostModal(false);
-    const fullText = transcriptRef.current.map(l => `[${l.time}] ${l.text}`).join('\n');
-    onEndMeeting(fullText);
-  };
-
-  const flagClass = (type) => ({
-    '根拠不足': 'ai-flag-root', '矛盾': 'ai-flag-warn',
-    'リスク': 'ai-flag-risk', '課題': 'ai-flag-issue'
-  }[type] || 'ai-flag-warn');
-
-  return (
-    <div className="live-mode-wrap">
-      {/* ヘッダー */}
-      <div className="live-header">
-        <div className={`live-title ${isRecording ? 'recording' : ''}`}>
-          {isRecording ? '🔴' : '⚫'} 会議中モード
-          {isRecording && micMode === 'physical' && <span style={{fontSize:11,marginLeft:6,color:'#90CDF4'}}>🎤 対面</span>}
-          {isRecording && micMode === 'mixed'    && <span style={{fontSize:11,marginLeft:6,color:'#9AE6B4'}}>🎤💻 混在</span>}
-          {isRecording && micMode === 'vbcable'  && <span style={{fontSize:11,marginLeft:6,color:'#FEB2B2'}}>🔁 Teams</span>}
-          {isRecording && micMode === 'dual'     && <span style={{fontSize:11,marginLeft:6,color:'#68d391'}}>🎤🔁 全員</span>}
-          {micMode === 'notta' && <span style={{fontSize:11,marginLeft:6,color:'#F6AD55'}}>👂 聞くだけ</span>}
-        </div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-          {micMode === 'notta' ? (
-            <button className="live-btn live-btn-blue"
-              onClick={()=>window.open('https://app.notta.ai/398793/dashboard', '_blank')}>
-              🔗 Nottaを開く
-            </button>
-          ) : (
-            !isRecording
-              ? <button className="live-btn live-btn-green" onClick={startRecording}>▶ 録音開始</button>
-              : <button className="live-btn live-btn-gray"  onClick={stopRecording}>⏸ 一時停止</button>
-          )}
-          <button className="live-btn live-btn-blue" onClick={runAnalysis} disabled={isAnalyzing || !transcript.length}>
-            {isAnalyzing ? '⏳ 分析中...' : '🤖 今すぐ分析'}
-          </button>
-          <button className="live-btn live-btn-gray" onClick={()=>setShowSettings(s=>!s)}>
-            ⚙️ 設定
-          </button>
-          <button className="live-btn live-btn-dark" onClick={handleEndMeeting}>
-            ✅ 会議終了→議事録作成
-          </button>
-        </div>
-        {isAnalyzing && <span className="analyzing-badge">⏳ AI分析中...</span>}
-        {analysisCount > 0 && !isAnalyzing && <span style={{fontSize:11,color:'#68d391'}}>✓ 分析 {analysisCount}回完了</span>}
-      </div>
-
-      {/* 設定パネル */}
-      {showSettings && (
-        <div className="live-settings">
-          {/* Azure Key / Region ── ロック付き ── */}
-          <div style={{display:'flex',alignItems:'flex-end',gap:8,flexWrap:'wrap'}}>
-            <div className="live-setting-group" style={{minWidth:220}}>
-              <label>🔷 Azure Speech キー</label>
-              {azureKeyLocked ? (
-                <div style={{padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,
-                  fontSize:12,background:'#f8fafc',color:'#718096',letterSpacing:2,
-                  fontFamily:'monospace',userSelect:'none'}}>
-                  {'●'.repeat(Math.min(azureKey.length||20,24))}
-                </div>
-              ) : (
-                <input type="password" value={azureKey} onChange={e=>setAzureKey(e.target.value)} placeholder="Azure Subscription Key"/>
-              )}
-            </div>
-            <div className="live-setting-group" style={{minWidth:120}}>
-              <label>🌏 リージョン</label>
-              {azureKeyLocked ? (
-                <div style={{padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,
-                  fontSize:12,background:'#f8fafc',color:'#555'}}>
-                  {azureRegion}
-                </div>
-              ) : (
-                <input value={azureRegion} onChange={e=>setAzureRegion(e.target.value)} placeholder="japaneast"/>
-              )}
-            </div>
-            {azureKeyLocked ? (
-              <button className="live-btn live-btn-gray"
-                style={{marginBottom:1,whiteSpace:'nowrap',
-                  opacity:isRecording?0.4:1, cursor:isRecording?'not-allowed':'pointer'}}
-                onClick={()=>{ if(!isRecording) setAzureKeyLocked(false); }}
-                title={isRecording ? '録音中は変更できません。一時停止してください' : 'クリックしてキーを編集'}>
-                {isRecording ? '🔒' : '🔐'} 変更
-              </button>
-            ) : (
-              <button className="live-btn live-btn-green"
-                style={{marginBottom:1,whiteSpace:'nowrap'}}
-                onClick={()=>{
-                  localStorage.setItem('azure_speech_key', azureKey);
-                  localStorage.setItem('azure_speech_region', azureRegion);
-                  setAzureKeyLocked(true);
-                }}>
-                🔒 保存してロック
-              </button>
-            )}
-          </div>
-
-          {/* マイク選択 ── カード型ガイド付き */}
-          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:8,minWidth:320,flex:1}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:2}}>🎤 会議形式を選択</div>
-
-            {/* 録音中ロック警告 */}
-            {isRecording && (
-              <div style={{
-                background:'#FFF3CD',border:'1.5px solid #F6AD55',borderRadius:6,
-                padding:'6px 10px',display:'flex',alignItems:'center',gap:8,fontSize:11,color:'#7D4E00'
-              }}>
-                <span style={{fontSize:14}}>🔒</span>
-                <span><strong>録音中は設定変更できません</strong><br/>
-                一時停止してから変更し、録音を再開してください</span>
-              </div>
-            )}
-
-            {/* モード選択ボタン5つ */}
-            <div style={{display:'flex',gap:6,position:'relative',flexWrap:'wrap'}}>
-              {[
-                {id:'physical', icon:'🎤',   label:'対面のみ',    color:'live-btn-blue'},
-                {id:'mixed',    icon:'🎤💻', label:'対面＋Teams', color:'live-btn-blue'},
-                {id:'vbcable',  icon:'🔁',   label:'Teamsのみ',   color:'live-btn-red'},
-                {id:'dual',     icon:'🎤🔁', label:'全員',        color:'live-btn-green'},
-                {id:'notta',    icon:'👂',   label:'聞くだけ',    color:'live-btn-gray'},
-              ].map(m=>(
-                <button key={m.id}
-                  className={`live-btn ${micMode===m.id ? m.color : 'live-btn-gray'}`}
-                  style={{flex:1,flexDirection:'column',gap:1,padding:'6px 4px',fontSize:11,lineHeight:1.4,
-                    minWidth:56,
-                    opacity: isRecording ? 0.45 : 1,
-                    cursor: isRecording ? 'not-allowed' : 'pointer',
-                    ...(micMode===m.id && m.id==='notta' ? {background:'#D69E2E',color:'#fff'} : {})}}
-                  onClick={()=>{ if(!isRecording) handleMicModeChange(m.id); }}
-                  disabled={isRecording}>
-                  <span style={{fontSize:14}}>{m.icon}</span>
-                  <span>{m.label}</span>
-                  {m.id==='dual'  && <span style={{fontSize:9,color:micMode==='dual' ?'rgba(255,255,255,.8)':'#38A169',fontWeight:700}}>推奨</span>}
-                  {m.id==='notta' && <span style={{fontSize:9,color:micMode==='notta'?'rgba(255,255,255,.8)':'#D69E2E',fontWeight:700}}>Notta</span>}
-                </button>
-              ))}
-            </div>
-
-            {/* モード別ガイドカード */}
-            {micMode === 'physical' && (
-              <div style={{border:'1.5px solid #90CDF4',borderRadius:8,overflow:'hidden',fontSize:11}}>
-                <div style={{background:'#2E75B6',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
-                  🎤 対面のみモード
-                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>物理マイク1本</span>
-                </div>
-                <div style={{background:'#EBF3FB',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
-                  <div style={{color:'#1a4a7a'}}>
-                    <span style={{fontWeight:700}}>✅ 文字起こし対象</span><br/>
-                    <span style={{color:'#2c5282'}}>　・自分の声<br/>　・同室の対面参加者全員の声</span>
-                  </div>
-                  <div style={{color:'#742a2a',background:'#FFF5F5',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>❌ 文字起こし不可</span><br/>
-                    <span>　・Teamsリモート参加者の声（スピーカー→マイクの距離で精度低下）</span>
-                  </div>
-                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>⚠️ イヤホン利用時の注意</span><br/>
-                    <span>　PCマイクは引き続き周囲の声を拾います<br/>
-                    　→ <strong>イヤホンマイクではなくPCマイク（内蔵）</strong>が使われていることを確認</span>
-                  </div>
-                  <div style={{color:'#444',marginTop:2}}>
-                    💻 <strong>Windows設定：</strong>出力→スピーカー(Realtek)、マイク→マイク配列(内蔵)
-                  </div>
-                  <div style={{background:'#F7FAFC',border:'1px solid #CBD5E0',borderRadius:4,padding:'5px 8px',marginTop:2}}>
-                    <div style={{fontWeight:700,color:'#2D3748',marginBottom:3}}>🌐 ブラウザ</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:2,color:'#4A5568'}}>
-                      <span>✅ <strong>Chrome</strong>　— 推奨。マイク選択・Azure SDK ともに安定動作</span>
-                      <span>🔺 <strong>Edge</strong>　— 動作可。「音声強調」機能がONだと収音が変質する場合あり<br/>
-                        <span style={{paddingLeft:18,color:'#718096'}}>→ Edge設定 ＞ Cookie/サイトデータ ＞ マイク ＞ 音声処理をOFFに</span>
-                      </span>
-                      <span>❌ <strong>Firefox / Safari</strong>　— Azure Speech SDK 非対応のため使用不可</span>
-                    </div>
-                  </div>
-                  <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px',alignSelf:'flex-start',marginTop:2}}
-                    onClick={()=>openSetupGuide('physical')}>📋 会議前チェックリスト</button>
-                </div>
-              </div>
-            )}
-
-            {micMode === 'mixed' && (
-              <div style={{border:'1.5px solid #9AE6B4',borderRadius:8,overflow:'hidden',fontSize:11}}>
-                <div style={{background:'#276749',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
-                  🎤💻 対面＋Teamsモード
-                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>PCマイク使用</span>
-                </div>
-                <div style={{background:'#F0FFF4',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
-                  <div style={{color:'#1B4332'}}>
-                    <span style={{fontWeight:700}}>✅ 文字起こし対象</span><br/>
-                    <span style={{color:'#1B5E20'}}>
-                      　・同室の対面参加者の声<br/>
-                      　・Teams参加者の声（スピーカーから拾う）
-                    </span>
-                  </div>
-                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>⚠️ イヤホン利用時は使用不可</span><br/>
-                    <span>　イヤホンをするとTeams音声がマイクに入らなくなります<br/>
-                    　→ <strong>スピーカー出力にして音量を上げて</strong>ください<br/>
-                    　→ Teams参加者の声が大きいほど文字起こし精度が向上します</span>
-                  </div>
-                  <div style={{color:'#742a2a',background:'#FFF5F5',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>❌ 精度が下がるケース</span><br/>
-                    <span>　・スピーカー音量が小さい場合<br/>
-                    　・PCマイクとスピーカーが遠い場合（ハウリング注意）</span>
-                  </div>
-                  <div style={{color:'#444',marginTop:2}}>
-                    💻 <strong>Windows設定：</strong>出力→スピーカー(Realtek)、マイク→マイク配列(内蔵)
-                  </div>
-                  <div style={{background:'#F7FAFC',border:'1px solid #CBD5E0',borderRadius:4,padding:'5px 8px',marginTop:2}}>
-                    <div style={{fontWeight:700,color:'#2D3748',marginBottom:3}}>🌐 ブラウザ</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:2,color:'#4A5568'}}>
-                      <span>✅ <strong>Chrome</strong>　— 推奨。スピーカーの音をマイクが拾う構成で安定動作</span>
-                      <span>🔺 <strong>Edge</strong>　— 動作可だが「音声強調」がONだと外部音声をノイズとして除去する場合あり<br/>
-                        <span style={{paddingLeft:18,color:'#718096'}}>→ Teams参加者の声が文字起こしされない場合はEdge音声処理をOFFに</span>
-                      </span>
-                      <span>❌ <strong>Firefox / Safari</strong>　— 使用不可</span>
-                    </div>
-                  </div>
-                  <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px',alignSelf:'flex-start',marginTop:2}}
-                    onClick={()=>openSetupGuide('mixed')}>📋 会議前チェックリスト</button>
-                </div>
-              </div>
-            )}
-
-            {micMode === 'vbcable' && (
-              <div style={{border:'1.5px solid #FEB2B2',borderRadius:8,overflow:'hidden',fontSize:11}}>
-                <div style={{background:'#C53030',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
-                  🔁 Teamsのみモード（VB-Cable）
-                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>仮想ケーブル使用</span>
-                </div>
-                <div style={{background:'#FFF5F5',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
-                  <div style={{color:'#742a2a'}}>
-                    <span style={{fontWeight:700}}>✅ 文字起こし対象</span><br/>
-                    <span style={{color:'#822727'}}>　・Teamsのすべての参加者の声（クリアに取得）</span>
-                  </div>
-                  <div style={{color:'#276749',background:'#F0FFF4',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>✅ イヤホン利用OK</span><br/>
-                    <span>　VB-CableはPCマイクを使わず仮想ケーブルで音声を取得します<br/>
-                    　→ <strong>イヤホンをしたまま</strong>でTeams音声だけを文字起こしできます</span>
-                  </div>
-                  <div style={{color:'#744210',background:'#FFF3CD',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>❌ 文字起こし不可</span><br/>
-                    <span>　・<strong>同室の対面参加者の声</strong>（PCマイクを使わないため）<br/>
-                    　・自分自身の声</span>
-                  </div>
-                  <div style={{color:'#444',marginTop:2}}>
-                    💻 <strong>Windows設定：</strong>出力→CABLE Input、Teamsスピーカー→CABLE Input
-                  </div>
-                  <div style={{background:'#F7FAFC',border:'1px solid #CBD5E0',borderRadius:4,padding:'5px 8px',marginTop:2}}>
-                    <div style={{fontWeight:700,color:'#2D3748',marginBottom:3}}>🌐 ブラウザ</div>
-                    <div style={{display:'flex',flexDirection:'column',gap:2,color:'#4A5568'}}>
-                      <span>✅ <strong>Chrome</strong>　— 推奨。CABLE Output（仮想デバイス）をマイクとして確実に認識</span>
-                      <span>⚠️ <strong>Edge</strong>　— <strong>仮想デバイスが選択肢に出ないケースあり</strong><br/>
-                        <span style={{paddingLeft:18,color:'#718096'}}>→ edge://flags/ で「Experimental Web Platform features」をEnableにすると改善する場合あり</span><br/>
-                        <span style={{paddingLeft:18,color:'#718096'}}>→ 解決しない場合はChromeに切り替えてください</span>
-                      </span>
-                      <span>❌ <strong>Firefox / Safari</strong>　— 使用不可</span>
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:6,alignItems:'center',marginTop:4,flexWrap:'wrap'}}>
-                    <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px'}}
-                      onClick={()=>openSetupGuide('vbcable')}>
-                      📋 {vbSetupDone ? '会議前チェックリスト' : '初回セットアップ＋チェックリスト'}
-                    </button>
-                    {vbSetupDone && <span style={{fontSize:10,color:'#38A169'}}>✓ 初回設定済み</span>}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Nottaモード ガイドカード */}
-            {micMode === 'notta' && (
-              <div style={{border:'1.5px solid #F6AD55',borderRadius:8,overflow:'hidden',fontSize:11}}>
-                <div style={{background:'#D69E2E',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
-                  👂 聞くだけモード（Notta連携）
-                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 8px',fontSize:10}}>Azure録音なし</span>
-                </div>
-                <div style={{background:'#FFFBEB',padding:'8px 10px',display:'flex',flexDirection:'column',gap:5}}>
-                  <div style={{color:'#744210'}}>
-                    <span style={{fontWeight:700}}>✅ このモードでできること</span><br/>
-                    <span>　・Nottaで会議を録音・文字起こし（Notta側で操作）<br/>
-                    　・文字起こし結果をこのアプリに貼り付けてAI分析<br/>
-                    　・Azureの料金は一切発生しない</span>
-                  </div>
-                  <div style={{color:'#276749',background:'#F0FFF4',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>📋 使い方</span><br/>
-                    <span>
-                      ① 上の「🔗 Nottaを開く」で別タブを起動<br/>
-                      ② Notta側で録音開始（手動）<br/>
-                      ③ 会議終了後、NottaのテキストをコピーしてAI分析パネルに貼り付け<br/>
-                      ④「🤖 今すぐ分析」で解析
-                    </span>
-                  </div>
-                  <div style={{color:'#742a2a',background:'#FFF5F5',borderRadius:4,padding:'4px 8px'}}>
-                    <span style={{fontWeight:700}}>❌ できないこと</span><br/>
-                    <span>　・このアプリからNottaの録音を自動制御することはできません<br/>
-                    　・リアルタイムAI分析はAzure録音時のみ動作します</span>
-                  </div>
-                  <div style={{color:'#444',marginTop:2}}>
-                    💡 <strong>Nottaとは：</strong>AI文字起こしサービス。
-                  </div>
-                  <div style={{display:'flex',gap:6,marginTop:2,flexWrap:'wrap'}}>
-                    <button className="live-btn live-btn-blue" style={{fontSize:11,padding:'5px 14px'}}
-                      onClick={()=>window.open('https://app.notta.ai/398793/dashboard','_blank')}>
-                      🔗 Nottaを開く（別タブ）
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* デバイス詳細選択（任意）– Nottaモードでは非表示 */}
-            {micDevices.length > 0 && micMode !== 'notta' && (
-              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,opacity:isRecording?0.45:1}}>
-                <span style={{fontSize:10,color:'#718096',whiteSpace:'nowrap'}}>デバイス指定：</span>
-                <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:11,fontFamily:'inherit',
-                  cursor:isRecording?'not-allowed':'pointer'}}
-                  value={selectedMicId} onChange={e=>{ if(!isRecording) setSelectedMicId(e.target.value); }}
-                  disabled={isRecording}>
-                  <option value="default">デフォルト（モードに従う）</option>
-                  {micDevices.map(d=>(
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `マイク ${d.deviceId.slice(0,8)}`}
-                      {(d.label.toLowerCase().includes('cable')||d.label.toLowerCase().includes('vb')) ? ' 🔁' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* 会議ブリーフィング */}
-          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6,minWidth:240,flex:1}}>
-            <div style={{display:'flex',alignItems:'center',gap:6,justifyContent:'space-between'}}>
-              <div style={{fontSize:11,fontWeight:700,color:'#444',display:'flex',alignItems:'center',gap:4}}>
-                📋 会議ブリーフィング
-                {briefing.trim() && <span style={{background:'#38A169',color:'#fff',borderRadius:8,padding:'1px 6px',fontSize:9,fontWeight:700}}>設定済</span>}
-              </div>
-              <div style={{display:'flex',gap:4}}>
-                <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px'}}
-                  onClick={()=>setShowBriefingMgr(true)} title="テンプレート管理">⚙️ 管理</button>
-                <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px'}}
-                  onClick={()=>setShowBriefing(s=>!s)}>
-                  {showBriefing ? '▲ 閉じる' : '▼ 編集'}
-                </button>
-              </div>
-            </div>
-
-            <div style={{fontSize:10,color:'#718096',lineHeight:1.4}}>
-              AI分析がこの内容を優先的に意識します。<span style={{color:'#E53E3E',fontWeight:600}}>起動のたびにリセット</span>されます。
-            </div>
-
-            {/* テンプレートプルダウン */}
-            {briefingTemplates.length > 0 && (
-              <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <select
-                  value={selectedTmplIdx}
-                  onChange={e=>applyTemplate(e.target.value)}
-                  disabled={isRecording}
-                  style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:11,
-                    fontFamily:'inherit',background:'#fff',cursor:isRecording?'not-allowed':'pointer',
-                    opacity:isRecording?0.5:1}}>
-                  <option value="">── テンプレートから選択 ──</option>
-                  {briefingTemplates.map((t,i)=>(
-                    <option key={i} value={i}>{t.name}</option>
-                  ))}
-                </select>
-                {selectedTmplIdx !== '' && (
-                  <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px',flexShrink:0}}
-                    onClick={()=>{setSelectedTmplIdx('');setBriefing('');}}>✕ 解除</button>
-                )}
-              </div>
-            )}
-            {briefingTemplates.length === 0 && !showBriefing && (
-              <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 8px',alignSelf:'flex-start'}}
-                onClick={()=>setShowBriefingMgr(true)}>＋ テンプレートを登録する</button>
-            )}
-
-            {/* 折りたたみプレビュー */}
-            {!showBriefing && briefing.trim() && (
-              <div style={{fontSize:11,color:'#2D6A4F',background:'#F0FFF4',border:'1px solid #9AE6B4',
-                borderRadius:4,padding:'5px 8px',whiteSpace:'pre-wrap',lineHeight:1.5,maxHeight:56,overflow:'hidden'}}>
-                {briefing.slice(0,120)}{briefing.length>120?'…':''}
-              </div>
-            )}
-            {!showBriefing && !briefing.trim() && (
-              <div style={{fontSize:10,color:'#a0aec0'}}>未設定 — テンプレートか手入力で指定してください（空の場合はAIが自律判断）</div>
-            )}
-
-            {/* テキストエリア（展開時） */}
-            {showBriefing && (
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                <textarea
-                  value={briefing}
-                  onChange={e=>{setBriefing(e.target.value); setSelectedTmplIdx('');}}
-                  disabled={isRecording}
-                  placeholder={`例：\n・今日はサプライヤーポータルRFP最終提案の評価会議\n・SoftesのGDPR対応と価格根拠を必ず確認すること\n・前回宿題への回答を全件チェック\n・次回ステコミ報告事項を漏れなく抽出すること\n（空欄のままにするとAIが自律的に判断します）`}
-                  style={{
-                    width:'100%',minHeight:100,padding:'7px 10px',
-                    border:`1.5px solid ${briefing.trim()?'#9AE6B4':'#d0d8e4'}`,
-                    borderRadius:6,fontSize:11,fontFamily:'Meiryo UI,Meiryo,sans-serif',
-                    resize:'vertical',lineHeight:1.6,
-                    background:isRecording?'#f8fafc':briefing.trim()?'#F0FFF4':'#fafbfc',
-                    color:isRecording?'#999':'#1B4332',
-                    cursor:isRecording?'not-allowed':'text'
-                  }}/>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                  <div style={{fontSize:10,color:isRecording?'#e53e3e':'#38A169'}}>
-                    {isRecording ? '🔒 録音中は編集できません' : '✅ 毎回リセット（保存は「管理」からテンプレート登録）'}
-                  </div>
-                  {briefing.trim() && (
-                    <div style={{display:'flex',gap:4}}>
-                      <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px'}}
-                        onClick={()=>{
-                          const blob = new Blob([briefing], {type:'text/plain;charset=utf-8'});
-                          const url = URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          const ts = new Date().toISOString().slice(0,16).replace('T','_').replace(':','');
-                          a.href = url; a.download = `briefing_${ts}.txt`; a.click();
-                          URL.revokeObjectURL(url);
-                        }}>📥 テキスト出力</button>
-                      <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'2px 8px'}}
-                        onClick={()=>{setBriefing('');setSelectedTmplIdx('');}}>🗑 クリア</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {showBriefingMgr && (
-            <BriefingManagerModal
-              templates={briefingTemplates}
-              onSave={saveBriefingTemplates}
-              onClose={()=>setShowBriefingMgr(false)}/>
-          )}
-
-          {/* ── 参考資料パネル（前回議事録・参考ファイル・参考URL 統合） ── */}
-          <div style={{borderLeft:'1px solid #e2e8f0',paddingLeft:12,display:'flex',flexDirection:'column',gap:6,minWidth:260,flex:1}}>
-            <div style={{fontSize:11,fontWeight:700,color:'#444',marginBottom:2}}>
-              📚 参考資料
-              <span style={{fontSize:9,color:'#718096',fontWeight:400,marginLeft:6}}>優先度順にAIへ提供されます</span>
-            </div>
-
-            {/* ① 前回議事録 */}
-            <div style={{border:'1.5px solid #d0d8e4',borderRadius:6,overflow:'hidden',background:'#fafbfc'}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'#f0f4f8',borderBottom:'1px solid #e2e8f0'}}>
-                <span style={{fontSize:10,fontWeight:700,color:'#2E75B6',minWidth:16}}>①</span>
-                <span style={{fontSize:10,fontWeight:700,color:'#444',flex:1}}>📄 前回議事録</span>
-                <span style={{fontSize:9,color:'#a0aec0'}}>最高優先度</span>
-              </div>
-              <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:4}}>
-                {prevLoaded ? (
-                  <div style={{display:'flex',alignItems:'center',gap:6,background:'#E8F5E9',border:'1px solid #A5D6A7',borderRadius:4,padding:'3px 8px',fontSize:11}}>
-                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1B5E20'}}>✅ {prevFileName}</span>
-                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:13}} onClick={()=>{setPrevMinutes('');setPrevLoaded(false);setPrevFileName('');}}>×</button>
-                  </div>
-                ) : (
-                  <label style={{cursor:'pointer'}}>
-                    <input type="file" accept=".txt,.docx,.doc" style={{display:'none'}} onChange={e=>loadPrevMinutesFromFile(e.target.files[0])}/>
-                    <div style={{border:'1.5px dashed #a0aec0',borderRadius:5,padding:'5px 10px',textAlign:'center',fontSize:11,color:'#2E75B6',background:'#fff',cursor:'pointer'}}>
-                      📂 ファイルを選択（.txt / .docx）
-                    </div>
-                  </label>
-                )}
-              </div>
-            </div>
-
-            {/* ② 参考ファイル */}
-            <div style={{border:'1.5px solid #d0d8e4',borderRadius:6,overflow:'hidden',background:'#fafbfc'}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'#f0f4f8',borderBottom:'1px solid #e2e8f0'}}>
-                <span style={{fontSize:10,fontWeight:700,color:'#2E75B6',minWidth:16}}>②</span>
-                <span style={{fontSize:10,fontWeight:700,color:'#444',flex:1}}>📎 参考ファイル</span>
-                <label style={{cursor:'pointer',fontSize:9,color:'#2E75B6',fontWeight:600,background:'#EBF3FB',border:'1px solid #bee3f8',borderRadius:4,padding:'1px 6px'}}>
-                  ＋追加
-                  <input type="file" multiple accept=".txt,.docx,.doc" style={{display:'none'}} onChange={e=>handleRefFileAdd(e.target.files)}/>
-                </label>
-              </div>
-              <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:3,maxHeight:100,overflowY:'auto'}}>
-                {refFiles.length === 0 && <div style={{fontSize:10,color:'#a0aec0'}}>ファイルなし</div>}
-                {refFiles.map((f,i)=>(
-                  <div key={f.name} style={{display:'flex',alignItems:'center',gap:4,fontSize:10,background:'#EBF3FB',border:'1px solid #bee3f8',borderRadius:3,padding:'2px 6px'}}>
-                    <span style={{color:'#718096',minWidth:14}}>{i+1}.</span>
-                    <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:'#1a4a7a'}}>📄 {f.name}</span>
-                    <span style={{color:'#a0aec0',fontSize:9,flexShrink:0}}>{f.text.length}字</span>
-                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:12,padding:'0 1px'}} onClick={()=>removeRefFile(f.name)}>×</button>
-                  </div>
-                ))}
-                {refFiles.length > 1 && (
-                  <button className="live-btn live-btn-gray" style={{fontSize:9,padding:'1px 6px',alignSelf:'flex-start'}} onClick={()=>setRefFiles([])}>すべて削除</button>
-                )}
-              </div>
-            </div>
-
-            {/* ③ 参考URL */}
-            <div style={{border:'1.5px solid #d0d8e4',borderRadius:6,overflow:'hidden',background:'#fafbfc'}}>
-              <div style={{display:'flex',alignItems:'center',gap:6,padding:'4px 8px',background:'#f0f4f8',borderBottom:'1px solid #e2e8f0'}}>
-                <span style={{fontSize:10,fontWeight:700,color:'#2E75B6',minWidth:16}}>③</span>
-                <span style={{fontSize:10,fontWeight:700,color:'#444',flex:1}}>🔗 参考URL <span style={{fontSize:9,color:'#a0aec0',fontWeight:400}}>最大5件</span></span>
-                {refUrls.length < 5 && (
-                  <button className="live-btn live-btn-gray" style={{fontSize:9,padding:'1px 6px'}} onClick={addRefUrl}>＋追加</button>
-                )}
-              </div>
-              <div style={{padding:'6px 8px',display:'flex',flexDirection:'column',gap:4}}>
-                {refUrls.length === 0 && <div style={{fontSize:10,color:'#a0aec0'}}>URLなし — ＋追加で登録（最大5件）</div>}
-                {refUrls.map((r,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:4,background:'#fff',border:'1px solid #e2e8f0',borderRadius:4,padding:'3px 6px'}}>
-                    <div style={{display:'flex',flexDirection:'column',gap:1,flexShrink:0}}>
-                      <button style={{background:'none',border:'none',cursor:'pointer',color:'#a0aec0',fontSize:10,lineHeight:1,padding:'1px'}} onClick={()=>moveRefUrl(i,-1)} disabled={i===0}>▲</button>
-                      <span style={{fontSize:9,color:'#2E75B6',fontWeight:700,textAlign:'center'}}>{i+1}</span>
-                      <button style={{background:'none',border:'none',cursor:'pointer',color:'#a0aec0',fontSize:10,lineHeight:1,padding:'1px'}} onClick={()=>moveRefUrl(i,1)} disabled={i===refUrls.length-1}>▼</button>
-                    </div>
-                    <div style={{flex:1,display:'flex',flexDirection:'column',gap:2,minWidth:0}}>
-                      <input value={r.label} onChange={e=>updateRefUrl(i,'label',e.target.value)}
-                        placeholder="ラベル（例：課題台帳、仕様書）"
-                        style={{width:'100%',border:'none',borderBottom:'1px solid #e2e8f0',fontSize:10,fontFamily:'inherit',outline:'none',background:'transparent',padding:'1px 2px',color:'#444'}}/>
-                      <input value={r.url} onChange={e=>updateRefUrl(i,'url',e.target.value)}
-                        placeholder="https://..."
-                        style={{width:'100%',border:'none',borderBottom:'1px solid #e2e8f0',fontSize:10,fontFamily:'inherit',outline:'none',background:'transparent',padding:'1px 2px',color:'#2E75B6'}}/>
-                    </div>
-                    <button style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:13,flexShrink:0}} onClick={()=>removeRefUrl(i)}>×</button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* メインパネル */}
-      <div className="live-panels">
-        {/* 左：文字起こし */}
-        <div className="live-panel">
-          <div className="live-panel-header" style={{background: micMode==='notta' ? '#B7791F' : '#2D3748'}}>
-            {micMode==='notta' ? '👂 Notta 文字起こし貼り付け' : '📝 リアルタイム文字起こし'}
-            <span style={{marginLeft:'auto',fontSize:10,color:'#a0aec0',display:'flex',gap:8,alignItems:'center'}}>
-              {transcript.length > 0 && <span>🔼 新しい順</span>}
-              <span>{transcript.length}行</span>
-            </span>
-          </div>
-          <div className="live-panel-body" ref={transcriptBodyRef}>
-            {/* Nottaモード：貼り付けエリア */}
-            {micMode === 'notta' && transcript.length === 0 && (
-              <div style={{padding:12,display:'flex',flexDirection:'column',gap:8}}>
-                <div style={{fontSize:12,color:'#744210',background:'#FFFBEB',border:'1px solid #F6AD55',
-                  borderRadius:6,padding:'8px 12px',lineHeight:1.6}}>
-                  <strong>① Nottaで文字起こしを完了させてください</strong><br/>
-                  ② Nottaのテキストをコピーして下の欄に貼り付け<br/>
-                  ③「✅ 適用してAI分析」ボタンを押してください
-                </div>
-                <textarea
-                  placeholder="ここにNottaの文字起こしテキストを貼り付けてください..."
-                  style={{width:'100%',minHeight:200,padding:'9px 12px',border:'1.5px solid #F6AD55',
-                    borderRadius:6,fontSize:12,fontFamily:'Meiryo UI,Meiryo,sans-serif',
-                    resize:'vertical',lineHeight:1.7,background:'#FFFBEB'}}
-                  onChange={e=>{
-                    const lines = e.target.value.split('\n').filter(l=>l.trim()).map(l=>({time:'--:--:--',text:l.trim()}));
-                    setTranscript(lines);
-                    transcriptRef.current = lines;
-                  }}
-                />
-                <button className="live-btn live-btn-blue" style={{fontSize:12,padding:'7px 20px',alignSelf:'flex-start'}}
-                  onClick={()=>{ if(transcript.length>0) runAnalysis(); else alert('テキストを貼り付けてください'); }}>
-                  ✅ 適用してAI分析
-                </button>
-              </div>
-            )}
-            {/* 通常モード or Notta貼り付け後 */}
-            {(micMode !== 'notta' || transcript.length > 0) && (
-              <>
-                {transcript.length === 0 && !interimText && (
-                  <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13}}>
-                    {isRecording ? '音声を待機中...' : '「録音開始」ボタンで開始します'}
-                  </div>
-                )}
-                {/* 最新が上：interim → transcript逆順 */}
-                {interimText && (
-                  <div className="live-interim">
-                    <span className="live-transcript-time">...</span>
-                    {interimText}
-                  </div>
-                )}
-                {[...transcript].reverse().map((line, i) => {
-                  // AI分析で「注意すべき発言」に含まれるテキストを赤くハイライト
-                  const flagged = analysisHistory.length > 0 && analysisHistory[0].categories &&
-                    Object.values(analysisHistory[0].categories).some(cat =>
-                      cat.items && cat.items.some(item =>
-                        item.length > 6 && line.text.includes(item.slice(0,10))
-                      )
-                    );
-                  // フラグがついた発言かどうか（top_questionsのキーワードも含む）
-                  const questioned = analysisHistory.length > 0 &&
-                    analysisHistory[0].top_questions &&
-                    analysisHistory[0].top_questions.some(q =>
-                      q.length > 6 && line.text.includes(q.slice(0,8))
-                    );
-                  const isAlert = flagged || questioned;
-                  return (
-                    <div key={i} className="live-transcript-line"
-                      style={isAlert ? {
-                        background:'#FFF5F5',
-                        borderLeft:'3px solid #E53E3E',
-                        paddingLeft:8,
-                      } : {}}>
-                      <span className="live-transcript-time" style={isAlert?{color:'#E53E3E'}:{}}>{line.time}</span>
-                      <span style={isAlert?{color:'#C53030',fontWeight:600}:{}}>{line.text}</span>
-                      {isAlert && <span style={{marginLeft:6,fontSize:10,color:'#E53E3E',flexShrink:0}}>⚠️</span>}
-                    </div>
-                  );
-                })}
-                {micMode === 'notta' && transcript.length > 0 && (
-                  <div style={{padding:'8px 12px',borderTop:'1px solid #e2e8f0',marginTop:8}}>
-                    <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px'}}
-                      onClick={()=>{setTranscript([]);transcriptRef.current=[];}}>
-                      🗑 クリアして再貼り付け
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* 右：AIアシスト */}
-        <div className="live-panel">
-          <div className="live-panel-header" style={{background:'#1F3864',flexWrap:'wrap',gap:4}}>
-            <span>🤖 AIアシストパネル</span>
-            <span style={{fontSize:10,color:'#a0b4cc',marginLeft:4}}>
-              {analysisHistory.length > 0 ? `${analysisHistory.length}回分の履歴` : '分析待ち'}
-            </span>
-            <span style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
-              {analysis && <span style={{fontSize:10,color:'#68d391'}}>最終: {analysis._time}</span>}
-              {analysisHistory.length > 0 && (
-                <button className="usage-btn" style={{fontSize:10,color:'rgba(252,129,129,.8)'}}
-                  onClick={()=>{ if(window.confirm('分析履歴を全件クリアしますか？')) { setAnalysisHistory([]); setAnalysis(null); } }}>
-                  🗑 クリア
-                </button>
-              )}
-              <button className="usage-btn" style={{fontSize:10}} onClick={()=>setShowFwModal(true)} title="分析フレームワーク設定">
-                ⚙️ 設定
-              </button>
-            </span>
-          </div>
-          <div className="live-panel-body" ref={analysisPanelRef} style={{padding:0}}>
-            {analysisHistory.length === 0 && (
-              <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13,padding:16}}>
-                会議開始後30秒で自動分析されます<br/>
-                <span style={{fontSize:11}}>または「今すぐ分析」ボタンを押してください</span>
-              </div>
-            )}
-
-            {/* 全履歴を新しい順で表示（各エントリは折りたたみ可能） */}
-            {analysisHistory.map((entry, ei) => (
-              <AnalysisEntry key={ei} entry={entry} ei={ei} total={analysisHistory.length} framework={framework}
-                onDelete={()=>setAnalysisHistory(prev=>prev.filter((_,i)=>i!==ei))}/>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* フレームワーク設定モーダル */}
-      {showFwModal && (
-        <FrameworkModal fw={framework} onSave={saveFw} onClose={()=>setShowFwModal(false)} defaultFw={DEFAULT_FW}/>
-      )}
-
-      {/* 統合セットアップガイドモーダル */}
-      {showSetupModal && (() => {
-        const steps = setupSteps[setupMode] || [];
-        const currentStep = steps[setupStep] || {};
-        const isLast = setupStep === steps.length - 1;
-        const color = modeColors[setupMode] || '#1F3864';
-        return (
-          <div className="modal-overlay" style={{zIndex:2000}}>
-            <div className="modal" style={{maxWidth:540,width:'95%'}}>
-              {/* ヘッダー */}
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                <div style={{fontWeight:700,fontSize:15,color}}>
-                  {modeLabels[setupMode]} — 会議前チェックリスト
-                </div>
-                <button style={{background:'none',border:'none',fontSize:18,cursor:'pointer',color:'#888'}}
-                  onClick={()=>setShowSetupModal(false)}>✕</button>
-              </div>
-
-              {/* ステップインジケーター */}
-              <div style={{display:'flex',gap:3,marginBottom:14}}>
-                {steps.map((s,i)=>(
-                  <div key={i} style={{flex:1,height:6,borderRadius:3,
-                    background: setupStep>i ? color : setupStep===i ? color+'99' : '#e2e8f0',
-                    transition:'.2s'}}/>
-                ))}
-              </div>
-              <div style={{fontSize:11,color:'#888',marginBottom:12}}>
-                ステップ {setupStep+1} / {steps.length}：{currentStep.title}
-              </div>
-
-              {/* 現在のステップ内容 */}
-              <div className={`notice notice-${currentStep.noticeType||'info'}`} style={{marginBottom:12}}>
-                <span dangerouslySetInnerHTML={{__html: currentStep.notice||''}}/>
-              </div>
-
-              <div style={{background:'#f8fafc',borderRadius:8,padding:12,marginBottom:16,fontSize:13,lineHeight:1.9}}>
-                {(currentStep.steps||[]).map((s,i)=>(
-                  <div key={i} style={{display:'flex',gap:8,alignItems:'flex-start'}}>
-                    <span style={{minWidth:20,fontWeight:700,color}}>{i+1}.</span>
-                    <span dangerouslySetInnerHTML={{__html:s}}/>
-                  </div>
-                ))}
-              </div>
-
-              {/* ナビゲーション */}
-              <div style={{display:'flex',gap:8,justifyContent:'space-between',alignItems:'center'}}>
-                <div style={{display:'flex',gap:8}}>
-                  {setupStep > 0 && (
-                    <button className="live-btn live-btn-gray" style={{fontSize:12}}
-                      onClick={()=>setSetupStep(s=>s-1)}>← 戻る</button>
-                  )}
-                  {currentStep.skip && (
-                    <button className="live-btn live-btn-gray" style={{fontSize:12}}
-                      onClick={()=>setSetupStep(s=>s+1)}>{currentStep.skip} →</button>
-                  )}
-                </div>
-                {!isLast ? (
-                  <button className="live-btn live-btn-blue" style={{fontSize:13}}
-                    onClick={()=>setSetupStep(s=>s+1)}>✅ 完了 → 次へ</button>
-                ) : (
-                  <button className="live-btn live-btn-green" style={{fontSize:13}}
-                    onClick={()=>{
-                      if(setupMode==='vbcable') completeVbSetup();
-                      else setShowSetupModal(false);
-                    }}>
-                    🎉 チェック完了！録音を開始する
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* コスト確認モーダル（会議終了時ポップアップ） */}
-      {showCostModal && (
-        <div className="cost-modal-overlay" onClick={()=>setShowCostModal(false)}>
-          <div className="cost-modal" style={{maxHeight:'85vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
-              <div className="cost-modal-title" style={{margin:0}}>💰 今回の会議　コスト集計</div>
-              <button onClick={()=>setShowCostModal(false)}
-                style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#888',lineHeight:1}}>✕</button>
-            </div>
-
-            {/* Claude API */}
-            <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:4,marginTop:4}}>🤖 Claude API（AI分析）</div>
-            <div className="cost-row"><span>分析回数</span><span>{liveCostLog.length} 回</span></div>
-            {/* 最新5件のみ表示、残りは折りたたみ */}
-            {liveCostLog.slice(-5).map((l,i) => (
-              <div key={i} className="cost-row" style={{fontSize:12,color:'#555'}}>
-                <span>分析 {l.count} 回目</span>
-                <span>{formatCost(l.cost)}<span style={{color:'#a0aec0',fontSize:11,marginLeft:6}}>{l.tokens.toLocaleString()} tokens</span></span>
-              </div>
-            ))}
-            {liveCostLog.length > 5 && (
-              <div style={{fontSize:11,color:'#a0aec0',textAlign:'center',padding:'2px 0'}}>… 他 {liveCostLog.length-5} 回分省略</div>
-            )}
-            <div className="cost-row" style={{fontWeight:700}}>
-              <span>Claude 小計</span><span>{formatCost(liveCostTotal)}</span>
-            </div>
-            <div className="cost-note" style={{marginBottom:8}}>
-              Claude Sonnet 4: 入力 $3/MTok・出力 $15/MTok｜
-              <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{color:'#2E75B6'}}>Anthropicコンソール →</a>
-            </div>
-
-            {/* Azure Speech */}
-            <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:4,borderTop:'1px solid #eee',paddingTop:8}}>🎤 Azure Speech（文字起こし）</div>
-            <div className="cost-row"><span>録音時間</span><span>{formatAzureSec(azureRecordingSec)}</span></div>
-            <div className="cost-row"><span>ストリーム数</span><span>{azureStreams}本{azureStreams===2?' （デュアルモード）':''}</span></div>
-            <div className="cost-row" style={{fontWeight:700}}>
-              <span>Azure 小計</span>
-              <span>{formatAzureCost(azureCostTotal)}
-                <span style={{color:'#a0aec0',fontSize:11,marginLeft:6}}>({azureRecordingSec * azureStreams}秒 × $1/時間)</span>
-              </span>
-            </div>
-            <div className="cost-note" style={{marginBottom:8}}>
-              Azure Speech STT: $1.00/時間｜無料枠: 5時間/月｜
-              <a href="https://portal.azure.com" target="_blank" rel="noreferrer" style={{color:'#2E75B6'}}>Azureポータル →</a>
-            </div>
-
-            {/* 合計 */}
-            <div className="cost-total">
-              <span>今回の合計</span>
-              <span>{formatCost(liveCostTotal + azureCostTotal)}</span>
-            </div>
-
-            <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'space-between',alignItems:'center'}}>
-              <button className="live-btn live-btn-gray" onClick={()=>setShowCostModal(false)}>
-                閉じる
-              </button>
-              <button className="live-btn live-btn-green" onClick={handleCostModalClose}>
-                ✅ 議事録作成へ進む
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Usage Bar（下部統合パネル） */}
-      <div className="usage-bar">
-        {/* Claude AI分析コスト */}
-        <div className="usage-seg">
-          <span className="usage-label">Claude</span>
-          <span className={`usage-val ${liveCostTotal === 0 ? '' : liveCostTotal < 0.05 ? 'green' : liveCostTotal < 0.2 ? 'amber' : 'red'}`}>
-            {liveCostLog.length === 0 ? '—' : formatCost(liveCostTotal)}
-          </span>
-          {liveCostLog.length > 0 && <span className="usage-sub">{liveCostLog.length}回</span>}
-        </div>
-
-        {/* Azure Speech コスト */}
-        <div className="usage-seg">
-          <span className="usage-label">Azure STT</span>
-          <span className={`usage-val ${azureRecordingSec === 0 ? '' : azureCostTotal < 0.02 ? 'green' : azureCostTotal < 0.08 ? 'amber' : 'red'}`}>
-            {azureRecordingSec === 0 ? '—' : formatAzureCost(azureCostTotal)}
-          </span>
-          {azureRecordingSec > 0 && <span className="usage-sub">{formatAzureSec(azureRecordingSec)}{azureStreams===2?' ×2':''}</span>}
-        </div>
-
-        {/* 今日の消費（Admin API） */}
-        <div className="usage-seg">
-          <span className="usage-label">今日</span>
-          {orgUsageLoading
-            ? <span className="usage-spin"/>
-            : orgUsageError
-              ? <span className="usage-sub" style={{color:'rgba(252,129,129,.7)'}}>{orgUsageError}</span>
-              : orgUsage
-                ? <><span className="usage-val amber">{formatCost(orgUsage.todayCost ?? 0)}</span>
-                    <span className="usage-sub">{orgUsage.fetchedAt.toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}時点</span></>
-                : <span className="usage-sub">—</span>
-          }
-        </div>
-
-        {/* 今月の消費（Admin API） */}
-        <div className="usage-seg">
-          <span className="usage-label">今月</span>
-          {orgUsageLoading
-            ? <span className="usage-spin"/>
-            : orgUsage
-              ? <span className="usage-val" style={{color:'rgba(255,255,255,.6)'}}>{formatCost(orgUsage.monthCost ?? 0)}</span>
-              : <span className="usage-sub">—</span>
-          }
-        </div>
-
-        {/* 更新ボタン */}
-        <div className="usage-seg">
-          <button
-            className="usage-btn"
-            onClick={fetchUsage}
-            disabled={orgUsageLoading || !adminKey}
-            title={!adminKey ? 'Admin APIキーを設定してください' : '利用コストを再取得'}
-          >
-            {orgUsageLoading ? '取得中...' : '↻ 更新'}
-          </button>
-          {!adminKey && <span className="usage-sub" style={{marginLeft:4}}>Adminキー未設定</span>}
-        </div>
-
-        {/* 今回合計 */}
-        {(liveCostLog.length > 0 || azureRecordingSec > 0) && (
-          <div className="usage-seg" style={{marginLeft:'auto',borderRight:'none'}}>
-            <span className="usage-label">合計</span>
-            <span className="usage-val" style={{color:'rgba(255,255,255,.9)',fontWeight:700}}>
-              {formatCost(liveCostTotal + azureCostTotal)}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Main App ──────────────────────────────────────────────
-// ── ヘッダー設定メニュー ─────────────────────────────────────
-function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, appMode }) {
+function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
   React.useEffect(() => {
@@ -4985,18 +3266,14 @@ function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, appMode }) 
             <span>{apiKey ? 'APIキー設定済み' : 'APIキーを設定'}</span>
             {apiKey && <span style={{marginLeft:'auto',fontSize:9,color:'#38A169',fontWeight:700}}>✓</span>}
           </button>
-          {appMode === 'post' && (<>
-            <div className="header-gear-sep"/>
-            <div className="header-gear-label">マスター管理</div>
-            <button className="header-gear-item" onClick={()=>click(onOpenPerson)}>
-              <span style={{fontSize:14}}>👥</span>
-              <span>出席者マスター</span>
-            </button>
-            <button className="header-gear-item" onClick={()=>click(onOpenDomain)}>
-              <span style={{fontSize:14}}>🌐</span>
-              <span>ドメイン設定</span>
-            </button>
-          </>)}
+          <div className="header-gear-sep"/>
+          <div className="header-gear-label">マスター管理</div>
+          <button className="header-gear-item" onClick={()=>click(onOpenPerson)}>
+            <span style={{fontSize:14}}>👥</span><span>出席者マスター</span>
+          </button>
+          <button className="header-gear-item" onClick={()=>click(onOpenDomain)}>
+            <span style={{fontSize:14}}>🌐</span><span>ドメイン設定</span>
+          </button>
         </div>
       )}
     </div>
@@ -5004,104 +3281,105 @@ function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, appMode }) 
 }
 
 function App(){
-  const [appMode, setAppMode] = useState('post'); // 'live' | 'post'
-  const [step,setStep]=useState(1);
-  const [maxReached,setMaxReached]=useState(1);
+  const [apiKey,setApiKey]=useState(()=>localStorage.getItem('claude_api_key')||'');
+  const [adminKey,setAdminKey]=useState(()=>localStorage.getItem('claude_admin_api_key')||'');
   const [showKeyModal,setShowKeyModal]=useState(false);
   const [showPersonMaster,setShowPersonMaster]=useState(false);
   const [showDomainMaster,setShowDomainMaster]=useState(false);
-  const [apiKey,setApiKey]=useState(()=>localStorage.getItem('claude_api_key')||'');
-  const [adminKey,setAdminKey]=useState(()=>localStorage.getItem('claude_admin_api_key')||'');
-  const [basicInfo,setBasicInfo]=useState({
-    meetingName:'', meetingNo:'', date:todayStr(),
-    startTime:'10:00', endTime:'11:00',
-    location:'KE（本社）応接室x、オンライン（Teams）',
-    author:'安田 真和',
-    attendees: [],
-    materials:[{name:'',url:''}]
-  });
+  const [step,setStep]=useState(1);
+  const [maxReached,setMaxReached]=useState(1);
+  const [basicInfo,setBasicInfo]=useState({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'',attendees:[],materials:[{name:'',url:''}]});
   const [transcript,setTranscript]=useState('');
   const [docxTemplateFile,setDocxTemplateFile]=useState(null);
   const [xlsxTemplateFile,setXlsxTemplateFile]=useState(null);
   const [xlsxDataFile,setXlsxDataFile]=useState(null);
+  const [result,setResult]=useState(null);
   const [analyzing,setAnalyzing]=useState(false);
   const [logs,setLogs]=useState([]);
   const [error,setError]=useState('');
-  const [result,setResult]=useState(null);
   const [docVersion,setDocVersion]=useState(1);
 
-  const saveApiKey=(key)=>{setApiKey(key);localStorage.setItem('claude_api_key',key);setShowKeyModal(false);};
-  const saveAdminKey=(key)=>{setAdminKey(key);if(key)localStorage.setItem('claude_admin_api_key',key);else localStorage.removeItem('claude_admin_api_key');};
-  const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));};
+  // 会議中ツールからの引き渡しチェック
+  const [liveHandoff]=useState(()=>{
+    const t=localStorage.getItem('pmo_live_transcript');
+    const ts=localStorage.getItem('pmo_live_timestamp');
+    if(t&&ts){
+      localStorage.removeItem('pmo_live_transcript');
+      localStorage.removeItem('pmo_live_timestamp');
+      return {transcript:t,timestamp:ts};
+    }
+    return null;
+  });
 
-  // 会議中モード終了 → 議事録作成モードへ
-  const handleEndLiveMeeting = (liveTranscript) => {
-    setTranscript(liveTranscript);
-    setAppMode('post');
-    setStep(1);
-    setMaxReached(1);
+  useEffect(()=>{
+    if(liveHandoff){
+      setTranscript(liveHandoff.transcript);
+      setStep(2);setMaxReached(2);
+    }
+    const params=new URLSearchParams(window.location.search);
+    if(params.get('from')==='live'){
+      window.history.replaceState({},'',window.location.pathname);
+    }
+  },[]);
+
+  const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));};
+  const saveApiKey=(key,admin)=>{
+    setApiKey(key);localStorage.setItem('claude_api_key',key);
+    if(admin!==undefined){setAdminKey(admin);localStorage.setItem('claude_admin_api_key',admin);}
+    setShowKeyModal(false);
   };
+  const addLog=(msg)=>setLogs(p=>[...p,msg]);
 
   const handleAnalyze=async()=>{
-    if(!apiKey){setShowKeyModal(true);return;}
-    setAnalyzing(true);setError('');setLogs([]);
-    const addLog=(l)=>setLogs(p=>[...p,l]);
+    setAnalyzing(true);setLogs([]);setError('');
+    if(!apiKey){setShowKeyModal(true);setAnalyzing(false);return;}
     try{
-      // 既存ファイルからデータを事前読み込み
-      let existingData = {};
-      const srcFile = xlsxDataFile || xlsxTemplateFile;
-      if (srcFile) {
-        addLog('📊 既存台帳を読み込み中...');
-        try {
-          const ab = await srcFile.arrayBuffer();
-          const wbOld = new ExcelJS.Workbook();
-          await wbOld.xlsx.load(ab);
-          wbOld.eachSheet((ws) => {
-            const rows = [];
-            let headerRow = null;
-            let headers = [];
-            ws.eachRow({ includeEmpty: false }, (row, rowNum) => {
-              const colCount = row.cellCount || 30;
-              const toStr = (v) => {
-                if (v === null || v === undefined) return '';
-                if (typeof v === 'object' && v !== null) {
-                  if (v instanceof Date) { const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0'); return `${y}/${m}/${d}`; }
-                  if (v.richText) return v.richText.map(r=>r.text||'').join('');
-                  if (v.result !== undefined) return toStr(v.result);
-                  if (v.text !== undefined) return String(v.text);
-                  if (v.value !== undefined) return String(v.value);
-                  if (v.error !== undefined) return '';
-                  return '';
+      addLog('🔍 解析を開始します...');
+      let existingData={};
+      if(xlsxDataFile){
+        addLog('📊 既存台帳データを読み込み中...');
+        try{
+          const ExcelJS=window.ExcelJS;
+          const buf=await xlsxDataFile.arrayBuffer();
+          const wb=new ExcelJS.Workbook();
+          await wb.xlsx.load(buf);
+          wb.eachSheet(ws=>{
+            const rows=[];let headerRow=null,headers=[];
+            const colCount=ws.columnCount||20;
+            ws.eachRow({includeEmpty:false},(row,rowNum)=>{
+              const toStr=(v)=>{
+                if(v===null||v===undefined)return'';
+                if(typeof v==='object'){
+                  if(v.richText)return v.richText.map(r=>r.text||'').join('');
+                  if(v.result!==undefined)return String(v.result||'');
+                  if(v.formula)return'';
+                  if(v.text)return v.text;
+                  if(v.value!==undefined)return String(v.value);
+                  if(v.error!==undefined)return'';
+                  return'';
                 }
-                if (typeof v === 'number' && v > 40000 && v < 60000) { const dt=new Date(Math.round((v-25569)*86400*1000)); return `${dt.getUTCFullYear()}/${String(dt.getUTCMonth()+1).padStart(2,'0')}/${String(dt.getUTCDate()).padStart(2,'0')}`; }
+                if(typeof v==='number'&&v>40000&&v<60000){const dt=new Date(Math.round((v-25569)*86400*1000));return dt.getUTCFullYear()+'/'+String(dt.getUTCMonth()+1).padStart(2,'0')+'/'+String(dt.getUTCDate()).padStart(2,'0');}
                 return String(v);
               };
-              const getV = (ci) => { const c = row.getCell(ci); return c ? c.value : null; };
-              if (!headerRow) {
-                const vals = Array.from({length: colCount}, (_, i) => toStr(getV(i+1)));
-                if (vals.some(v => v.includes('No.'))) {
-                  headerRow = rowNum;
-                  headers = vals.map(v => v.replace(/\n/g,''));
-                }
-              } else {
-                const rowObj = {};
-                headers.forEach((h, i) => { rowObj[h] = toStr(getV(i+1)); });
-                const noVal = rowObj['No.'] || rowObj['No'];
-                if (noVal && noVal !== '例' && rowObj['行種別'] !== 'progress') {
-                  rows.push(rowObj);
-                }
+              const getV=(ci)=>{const c=row.getCell(ci);return c?c.value:null;};
+              if(!headerRow){
+                const vals=Array.from({length:colCount},(_,i)=>toStr(getV(i+1)));
+                if(vals.some(v=>v.includes('No.'))){headerRow=rowNum;headers=vals.map(v=>v.replace(/\n/g,''));}
+              }else{
+                const rowObj={};
+                headers.forEach((h,i)=>{rowObj[h]=toStr(getV(i+1));});
+                const noVal=rowObj['No.']||rowObj['No'];
+                if(noVal&&noVal!=='例'&&rowObj['行種別']!=='progress')rows.push(rowObj);
               }
             });
-            if (rows.length > 0) existingData[ws.name] = rows;
+            if(rows.length>0)existingData[ws.name]=rows;
           });
-          addLog(`📋 既存データ読み込み完了（${Object.keys(existingData).join('、')}）`);
-        } catch(e) { addLog('⚠️ 既存ファイル読み込みエラー（無視して続行）'); }
+          addLog('📋 既存データ読み込み完了（'+Object.keys(existingData).join('、')+'）');
+        }catch(e){addLog('⚠️ 既存ファイル読み込みエラー（無視して続行）');}
       }
       const r=await callClaude(apiKey,basicInfo,transcript,addLog,existingData);
       addLog('📊 データを整理・照合中...');
-      if(r._cost !== undefined){
-        addLog(`💰 APIコスト: ${formatCost(r._cost)}（${formatTokens(r._usage)}）`);
-      }
+      if(r._cost!==undefined)addLog('💰 APIコスト: '+formatCost(r._cost)+'（'+formatTokens(r._usage)+'）');
       setResult({...EMPTY,...r,_existingData:existingData});
       goTo(4);
     }catch(e){setError(e.message);}
@@ -5109,80 +3387,48 @@ function App(){
   };
 
   return(
-    <div className={appMode === 'live' ? 'live-mode-wrap' : 'app-wrap'} style={appMode === 'live' ? {maxWidth:'none',padding:0} : {}}>
-      {/* ヘッダー（常時表示） */}
-      <div className={appMode === 'live' ? '' : 'app-wrap'} style={appMode === 'live' ? {padding:'0 16px'} : {padding:0}}>
-      <div className="app-header" style={appMode==='live'?{borderRadius:'10px 10px 0 0',marginBottom:0}:{}}>
-
-        {/* 左：タイトル */}
-        <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0,flex:'0 0 auto'}}>
+    <div className="app-wrap">
+      <div className="app-header">
+        <div style={{display:'flex',alignItems:'center',gap:12,flex:'0 0 auto'}}>
           <div style={{width:36,height:36,borderRadius:8,background:'rgba(255,255,255,.12)',
-            display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>
-            📋
-          </div>
-          <div style={{minWidth:0}}>
-            <div className="app-title" style={{fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:180}}>
-              {appMode === 'live' ? '会議中モード' : '会議議事録・管理台帳'}
-            </div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1,letterSpacing:.3}}>
-              自動生成ツール　<span style={{color:'#50697A'}}>v35</span>
-            </div>
+            display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#4A5568'}}>v1.0</span></div>
           </div>
         </div>
-
-        {/* 中央：モード切り替え */}
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
-          <div className="mode-toggle">
-            <button className={`mode-btn ${appMode==='post'?'active':''}`}
-              onClick={()=>setAppMode('post')}>
-              📄 会議後
-            </button>
-            <button className={`mode-btn ${appMode==='live'?'live-active':''}`}
-              onClick={()=>setAppMode('live')}>
-              🔴 会議中
-            </button>
-          </div>
+          <a href="./live/" style={{background:'rgba(229,62,62,.2)',border:'1px solid rgba(229,62,62,.35)',
+            color:'rgba(255,255,255,.85)',borderRadius:8,padding:'7px 16px',fontSize:11,
+            textDecoration:'none',fontFamily:'Meiryo UI,Meiryo,sans-serif',fontWeight:600,
+            display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap'}}>
+            🔴 会議中支援ツールへ
+          </a>
         </div>
-
-        {/* 右：設定メニュー（ギアボタン） */}
-        <HeaderMenu
-          apiKey={apiKey}
-          onOpenKey={()=>setShowKeyModal(true)}
-          onOpenPerson={()=>setShowPersonMaster(true)}
-          onOpenDomain={()=>setShowDomainMaster(true)}
-          appMode={appMode}
-        />
-
-      </div>
+        <HeaderMenu apiKey={apiKey} onOpenKey={()=>setShowKeyModal(true)}
+          onOpenPerson={()=>setShowPersonMaster(true)} onOpenDomain={()=>setShowDomainMaster(true)}/>
       </div>
 
-      {/* 会議中モード */}
-      {appMode === 'live' && (
-        <LiveMeetingMode
-          apiKey={apiKey}
-          onEndMeeting={handleEndLiveMeeting}
-          onOpenKeyModal={()=>setShowKeyModal(true)}
-        />
-      )}
-
-      {/* 会議後モード（既存Step1〜5） */}
-      {appMode === 'post' && (<div className="app-wrap" style={{paddingTop:0}}>
       <StepIndicator step={step} setStep={setStep} maxReached={maxReached} hasResult={!!result}/>
-      {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)} onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
+      {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}
+        onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
         docxTemplateFile={docxTemplateFile} setDocxTemplateFile={setDocxTemplateFile}
         xlsxTemplateFile={xlsxTemplateFile} setXlsxTemplateFile={setXlsxTemplateFile}
         xlsxDataFile={xlsxDataFile} setXlsxDataFile={setXlsxDataFile}
+        liveHandoff={liveHandoff}
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
       {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
-      {step===4&&(result ? <Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)} onReanalyze={()=>{goTo(3);handleAnalyze();}}/> : <div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
-      {step===5&&(result ? <Step5 basicInfo={basicInfo} result={result}
-        docxTemplateFile={docxTemplateFile}
-        xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
-        onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/> : <div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
-      </div>)}
+      {step===4&&(result
+        ?<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)} onReanalyze={()=>{goTo(3);handleAnalyze();}}/>
+        :<div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
+      {step===5&&(result
+        ?<Step5 basicInfo={basicInfo} result={result} docxTemplateFile={docxTemplateFile}
+          xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
+          onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>
+        :<div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
 
-      {showKeyModal&&<ApiKeyModal current={apiKey} onSave={saveApiKey} onClose={()=>setShowKeyModal(false)} currentAdmin={adminKey} onSaveAdmin={saveAdminKey}/>}
+      {showKeyModal&&<ApiKeyModal current={apiKey} onSave={(k)=>saveApiKey(k,adminKey)} onClose={()=>setShowKeyModal(false)} currentAdmin={adminKey} onSaveAdmin={(a)=>saveApiKey(apiKey,a)}/>}
       {showPersonMaster&&<PersonMasterModal onClose={()=>setShowPersonMaster(false)}/>}
       {showDomainMaster&&<DomainMasterModal onClose={()=>setShowDomainMaster(false)} icsRaws={basicInfo._icsRaws||[]}/>}
     </div>
@@ -5191,6 +3437,10 @@ function App(){
 
 const root=ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
+
 </script>
+</head>
+<body>
+<div id="root"></div>
 </body>
 </html>
