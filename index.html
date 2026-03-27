@@ -1685,12 +1685,13 @@ function MaterialsInput({ value, onChange }){
                 const icon = ext==='pdf'?'📕':ext.startsWith('doc')?'📘':ext.startsWith('xls')?'📗':ext.startsWith('ppt')?'📙':'📄';
                 return(
                   <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'7px 10px',
+                    width:'100%',boxSizing:'border-box',
                     border:'1px solid #e2e8f0',borderRadius:6,cursor:'pointer',background:alreadyAdded?'#E8F5E9':'#fff',
                     transition:'.1s'}}>
                     <input type="checkbox" defaultChecked={alreadyAdded}
-                      onChange={e=>pickFile(f, e.target.checked)} style={{cursor:'pointer'}}/>
-                    <span style={{fontSize:16}}>{icon}</span>
-                    <span style={{flex:1,fontSize:12,color:'#333',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      onChange={e=>pickFile(f, e.target.checked)} style={{cursor:'pointer',flexShrink:0}}/>
+                    <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
+                    <span style={{flex:1,minWidth:0,fontSize:12,color:'#333',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       {f.name}
                     </span>
                     {alreadyAdded && <span style={{fontSize:10,color:'#38A169',flexShrink:0}}>✅ 追加済</span>}
@@ -2911,37 +2912,6 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
   const [importSource,setImportSource]=useState(liveHandoff?'live':'');
   const loadTxt=(file)=>{const r=new FileReader();r.onload=e=>{setTranscript(e.target.result);setImportSource('file');};r.readAsText(file,'UTF-8');};
 
-  // 文字起こしから話者名を抽出し、出席者リストにない話者を検出
-  const unknownSpeakers = React.useMemo(() => {
-    if (!transcript) return [];
-    // 既知の名前リストを構築（出席者の名前を分割・正規化）
-    const knownNames = [];
-    (attendees||[]).forEach(org => {
-      (Array.isArray(org.names)?org.names:[]).forEach(n => {
-        if (n) knownNames.push(n.trim());
-      });
-    });
-    // 話者パターン：行頭の「名前:」または「名前：」
-    const speakerRe = /^([^:\uff1a\n]{1,20})[\uff1a:]/gm;
-    const foundSpeakers = new Set();
-    let m;
-    while ((m = speakerRe.exec(transcript)) !== null) {
-      const sp = m[1].trim();
-      if (sp && !/^\s*$/.test(sp) && !/^[\d\-\[\(（【]/.test(sp)) {
-        foundSpeakers.add(sp);
-      }
-    }
-    // knownNamesに含まれない話者を抽出
-    const unknown = [...foundSpeakers].filter(sp => {
-      return !knownNames.some(kn =>
-        kn === sp || kn.includes(sp) || sp.includes(kn) ||
-        // 姓のみ一致でもOK
-        (kn.length >= 2 && sp.length >= 2 && (kn.startsWith(sp) || sp.startsWith(kn)))
-      );
-    });
-    return unknown;
-  }, [transcript, attendees]);
-
   const sources=[
     {id:'live',  icon:'🔴', label:'会議中ツール',     desc:'自動引き渡し'},
     {id:'file',  icon:'📄', label:'テキストファイル',  desc:'.txt'},
@@ -3013,23 +2983,6 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
           {transcript && (
             <div style={{fontSize:11,color:'#38A169',marginTop:4}}>
               ✅ {transcript.length.toLocaleString()}文字 読み込み済み
-            </div>
-          )}
-          {transcript && unknownSpeakers.length > 0 && (
-            <div style={{marginTop:8,padding:'10px 14px',background:'#FFF5F5',border:'1.5px solid #FC8181',borderRadius:8}}>
-              <div style={{fontSize:12,fontWeight:700,color:'#C53030',marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
-                ⚠️ 出席者リストにいない話者が検出されました
-              </div>
-              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {unknownSpeakers.map((sp,i)=>(
-                  <span key={i} style={{background:'#FED7D7',color:'#C53030',padding:'3px 10px',borderRadius:12,fontSize:12,fontWeight:700,border:'1px solid #FC8181'}}>
-                    {sp}
-                  </span>
-                ))}
-              </div>
-              <div style={{fontSize:11,color:'#718096',marginTop:6}}>
-                Step 1の出席者に追加するか、文字起こしの話者名を修正してください。
-              </div>
             </div>
           )}
         </div>
@@ -3237,10 +3190,39 @@ function MinutesEditor({data,setData}){
 }
 
 // ── Step 4 ─────────────────────────────────────────────────
-function Step4({result,setResult,onNext,onBack,onReanalyze}){
+function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}){
   const [tab,setTab]=useState('minutes');
   const [hasEdits,setHasEdits]=useState(false);
+  const [showSpeakerCheck,setShowSpeakerCheck]=useState(false);
+  const [unknownSpeakers,setUnknownSpeakers]=useState(null); // null=未実行, []=結果
   const upd=(key,val)=>{setHasEdits(true);setResult(p=>({...p,[key]:val}));};
+
+  // 話者チェック実行
+  const runSpeakerCheck = () => {
+    const knownNames = [];
+    (attendees||[]).forEach(org => {
+      (Array.isArray(org.names)?org.names:[]).forEach(n => {
+        if (n) knownNames.push(n.trim());
+      });
+    });
+    const speakerRe = /^([^:\uff1a\n]{1,20})[\uff1a:]/gm;
+    const foundSpeakers = new Set();
+    let m;
+    while ((m = speakerRe.exec(transcript||'')) !== null) {
+      const sp = m[1].trim();
+      if (sp && !/^\s*$/.test(sp) && !/^[\d\-\[\(（【]/.test(sp)) {
+        foundSpeakers.add(sp);
+      }
+    }
+    const unknown = [...foundSpeakers].filter(sp =>
+      !knownNames.some(kn =>
+        kn===sp || kn.includes(sp) || sp.includes(kn) ||
+        (kn.length>=2 && sp.length>=2 && (kn.startsWith(sp)||sp.startsWith(kn)))
+      )
+    );
+    setUnknownSpeakers(unknown);
+    setShowSpeakerCheck(true);
+  };
   const handleBack=()=>{
     if(hasEdits){
       if(!window.confirm('編集内容が失われる可能性があります。Step3（AI解析）に戻りますか？')) return;
@@ -3265,7 +3247,43 @@ function Step4({result,setResult,onNext,onBack,onReanalyze}){
   return(
     <div className="card">
       <div className="card-title">📄 Step 4 ― プレビュー・編集</div>
-      <div className="notice notice-info" style={{marginBottom:12}}>各タブで内容を確認・編集できます。重要度・優先度はAIが自動判定しましたが、必要に応じて修正してください。</div>
+      <div className="notice notice-info" style={{marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
+        <span>各タブで内容を確認・編集できます。重要度・優先度はAIが自動判定しましたが、必要に応じて修正してください。</span>
+        <button className="btn-form-sub" onClick={runSpeakerCheck} style={{flexShrink:0,gap:5}}>
+          👤 話者チェック
+        </button>
+      </div>
+
+      {/* 話者チェック結果モーダル */}
+      {showSpeakerCheck && (
+        <div className="modal-overlay" onClick={()=>setShowSpeakerCheck(false)}>
+          <div className="modal" style={{maxWidth:500}} onClick={e=>e.stopPropagation()}>
+            <div className="modal-title">👤 話者チェック結果</div>
+            {unknownSpeakers && unknownSpeakers.length === 0 ? (
+              <div className="notice notice-ok" style={{marginBottom:12}}>
+                ✅ 全ての話者が出席者リストと一致しています。
+              </div>
+            ) : (
+              <>
+                <div style={{fontSize:12,color:'#666',marginBottom:10}}>
+                  以下の話者名が出席者リストに見当たりません。<br/>
+                  Step 1で追加するか、文字起こしの話者名を修正してください。
+                </div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
+                  {(unknownSpeakers||[]).map((sp,i)=>(
+                    <span key={i} style={{background:'#FED7D7',color:'#C53030',padding:'4px 12px',borderRadius:14,fontSize:12,fontWeight:700,border:'1px solid #FC8181'}}>
+                      {sp}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+            <div style={{display:'flex',justifyContent:'flex-end'}}>
+              <button className="btn btn-primary" onClick={()=>setShowSpeakerCheck(false)}>閉じる</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="tabs">{tabs.map(t=><div key={t.id} className={`tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>{t.label}</div>)}</div>
       <div className="tab-content">
         {tab==='minutes'&&<MinutesEditor data={result.minutes_by_agenda} setData={v=>upd('minutes_by_agenda',v)}/>}
@@ -3553,7 +3571,8 @@ function App(){
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
       {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
       {step===4&&(result
-        ?<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)} onReanalyze={()=>{goTo(3);handleAnalyze();}}/>
+        ?<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)} onReanalyze={()=>{goTo(3);handleAnalyze();}}
+          transcript={transcript} attendees={basicInfo.attendees||[]}/>
         :<div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
       {step===5&&(result
         ?<Step5 basicInfo={basicInfo} result={result} docxTemplateFile={docxTemplateFile}
