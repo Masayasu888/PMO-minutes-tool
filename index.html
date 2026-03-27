@@ -295,17 +295,20 @@ function generateDocx(basicInfo, result){
     const shade = opts.shade ? `<w:shd w:val="clear" w:color="auto" w:fill="${opts.shade}"/>` : '';
     const span  = opts.span  ? `<w:gridSpan w:val="${opts.span}"/>` : '';
     const vA    = `<w:vAlign w:val="center"/>`;
-    // ヘッダーセルの罫線：全辺を明示指定（未指定だとWordがnilと解釈し左・上・右が消える）
-    // bottom のみ白線（セル間区切り）、他は黒線でテーブル罫線と同一
-    const tcBdr = opts.shade === HDR
-      ? `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>`
-      : '';
+    // ヘッダーセルの罫線：全辺を明示指定
+    // span セルも insideV を nil で明示（Word が phantom 縦線を描くのを防ぐ）
+    let tcBdr = '';
+    if (opts.shade === HDR) {
+      tcBdr = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="nil"/></w:tcBorders>`;
+    } else if (opts.span) {
+      tcBdr = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="nil"/></w:tcBorders>`;
+    }
     const mar   = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
     const wElem = w ? `<w:tcW w:w="${w}" w:type="dxa"/>` : '';
     const isHdr = opts.shade === HDR;
     const txtColor = isHdr ? 'FFFFFF' : (opts.textColor || '000000');
     const bold = isHdr ? '<w:b/><w:bCs/>' : (opts.bold ? '<w:b/><w:bCs/>' : '');
-    const sz = 22; // テンプレート実測値 sz=22（11pt）統一
+    const sz = 22;
     const jc = opts.center ? '<w:jc w:val="center"/>' : '';
     const lines = String(text||'').split('\n');
     const parasXml = lines.map(line =>
@@ -350,7 +353,9 @@ ${(()=>{
     const mats=Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name):[];
     if(!mats.length) return row(1021,cell('【配布資料/投影資料】\n・なし',W,{span:4}));
     const matParas=mats.map(m=>{
-      if(m.url){
+      // blob: URL はローカルのみ有効なためWordにリンクは埋め込まない（テキストのみ）
+      const isBlob = m.url && m.url.startsWith('blob:');
+      if(m.url && !isBlob){
         const rId='rMat'+materialRels.length;
         materialRels.push({id:rId,url:m.url});
         return '<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>'
@@ -362,7 +367,7 @@ ${(()=>{
       return '<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">・'+esc(m.name)+'</w:t></w:r></w:p>';
     }).join('');
     const hdr='<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>'+FONT+'<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t>【配布資料/投影資料】</w:t></w:r></w:p>';
-    const bdr='<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>';
+    const bdr='<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="nil"/></w:tcBorders>';
     const mar='<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
     return '<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="'+W+'" w:type="dxa"/><w:gridSpan w:val="4"/>'+bdr+'<w:vAlign w:val="center"/>'+mar+'</w:tcPr>'+hdr+matParas+'</w:tc></w:tr>';
   })()}
@@ -1585,42 +1590,46 @@ function MaterialsInput({ value, onChange }){
   };
 
   // ファイルを選択して追加
+  const [dupWarning, setDupWarning] = useState([]); // 重複ファイル名リスト
+
   const pickFile = async (fileInfo, checked) => {
     if(!checked) return;
+    // 重複チェック（既存の名前付きアイテムと一致する場合は警告して取り込まない）
+    const already = items.some(it => it.name === fileInfo.name && it.name);
+    if(already){
+      setDupWarning([fileInfo.name]);
+      return;
+    }
     try {
-      // webkitdirectory 方式（fileInfo.file）と旧 handle 方式の両対応
       const file = fileInfo.file
         ? fileInfo.file
         : await fileInfo.handle.getFile();
       const blobUrl = URL.createObjectURL(file);
       const newItem = { name: fileInfo.name, url: blobUrl, blobUrl, isLocal:true };
-      // 既に同名がある場合は更新
-      const existIdx = items.findIndex(it=>it.name === fileInfo.name);
-      if(existIdx >= 0) {
-        if(items[existIdx].blobUrl) URL.revokeObjectURL(items[existIdx].blobUrl);
-        setItems(items.map((it,i)=>i===existIdx ? newItem : it));
+      const emptyIdx = items.findIndex(it=>!it.name && !it.url);
+      if(emptyIdx >= 0) {
+        setItems(items.map((it,i)=>i===emptyIdx ? newItem : it));
       } else {
-        // 空行があれば置き換え、なければ追加
-        const emptyIdx = items.findIndex(it=>!it.name && !it.url);
-        if(emptyIdx >= 0) {
-          setItems(items.map((it,i)=>i===emptyIdx ? newItem : it));
-        } else {
-          setItems([...items, newItem]);
-        }
+        setItems([...items, newItem]);
       }
     } catch(e) { alert('ファイル読み込みエラー: ' + e.message); }
   };
 
-  // フォルダ選択でファイルを一括追加
+  // フォルダ選択・直接選択でファイルを一括追加
   const addFromFileInput = (files) => {
     const newItems = [...items];
+    const dups = [];
     Array.from(files).forEach(file => {
+      // 重複チェック
+      const already = newItems.some(it => it.name === file.name && it.name);
+      if(already){ dups.push(file.name); return; }
       const blobUrl = URL.createObjectURL(file);
       const newItem = { name: file.name, url: blobUrl, blobUrl, isLocal:true };
       const emptyIdx = newItems.findIndex(it=>!it.name && !it.url);
       if(emptyIdx >= 0) newItems[emptyIdx] = newItem;
       else newItems.push(newItem);
     });
+    if(dups.length > 0) setDupWarning(dups);
     setItems(newItems);
   };
 
@@ -1646,6 +1655,27 @@ function MaterialsInput({ value, onChange }){
           <button className="material-del" onClick={()=>del(i)}>🗑</button>
         </div>
       ))}
+
+      {/* 重複ファイル警告 */}
+      {dupWarning.length > 0 && (
+        <div style={{margin:'6px 0',padding:'8px 12px',background:'#FFFBEB',border:'1.5px solid #F6AD55',borderRadius:6,display:'flex',alignItems:'flex-start',gap:8}}>
+          <span style={{fontSize:15,flexShrink:0}}>⚠️</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#744210',marginBottom:3}}>
+              以下のファイルは既に追加済みのため取り込みをスキップしました
+            </div>
+            <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+              {dupWarning.map((n,i)=>(
+                <span key={i} style={{background:'#FEEBC8',color:'#744210',padding:'2px 8px',borderRadius:10,fontSize:11,fontWeight:600,border:'1px solid #F6AD55'}}>
+                  {n}
+                </span>
+              ))}
+            </div>
+          </div>
+          <button onClick={()=>setDupWarning([])}
+            style={{background:'none',border:'none',cursor:'pointer',color:'#a0aec0',fontSize:16,lineHeight:1,flexShrink:0,padding:'0 2px'}}>✕</button>
+        </div>
+      )}
 
       {/* アクションボタン行 */}
       <div style={{display:'flex',gap:6,marginTop:4,flexWrap:'wrap'}}>
@@ -3045,7 +3075,13 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
 }
 
 // ── Step 3 ─────────────────────────────────────────────────
-function Step3({onAnalyze,onBack,analyzing,logs,error}){
+function Step3({onAnalyze,onBack,analyzing,logs,error,validation}){
+  // Step1・Step2の未入力項目を集約
+  const warnings = [
+    ...((validation&&validation[1]&&!validation[1].ok) ? validation[1].warnings.map(w=>'Step 1：'+w) : []),
+    ...((validation&&validation[2]&&!validation[2].ok) ? validation[2].warnings.map(w=>'Step 2：'+w) : []),
+  ];
+  const hasWarnings = warnings.length > 0;
   return(
     <div className="card" style={{borderTop:'3px solid #38A169'}}>
       {/* ヘッダー：独立アクションであることを強調 */}
@@ -3081,9 +3117,23 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
           </div>
           <div className="btn-row" style={{marginTop:20}}>
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-            <button className="btn" onClick={onAnalyze}
-              style={{background:'linear-gradient(135deg,#38A169,#276749)',color:'#fff',
-                boxShadow:'0 2px 10px rgba(56,161,105,.35)',fontSize:15,padding:'10px 32px'}}>
+            {hasWarnings && (
+              <div style={{flex:1,padding:'10px 14px',background:'#FFF5F5',border:'1.5px solid #FC8181',borderRadius:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#C53030',marginBottom:5}}>⚠️ 以下の必須項目を入力してください</div>
+                {warnings.map((w,i)=>(
+                  <div key={i} style={{fontSize:12,color:'#C53030',lineHeight:1.8}}>・{w}</div>
+                ))}
+              </div>
+            )}
+            <button className="btn" onClick={onAnalyze} disabled={hasWarnings}
+              style={{background: hasWarnings
+                ? '#a0aec0'
+                :'linear-gradient(135deg,#38A169,#276749)',
+                color:'#fff',
+                boxShadow: hasWarnings ? 'none' : '0 2px 10px rgba(56,161,105,.35)',
+                fontSize:15,padding:'10px 32px',
+                cursor: hasWarnings ? 'not-allowed' : 'pointer',
+                opacity: hasWarnings ? 0.7 : 1}}>
               ⚡ AI解析を実行
             </button>
           </div>
@@ -3140,9 +3190,18 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
             }
             return <div className="notice notice-warn">❌ {error}</div>;
           })()}
-          <div className="btn-row">
+          <div className="btn-row" style={{flexWrap:'wrap',gap:8}}>
             <button className="btn btn-gray" onClick={onBack}>← 戻る</button>
-            <button className="btn btn-green" onClick={onAnalyze}>⚡ 再試行</button>
+            {hasWarnings && (
+              <div style={{flex:'1 1 100%',padding:'8px 12px',background:'#FFF5F5',border:'1.5px solid #FC8181',borderRadius:8}}>
+                <div style={{fontSize:12,fontWeight:700,color:'#C53030',marginBottom:4}}>⚠️ 以下の必須項目を入力してください</div>
+                {warnings.map((w,i)=><div key={i} style={{fontSize:12,color:'#C53030',lineHeight:1.8}}>・{w}</div>)}
+              </div>
+            )}
+            <button className="btn btn-green" onClick={onAnalyze} disabled={hasWarnings}
+              style={{opacity:hasWarnings?0.5:1,cursor:hasWarnings?'not-allowed':'pointer'}}>
+              ⚡ 再試行
+            </button>
           </div>
         </div>
       )}
@@ -3477,7 +3536,7 @@ function App(){
     }
   },[]);
 
-  const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));};
+  const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));if(n===3)setError('');};
   const saveApiKey=(key,admin)=>{
     setApiKey(key);localStorage.setItem('claude_api_key',key);
     if(admin!==undefined){setAdminKey(admin);localStorage.setItem('claude_admin_api_key',admin);}
@@ -3559,7 +3618,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v8</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v12</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
@@ -3585,7 +3644,8 @@ function App(){
         liveHandoff={liveHandoff}
         attendees={basicInfo.attendees||[]}
         onNext={()=>goTo(3)} onBack={()=>goTo(1)}/>}
-      {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}/>}
+      {step===3&&<Step3 onAnalyze={handleAnalyze} onBack={()=>goTo(2)} analyzing={analyzing} logs={logs} error={error}
+        validation={buildValidation(basicInfo,transcript,result)}/>}
       {step===4&&(result
         ?<Step4 result={result} setResult={setResult} onNext={()=>goTo(5)} onBack={()=>goTo(3)} onReanalyze={()=>{goTo(3);handleAnalyze();}}
           transcript={transcript} attendees={basicInfo.attendees||[]}/>
