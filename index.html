@@ -296,34 +296,33 @@ function generateDocx(basicInfo, result){
     const span  = opts.span  ? `<w:gridSpan w:val="${opts.span}"/>` : '';
     const vA    = `<w:vAlign w:val="center"/>`;
     const BLK = '000000';
-    const WHT = 'FFFFFF';
-    // 全セルに明示ボーダー。HDRはセル間区切りを白線、spanは内部縦線nil
+    // 全セルに明示ボーダー。全辺黒線で統一（元テンプレートに合わせる）
     let tcBdr = '';
     if (opts.shade === HDR) {
-      // ヘッダーセル：bottom のみ白（同行内の区切り）
+      // ヘッダーセル：全辺黒線
       tcBdr = `<w:tcBorders>`
-        +`<w:top w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:left w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:bottom w:val="single" w:sz="4" w:color="${WHT}"/>`
-        +`<w:right w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:top    w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:left   w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:right  w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:insideV w:val="nil"/>`
         +`</w:tcBorders>`;
     } else if (opts.span) {
       // spanセル：外枠のみ、内部縦線nil
       tcBdr = `<w:tcBorders>`
-        +`<w:top w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:left w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:top    w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:left   w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:right w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:right  w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:insideV w:val="nil"/>`
         +`</w:tcBorders>`;
     } else {
       // 通常セル：全辺明示
       tcBdr = `<w:tcBorders>`
-        +`<w:top w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:left w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:top    w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:left   w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:right w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:right  w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`</w:tcBorders>`;
     }
     const mar   = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
@@ -3107,6 +3106,35 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
 }
 
 // ── Step 3 ─────────────────────────────────────────────────
+// ── 過負荷エラー（529）：カウントダウン付き自動リトライ ─────
+function OverloadedError({ onRetry }) {
+  const [sec, setSec] = React.useState(30);
+  const [retrying, setRetrying] = React.useState(false);
+  React.useEffect(() => {
+    if (sec <= 0) { setRetrying(true); onRetry(); return; }
+    const t = setTimeout(() => setSec(s => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [sec]);
+  return (
+    <div className="notice notice-warn">
+      <div style={{fontWeight:700,fontSize:13,marginBottom:6}}>🌐 APIサーバーが混雑しています（過負荷エラー）</div>
+      <div style={{fontSize:12,lineHeight:1.8,marginBottom:10}}>
+        Anthropic APIサーバーが一時的に混雑しています。ユーザー側の問題ではありません。<br/>
+        {retrying
+          ? <span style={{color:'#276749',fontWeight:700}}>⚡ 自動再試行中...</span>
+          : <span><strong style={{fontSize:14,color:'#C55A11'}}>{sec}秒後</strong>に自動的に再試行します。</span>
+        }
+      </div>
+      {!retrying && (
+        <button className="btn btn-green" style={{fontSize:12,padding:'6px 18px'}}
+          onClick={()=>{setSec(0);}}>
+          今すぐ再試行
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Step3({onAnalyze,onBack,analyzing,logs,error,validation}){
   // Step1・Step2の未入力項目を集約
   const warnings = [
@@ -3219,6 +3247,9 @@ function Step3({onAnalyze,onBack,analyzing,logs,error,validation}){
                   </div>
                 </div>
               );
+            }
+            if(error.includes('529')||error.includes('overloaded')){
+              return <OverloadedError onRetry={onAnalyze}/>;
             }
             return <div className="notice notice-warn">❌ {error}</div>;
           })()}
@@ -3689,7 +3720,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v15</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v17</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
