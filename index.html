@@ -15,9 +15,9 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202c;min-height:100vh}
 .app-wrap{max-width:960px;margin:0 auto;padding:16px}
-.app-header{background:#1F3864;color:#fff;padding:14px 20px;border-radius:10px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-.app-title{font-size:18px;font-weight:700;letter-spacing:.5px}
-.app-sub{font-size:11px;color:#a0b4cc;margin-top:2px}
+.app-header{background:linear-gradient(135deg,#1F3864 0%,#1a4a7a 100%);color:#fff;padding:0 24px;border-radius:10px;margin-bottom:20px;display:flex;align-items:stretch;justify-content:space-between;box-shadow:0 2px 12px rgba(0,0,0,.18);min-height:52px}
+.app-title{font-size:15px;font-weight:700;letter-spacing:.3px;line-height:1.2}
+.app-sub{font-size:10px;color:#a0b4cc;margin-top:2px}
 .btn-key{background:#2E75B6;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:12px;cursor:pointer;font-family:'Meiryo UI','Meiryo',sans-serif;white-space:nowrap}
 .btn-key:hover{background:#1a5c9e}
 /* ── ヘッダー内サブボタン（半透明ゴースト） ── */
@@ -220,10 +220,19 @@ textarea{resize:vertical;min-height:70px}
 .live-btn-blue{background:#2E75B6;color:#fff}.live-btn-blue:hover{background:#1d5fa0}
 .live-btn-dark{background:#1F3864;color:#fff}.live-btn-dark:hover{background:#16295a}
 .live-btn:disabled{opacity:.5;cursor:not-allowed}
-.mode-toggle{display:flex;gap:8px;align-items:center}
-.mode-btn{padding:6px 14px;border-radius:6px;border:1.5px solid #d0d8e4;font-size:12px;font-weight:600;cursor:pointer;background:#fff;color:#555;transition:.15s}
-.mode-btn.active{background:#1F3864;color:#fff;border-color:#1F3864}
-.mode-btn.live-active{background:#E53E3E;color:#fff;border-color:#E53E3E}
+.mode-toggle{display:flex;gap:0;align-items:center;background:rgba(0,0,0,.25);border-radius:8px;padding:3px}
+.mode-btn{padding:6px 16px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:rgba(255,255,255,.65);transition:.15s;white-space:nowrap}
+.mode-btn.active{background:#fff;color:#1F3864;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.mode-btn.live-active{background:#E53E3E;color:#fff}
+/* ヘッダー設定メニュー */
+.header-gear-wrap{position:relative;display:flex;align-items:center}
+.header-gear-btn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.85);border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:5px;font-family:'Meiryo UI','Meiryo',sans-serif;white-space:nowrap}
+.header-gear-btn:hover{background:rgba(255,255,255,.18)}
+.header-gear-menu{position:absolute;top:calc(100% + 6px);right:0;background:#fff;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:190px;z-index:500;overflow:hidden;border:1px solid #e2e8f0}
+.header-gear-item{display:flex;align-items:center;gap:10px;padding:11px 16px;font-size:12px;color:#333;cursor:pointer;transition:.1s;font-family:'Meiryo UI','Meiryo',sans-serif;border:none;background:none;width:100%;text-align:left}
+.header-gear-item:hover{background:#EBF3FB;color:#1F3864}
+.header-gear-sep{height:1px;background:#f0f0f0;margin:2px 0}
+.header-gear-label{font-size:10px;color:#a0aec0;padding:8px 16px 3px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 @media(max-width:768px){.live-panels{grid-template-columns:1fr;height:auto}}
 
 /* ── APIコスト表示 ───────────────────────────────────────── */
@@ -2999,8 +3008,8 @@ function Step3({onAnalyze,onBack,analyzing,logs,error}){
 // ── TableEditor ────────────────────────────────────────────
 function TableEditor({data,setData,cols}){
   if(!data||data.length===0) return <div style={{color:'#888',fontSize:13,padding:'12px 0'}}>（該当する項目はありませんでした）</div>;
-  const upd=(i,k,v)=>setData(p=>p.map((r,ri)=>ri===i?{...r,[k]:v}:r));
-  const del=(i)=>setData(p=>p.filter((_,ri)=>ri!==i));
+  const upd=(i,k,v)=>setData(data.map((r,ri)=>ri===i?{...r,[k]:v}:r));
+  const del=(i)=>setData(data.filter((_,ri)=>ri!==i));
   return(
     <div style={{overflowX:'auto'}}>
       <table className="preview-table">
@@ -3024,14 +3033,14 @@ function TableEditor({data,setData,cols}){
           ))}
         </tbody>
       </table>
-      <button className="btn btn-gray" style={{fontSize:12,padding:'5px 12px',marginTop:6}} onClick={()=>setData(p=>[...p,{}])}>＋ 行追加</button>
+      <button className="btn btn-gray" style={{fontSize:12,padding:'5px 12px',marginTop:6}} onClick={()=>setData([...data,{}])}>＋ 行追加</button>
     </div>
   );
 }
 
 function MinutesEditor({data,setData}){
   if(!data||data.length===0) return <div style={{color:'#888',fontSize:13}}>（議事内容なし）</div>;
-  const upd=(i,k,v)=>setData(p=>p.map((r,ri)=>ri===i?{...r,[k]:v}:r));
+  const upd=(i,k,v)=>setData(data.map((r,ri)=>ri===i?{...r,[k]:v}:r));
   return data.map((item,i)=>(
     <div key={i} style={{marginBottom:16,borderBottom:'1px solid #eee',paddingBottom:12}}>
       <label style={{fontSize:12,color:'#1F3864',fontWeight:700}}>議題 {i+1}</label>
@@ -3176,6 +3185,100 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
 }
 
 // ── 会議中モード（LiveMeetingMode） ───────────────────────────
+// ── 分析エントリ（折りたたみ対応） ──────────────────────────
+function AnalysisEntry({ entry, ei, total, framework, onDelete }) {
+  const [collapsed, setCollapsed] = React.useState(ei !== 0); // 最新以外は初期折りたたみ
+  const catColors = {
+    '①':['#065A82','#EBF8FF'], '②':['#B7410E','#FFF3ED'],
+    '③':['#B7791F','#FFFBEB'], '④':['#276749','#E8F5EF'],
+    '⑤':['#4A3728','#F5F0EB'], '⑥':['#6B3FA0','#F3EEFF'],
+  };
+  const copyText = `分析 #${entry._count} (${entry._time})\n\n`+
+    (entry.exec_summary?`【役員サマリー】\n${entry.exec_summary}\n\n`:'')+
+    (entry.summary?`【要約】\n${entry.summary}\n\n`:'')+
+    (entry.top_questions?.length?`【確認すべき質問】\n${entry.top_questions.map(q=>`・${q}`).join('\n')}\n\n`:'')+
+    (entry.categories ? framework.cats.filter(c=>c.enabled).map(c=>
+      entry.categories[c.id]?.items?.length ?
+      `【${c.id} ${c.name}】\n${entry.categories[c.id].items.map(x=>`・${x}`).join('\n')}` : ''
+    ).filter(Boolean).join('\n\n') : '');
+
+  return (
+    <div style={{borderBottom: ei < total-1 ? '2px solid #EBF3FB' : 'none', background: ei===0 ? '#fff' : '#F7F9FC'}}>
+      {/* 分析ヘッダー（クリックで折りたたみ） */}
+      <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',
+        background: ei===0 ? '#1F3864' : '#4A5568', color:'#fff', fontSize:11, cursor:'pointer'}}
+        onClick={()=>setCollapsed(c=>!c)}>
+        <span style={{fontWeight:700}}>分析 #{entry._count}</span>
+        <span style={{color:'rgba(255,255,255,.6)'}}>{entry._time}</span>
+        {ei===0 && <span style={{background:'#38A169',borderRadius:8,padding:'1px 7px',fontSize:9,fontWeight:700}}>最新</span>}
+        {collapsed && entry.exec_summary && (
+          <span style={{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:10,color:'rgba(255,255,255,.6)',marginLeft:4}}>
+            {entry.exec_summary.slice(0,40)}…
+          </span>
+        )}
+        <span style={{marginLeft:'auto',display:'flex',gap:4,alignItems:'center'}} onClick={e=>e.stopPropagation()}>
+          <button style={{background:'none',border:'1px solid rgba(255,255,255,.3)',color:'rgba(255,255,255,.8)',
+            borderRadius:4,padding:'1px 7px',fontSize:9,cursor:'pointer'}}
+            onClick={()=>navigator.clipboard.writeText(copyText)}>📋</button>
+          <button style={{background:'none',border:'1px solid rgba(252,129,129,.4)',color:'rgba(252,129,129,.8)',
+            borderRadius:4,padding:'1px 7px',fontSize:9,cursor:'pointer'}}
+            onClick={()=>{ if(window.confirm('この分析を削除しますか？')) onDelete(); }}>🗑</button>
+        </span>
+        <span style={{fontSize:12,color:'rgba(255,255,255,.6)',marginLeft:4}}>{collapsed ? '▶' : '▼'}</span>
+      </div>
+
+      {/* 折りたたみコンテンツ */}
+      {!collapsed && (
+        <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:8}}>
+          {entry.exec_summary && (
+            <div style={{background:'#FFF4EB',borderLeft:'3px solid #C55A11',borderRadius:'0 4px 4px 0',
+              padding:'6px 10px',fontSize:11,color:'#7A3B0E',fontWeight:600,lineHeight:1.6}}>
+              👔 {entry.exec_summary}
+            </div>
+          )}
+          {entry.summary && (
+            <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:4,
+              padding:'6px 10px',fontSize:11,color:'#333',lineHeight:1.7}}>
+              📋 {entry.summary}
+            </div>
+          )}
+          {entry.categories && framework.cats.filter(c=>c.enabled).map(cat => {
+            const catData = entry.categories[cat.id];
+            if (!catData || !catData.items || catData.items.length===0) return null;
+            const [fg,bg] = catColors[cat.id] || ['#444','#f8fafc'];
+            const decBadge = catData.decision_needed && catData.decision_needed !== '不要' ? catData.decision_needed : null;
+            return (
+              <div key={cat.id} style={{border:`1.5px solid ${fg}33`,borderRadius:6,overflow:'hidden'}}>
+                <div style={{background:fg,color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
+                  <span>{cat.id} {cat.icon} {cat.name}</span>
+                  {decBadge && <span style={{marginLeft:'auto',background:'rgba(255,255,255,.25)',borderRadius:8,padding:'1px 8px',fontSize:9}}>⚡ {decBadge}</span>}
+                </div>
+                <div style={{background:bg,padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
+                  {catData.items.map((item,ii)=>(
+                    <div key={ii} style={{display:'flex',gap:5,fontSize:10.5,color:'#333',lineHeight:1.55}}>
+                      <span style={{color:fg,fontWeight:700,flexShrink:0}}>・</span><span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {entry.top_questions && entry.top_questions.length > 0 && (
+            <div style={{border:'1.5px solid #2E75B633',borderRadius:6,overflow:'hidden'}}>
+              <div style={{background:'#2E75B6',color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700}}>💬 今すぐ確認すべき質問</div>
+              <div style={{background:'#EBF3FB',padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
+                {entry.top_questions.map((q,qi)=>(
+                  <div key={qi} style={{fontSize:10.5,color:'#1a4a7a',lineHeight:1.55}}>❓ {q}</div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AIアシストフレームワーク設定モーダル ──────────────────
 function FrameworkModal({ fw, onSave, onClose, defaultFw }) {
   const [data, setData] = React.useState(JSON.parse(JSON.stringify(fw)));
@@ -3183,9 +3286,13 @@ function FrameworkModal({ fw, onSave, onClose, defaultFw }) {
   const updCat = (i,k,v) => setData(d=>({...d,cats:d.cats.map((c,idx)=>idx===i?{...c,[k]:v}:c)}));
   const reset = () => { if(window.confirm('初期設定に戻しますか？')) setData(JSON.parse(JSON.stringify(defaultFw))); };
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" style={{zIndex:5000}} onClick={onClose}>
       <div className="modal" style={{maxWidth:580,width:'95%',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">⚙️ AIアシストパネル 分析フレームワーク設定</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div className="modal-title" style={{margin:0}}>⚙️ AIアシストパネル 分析フレームワーク設定</div>
+          <button onClick={onClose}
+            style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'#888',lineHeight:1,padding:'0 4px'}}>✕</button>
+        </div>
         <div className="notice notice-info" style={{marginBottom:12,fontSize:11}}>
           会議の分析観点・会社DX文脈を設定します。変更はlocalStorageに保存され次回起動時も維持されます。
         </div>
@@ -3710,10 +3817,10 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     }).catch(() => {});
   }, []);
 
-  // 自動スクロール
+  // 自動スクロール（新しいものが上なのでtopに戻す）
   useEffect(() => {
     if (transcriptBodyRef.current) {
-      transcriptBodyRef.current.scrollTop = transcriptBodyRef.current.scrollHeight;
+      transcriptBodyRef.current.scrollTop = 0;
     }
   }, [transcript, interimText]);
 
@@ -4512,7 +4619,10 @@ ${catJsonDef}
         <div className="live-panel">
           <div className="live-panel-header" style={{background: micMode==='notta' ? '#B7791F' : '#2D3748'}}>
             {micMode==='notta' ? '👂 Notta 文字起こし貼り付け' : '📝 リアルタイム文字起こし'}
-            <span style={{marginLeft:'auto',fontSize:11,color:'#a0aec0'}}>{transcript.length}行</span>
+            <span style={{marginLeft:'auto',fontSize:10,color:'#a0aec0',display:'flex',gap:8,alignItems:'center'}}>
+              {transcript.length > 0 && <span>🔼 新しい順</span>}
+              <span>{transcript.length}行</span>
+            </span>
           </div>
           <div className="live-panel-body" ref={transcriptBodyRef}>
             {/* Nottaモード：貼り付けエリア */}
@@ -4549,18 +4659,41 @@ ${catJsonDef}
                     {isRecording ? '音声を待機中...' : '「録音開始」ボタンで開始します'}
                   </div>
                 )}
-                {transcript.map((line, i) => (
-                  <div key={i} className="live-transcript-line">
-                    <span className="live-transcript-time">{line.time}</span>
-                    <span>{line.text}</span>
-                  </div>
-                ))}
+                {/* 最新が上：interim → transcript逆順 */}
                 {interimText && (
                   <div className="live-interim">
                     <span className="live-transcript-time">...</span>
                     {interimText}
                   </div>
                 )}
+                {[...transcript].reverse().map((line, i) => {
+                  // AI分析で「注意すべき発言」に含まれるテキストを赤くハイライト
+                  const flagged = analysisHistory.length > 0 && analysisHistory[0].categories &&
+                    Object.values(analysisHistory[0].categories).some(cat =>
+                      cat.items && cat.items.some(item =>
+                        item.length > 6 && line.text.includes(item.slice(0,10))
+                      )
+                    );
+                  // フラグがついた発言かどうか（top_questionsのキーワードも含む）
+                  const questioned = analysisHistory.length > 0 &&
+                    analysisHistory[0].top_questions &&
+                    analysisHistory[0].top_questions.some(q =>
+                      q.length > 6 && line.text.includes(q.slice(0,8))
+                    );
+                  const isAlert = flagged || questioned;
+                  return (
+                    <div key={i} className="live-transcript-line"
+                      style={isAlert ? {
+                        background:'#FFF5F5',
+                        borderLeft:'3px solid #E53E3E',
+                        paddingLeft:8,
+                      } : {}}>
+                      <span className="live-transcript-time" style={isAlert?{color:'#E53E3E'}:{}}>{line.time}</span>
+                      <span style={isAlert?{color:'#C53030',fontWeight:600}:{}}>{line.text}</span>
+                      {isAlert && <span style={{marginLeft:6,fontSize:10,color:'#E53E3E',flexShrink:0}}>⚠️</span>}
+                    </div>
+                  );
+                })}
                 {micMode === 'notta' && transcript.length > 0 && (
                   <div style={{padding:'8px 12px',borderTop:'1px solid #e2e8f0',marginTop:8}}>
                     <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px'}}
@@ -4583,6 +4716,12 @@ ${catJsonDef}
             </span>
             <span style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center'}}>
               {analysis && <span style={{fontSize:10,color:'#68d391'}}>最終: {analysis._time}</span>}
+              {analysisHistory.length > 0 && (
+                <button className="usage-btn" style={{fontSize:10,color:'rgba(252,129,129,.8)'}}
+                  onClick={()=>{ if(window.confirm('分析履歴を全件クリアしますか？')) { setAnalysisHistory([]); setAnalysis(null); } }}>
+                  🗑 クリア
+                </button>
+              )}
               <button className="usage-btn" style={{fontSize:10}} onClick={()=>setShowFwModal(true)} title="分析フレームワーク設定">
                 ⚙️ 設定
               </button>
@@ -4596,100 +4735,10 @@ ${catJsonDef}
               </div>
             )}
 
-            {/* 全履歴を新しい順で表示 */}
+            {/* 全履歴を新しい順で表示（各エントリは折りたたみ可能） */}
             {analysisHistory.map((entry, ei) => (
-              <div key={ei} style={{
-                borderBottom: ei < analysisHistory.length-1 ? '2px solid #EBF3FB' : 'none',
-                background: ei===0 ? '#fff' : '#F7F9FC',
-              }}>
-                {/* 分析ヘッダー */}
-                <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',
-                  background: ei===0 ? '#1F3864' : '#4A5568',
-                  color:'#fff',fontSize:11}}>
-                  <span style={{fontWeight:700}}>分析 #{entry._count}</span>
-                  <span style={{color:'rgba(255,255,255,.6)'}}>{entry._time}</span>
-                  {ei===0 && <span style={{marginLeft:4,background:'#38A169',borderRadius:8,padding:'1px 7px',fontSize:9,fontWeight:700}}>最新</span>}
-                  <button style={{marginLeft:'auto',background:'none',border:'1px solid rgba(255,255,255,.3)',
-                    color:'rgba(255,255,255,.8)',borderRadius:4,padding:'1px 8px',fontSize:9,cursor:'pointer'}}
-                    onClick={()=>navigator.clipboard.writeText(
-                      `分析 #${entry._count} (${entry._time})\n\n`+
-                      (entry.exec_summary?`【役員サマリー】\n${entry.exec_summary}\n\n`:'')+
-                      (entry.summary?`【要約】\n${entry.summary}\n\n`:'')+
-                      (entry.top_questions?.length?`【確認すべき質問】\n${entry.top_questions.map(q=>`・${q}`).join('\n')}\n\n`:'')+
-                      (entry.categories ? framework.cats.filter(c=>c.enabled).map(c=>
-                        entry.categories[c.id]?.items?.length ?
-                        `【${c.id} ${c.name}】\n${entry.categories[c.id].items.map(x=>`・${x}`).join('\n')}`
-                        :''
-                      ).filter(Boolean).join('\n\n') : '')
-                    )}>
-                    📋 コピー
-                  </button>
-                </div>
-
-                <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:8}}>
-                  {/* 役員サマリー */}
-                  {entry.exec_summary && (
-                    <div style={{background:'#FFF4EB',borderLeft:'3px solid #C55A11',borderRadius:'0 4px 4px 0',padding:'6px 10px',fontSize:11,color:'#7A3B0E',fontWeight:600,lineHeight:1.6}}>
-                      👔 {entry.exec_summary}
-                    </div>
-                  )}
-
-                  {/* 要約 */}
-                  {entry.summary && (
-                    <div style={{background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:4,padding:'6px 10px',fontSize:11,color:'#333',lineHeight:1.7}}>
-                      📋 {entry.summary}
-                    </div>
-                  )}
-
-                  {/* 6カテゴリ */}
-                  {entry.categories && framework.cats.filter(c=>c.enabled).map(cat => {
-                    const catData = entry.categories[cat.id];
-                    if (!catData || !catData.items || catData.items.length===0) return null;
-                    const catColors = {
-                      '①':['#065A82','#EBF8FF'], '②':['#B7410E','#FFF3ED'],
-                      '③':['#B7791F','#FFFBEB'], '④':['#276749','#E8F5EF'],
-                      '⑤':['#4A3728','#F5F0EB'], '⑥':['#6B3FA0','#F3EEFF'],
-                    };
-                    const [fg,bg] = catColors[cat.id] || ['#444','#f8fafc'];
-                    const decBadge = catData.decision_needed && catData.decision_needed !== '不要'
-                      ? catData.decision_needed : null;
-                    return (
-                      <div key={cat.id} style={{border:`1.5px solid ${fg}33`,borderRadius:6,overflow:'hidden'}}>
-                        <div style={{background:fg,color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:6}}>
-                          <span>{cat.id} {cat.icon} {cat.name}</span>
-                          {decBadge && (
-                            <span style={{marginLeft:'auto',background:'rgba(255,255,255,.25)',borderRadius:8,padding:'1px 8px',fontSize:9}}>
-                              ⚡ {decBadge}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{background:bg,padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
-                          {catData.items.map((item,ii)=>(
-                            <div key={ii} style={{display:'flex',gap:5,fontSize:10.5,color:'#333',lineHeight:1.55}}>
-                              <span style={{color:fg,fontWeight:700,flexShrink:0}}>・</span>
-                              <span>{item}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {/* 確認すべき質問 */}
-                  {entry.top_questions && entry.top_questions.length > 0 && (
-                    <div style={{border:'1.5px solid #2E75B633',borderRadius:6,overflow:'hidden'}}>
-                      <div style={{background:'#2E75B6',color:'#fff',padding:'4px 8px',fontSize:10,fontWeight:700}}>
-                        💬 今すぐ確認すべき質問
-                      </div>
-                      <div style={{background:'#EBF3FB',padding:'5px 8px',display:'flex',flexDirection:'column',gap:3}}>
-                        {entry.top_questions.map((q,qi)=>(
-                          <div key={qi} style={{fontSize:10.5,color:'#1a4a7a',lineHeight:1.55}}>❓ {q}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <AnalysisEntry key={ei} entry={entry} ei={ei} total={analysisHistory.length} framework={framework}
+                onDelete={()=>setAnalysisHistory(prev=>prev.filter((_,i)=>i!==ei))}/>
             ))}
           </div>
         </div>
@@ -4776,19 +4825,27 @@ ${catJsonDef}
 
       {/* コスト確認モーダル（会議終了時ポップアップ） */}
       {showCostModal && (
-        <div className="cost-modal-overlay">
-          <div className="cost-modal">
-            <div className="cost-modal-title">💰 今回の会議　コスト集計</div>
+        <div className="cost-modal-overlay" onClick={()=>setShowCostModal(false)}>
+          <div className="cost-modal" style={{maxHeight:'85vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+              <div className="cost-modal-title" style={{margin:0}}>💰 今回の会議　コスト集計</div>
+              <button onClick={()=>setShowCostModal(false)}
+                style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#888',lineHeight:1}}>✕</button>
+            </div>
 
             {/* Claude API */}
             <div style={{fontWeight:700,fontSize:12,color:'#1F3864',marginBottom:4,marginTop:4}}>🤖 Claude API（AI分析）</div>
             <div className="cost-row"><span>分析回数</span><span>{liveCostLog.length} 回</span></div>
-            {liveCostLog.map((l,i) => (
+            {/* 最新5件のみ表示、残りは折りたたみ */}
+            {liveCostLog.slice(-5).map((l,i) => (
               <div key={i} className="cost-row" style={{fontSize:12,color:'#555'}}>
                 <span>分析 {l.count} 回目</span>
-                <span>{formatCost(l.cost)}<span style={{color:'#a0aec0',fontSize:11,marginLeft:6}}>{l.tokens.toLocaleString()} tokens（入力{l.inp.toLocaleString()} / 出力{l.out.toLocaleString()}）</span></span>
+                <span>{formatCost(l.cost)}<span style={{color:'#a0aec0',fontSize:11,marginLeft:6}}>{l.tokens.toLocaleString()} tokens</span></span>
               </div>
             ))}
+            {liveCostLog.length > 5 && (
+              <div style={{fontSize:11,color:'#a0aec0',textAlign:'center',padding:'2px 0'}}>… 他 {liveCostLog.length-5} 回分省略</div>
+            )}
             <div className="cost-row" style={{fontWeight:700}}>
               <span>Claude 小計</span><span>{formatCost(liveCostTotal)}</span>
             </div>
@@ -4808,7 +4865,7 @@ ${catJsonDef}
               </span>
             </div>
             <div className="cost-note" style={{marginBottom:8}}>
-              Azure Speech STT: $1.00/時間（リアルタイム）｜無料枠: 5時間/月｜
+              Azure Speech STT: $1.00/時間｜無料枠: 5時間/月｜
               <a href="https://portal.azure.com" target="_blank" rel="noreferrer" style={{color:'#2E75B6'}}>Azureポータル →</a>
             </div>
 
@@ -4818,7 +4875,10 @@ ${catJsonDef}
               <span>{formatCost(liveCostTotal + azureCostTotal)}</span>
             </div>
 
-            <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
+            <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'space-between',alignItems:'center'}}>
+              <button className="live-btn live-btn-gray" onClick={()=>setShowCostModal(false)}>
+                閉じる
+              </button>
               <button className="live-btn live-btn-green" onClick={handleCostModalClose}>
                 ✅ 議事録作成へ進む
               </button>
@@ -4900,6 +4960,49 @@ ${catJsonDef}
 }
 
 // ── Main App ──────────────────────────────────────────────
+// ── ヘッダー設定メニュー ─────────────────────────────────────
+function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, appMode }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const handler = (e) => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  const click = (fn) => { fn(); setOpen(false); };
+  return (
+    <div className="header-gear-wrap" ref={ref} style={{flex:'0 0 auto'}}>
+      <button className="header-gear-btn" onClick={()=>setOpen(o=>!o)}>
+        <span style={{fontSize:14}}>⚙️</span>
+        <span style={{fontSize:12}}>設定</span>
+        <span style={{fontSize:9,opacity:.7}}>{open?'▲':'▼'}</span>
+      </button>
+      {open && (
+        <div className="header-gear-menu">
+          <div className="header-gear-label">API</div>
+          <button className="header-gear-item" onClick={()=>click(onOpenKey)}>
+            <span style={{fontSize:14}}>{apiKey?'🔑':'🔓'}</span>
+            <span>{apiKey ? 'APIキー設定済み' : 'APIキーを設定'}</span>
+            {apiKey && <span style={{marginLeft:'auto',fontSize:9,color:'#38A169',fontWeight:700}}>✓</span>}
+          </button>
+          {appMode === 'post' && (<>
+            <div className="header-gear-sep"/>
+            <div className="header-gear-label">マスター管理</div>
+            <button className="header-gear-item" onClick={()=>click(onOpenPerson)}>
+              <span style={{fontSize:14}}>👥</span>
+              <span>出席者マスター</span>
+            </button>
+            <button className="header-gear-item" onClick={()=>click(onOpenDomain)}>
+              <span style={{fontSize:14}}>🌐</span>
+              <span>ドメイン設定</span>
+            </button>
+          </>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App(){
   const [appMode, setAppMode] = useState('post'); // 'live' | 'post'
   const [step,setStep]=useState(1);
@@ -5010,32 +5113,46 @@ function App(){
       {/* ヘッダー（常時表示） */}
       <div className={appMode === 'live' ? '' : 'app-wrap'} style={appMode === 'live' ? {padding:'0 16px'} : {padding:0}}>
       <div className="app-header" style={appMode==='live'?{borderRadius:'10px 10px 0 0',marginBottom:0}:{}}>
-        <div>
-          <div className="app-title">
-            {appMode === 'live' ? '🔴 会議中モード' : '会議議事録・管理台帳 自動生成ツール'}
+
+        {/* 左：タイトル */}
+        <div style={{display:'flex',alignItems:'center',gap:12,minWidth:0,flex:'0 0 auto'}}>
+          <div style={{width:36,height:36,borderRadius:8,background:'rgba(255,255,255,.12)',
+            display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,flexShrink:0}}>
+            📋
           </div>
-          <div style={{fontSize:10,color:'#a0b4cc',marginTop:2}}>v31</div>
+          <div style={{minWidth:0}}>
+            <div className="app-title" style={{fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:180}}>
+              {appMode === 'live' ? '会議中モード' : '会議議事録・管理台帳'}
+            </div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1,letterSpacing:.3}}>
+              自動生成ツール　<span style={{color:'#50697A'}}>v35</span>
+            </div>
+          </div>
         </div>
-        <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
-          {/* モード切り替えボタン */}
+
+        {/* 中央：モード切り替え */}
+        <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
           <div className="mode-toggle">
             <button className={`mode-btn ${appMode==='post'?'active':''}`}
-              onClick={()=>setAppMode('post')}>📄 会議後モード</button>
+              onClick={()=>setAppMode('post')}>
+              📄 会議後
+            </button>
             <button className={`mode-btn ${appMode==='live'?'live-active':''}`}
-              onClick={()=>setAppMode('live')}>🔴 会議中モード</button>
+              onClick={()=>setAppMode('live')}>
+              🔴 会議中
+            </button>
           </div>
-          {appMode === 'post' && (<>
-            <button className="btn-header-sub" onClick={()=>setShowPersonMaster(true)}>
-              👥 出席者マスター
-            </button>
-            <button className="btn-header-sub" onClick={()=>setShowDomainMaster(true)}>
-              🌐 ドメイン設定
-            </button>
-          </>)}
-          <button className="btn-key" onClick={()=>setShowKeyModal(true)}>
-            {apiKey?'🔑 APIキー設定済':'🔑 APIキー設定'}
-          </button>
         </div>
+
+        {/* 右：設定メニュー（ギアボタン） */}
+        <HeaderMenu
+          apiKey={apiKey}
+          onOpenKey={()=>setShowKeyModal(true)}
+          onOpenPerson={()=>setShowPersonMaster(true)}
+          onOpenDomain={()=>setShowDomainMaster(true)}
+          appMode={appMode}
+        />
+
       </div>
       </div>
 
