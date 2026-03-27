@@ -295,13 +295,36 @@ function generateDocx(basicInfo, result){
     const shade = opts.shade ? `<w:shd w:val="clear" w:color="auto" w:fill="${opts.shade}"/>` : '';
     const span  = opts.span  ? `<w:gridSpan w:val="${opts.span}"/>` : '';
     const vA    = `<w:vAlign w:val="center"/>`;
-    // ヘッダーセルの罫線：全辺を明示指定
-    // span セルも insideV を nil で明示（Word が phantom 縦線を描くのを防ぐ）
+    const BLK = '000000';
+    const WHT = 'FFFFFF';
+    // 全セルに明示ボーダー。HDRはセル間区切りを白線、spanは内部縦線nil
     let tcBdr = '';
     if (opts.shade === HDR) {
-      tcBdr = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="6" w:color="FFFFFF"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="nil"/></w:tcBorders>`;
+      // ヘッダーセル：bottom のみ白（同行内の区切り）
+      tcBdr = `<w:tcBorders>`
+        +`<w:top w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:left w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:bottom w:val="single" w:sz="4" w:color="${WHT}"/>`
+        +`<w:right w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:insideV w:val="nil"/>`
+        +`</w:tcBorders>`;
     } else if (opts.span) {
-      tcBdr = `<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="nil"/></w:tcBorders>`;
+      // spanセル：外枠のみ、内部縦線nil
+      tcBdr = `<w:tcBorders>`
+        +`<w:top w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:left w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:right w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:insideV w:val="nil"/>`
+        +`</w:tcBorders>`;
+    } else {
+      // 通常セル：全辺明示
+      tcBdr = `<w:tcBorders>`
+        +`<w:top w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:left w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`<w:right w:val="single" w:sz="4" w:color="${BLK}"/>`
+        +`</w:tcBorders>`;
     }
     const mar   = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
     const wElem = w ? `<w:tcW w:w="${w}" w:type="dxa"/>` : '';
@@ -324,15 +347,14 @@ function generateDocx(basicInfo, result){
     return names ? `【${o.org}】　${names}` : `【${o.org}】`;
   }).join('\n') || '';
 
-  // 決定事項・ToDo・議事内容は全て同一表内（テンプレート通り改ページなし）
-  // テンプレートのtblBordersはcolor=auto（自動色）
+  // テーブル外枠のみ定義。insideV/insideH は各セルで明示制御してWordの幽霊線を防ぐ
   const tblBdr = `<w:tblBorders>
-<w:top w:val="single" w:sz="4" w:color="auto"/>
-<w:left w:val="single" w:sz="4" w:color="auto"/>
-<w:bottom w:val="single" w:sz="4" w:color="auto"/>
-<w:right w:val="single" w:sz="4" w:color="auto"/>
-<w:insideH w:val="single" w:sz="4" w:color="auto"/>
-<w:insideV w:val="single" w:sz="4" w:color="auto"/>
+<w:top w:val="single" w:sz="4" w:color="000000"/>
+<w:left w:val="single" w:sz="4" w:color="000000"/>
+<w:bottom w:val="single" w:sz="4" w:color="000000"/>
+<w:right w:val="single" w:sz="4" w:color="000000"/>
+<w:insideH w:val="single" w:sz="4" w:color="000000"/>
+<w:insideV w:val="nil"/>
 </w:tblBorders>`;
 
   // 議事内容は文字起こしから抽出した内容を全て1セルに詰める
@@ -3242,16 +3264,78 @@ function TableEditor({data,setData,cols}){
   );
 }
 
-function MinutesEditor({data,setData}){
+function MinutesEditor({data,setData,unknownSpeakers}){
   if(!data||data.length===0) return <div style={{color:'#888',fontSize:13}}>（議事内容なし）</div>;
   const upd=(i,k,v)=>setData(data.map((r,ri)=>ri===i?{...r,[k]:v}:r));
-  return data.map((item,i)=>(
-    <div key={i} style={{marginBottom:16,borderBottom:'1px solid #eee',paddingBottom:12}}>
-      <label style={{fontSize:12,color:'#1F3864',fontWeight:700}}>議題 {i+1}</label>
-      <input value={item.title||''} onChange={e=>upd(i,'title',e.target.value)} style={{marginBottom:6,fontSize:14,fontWeight:600}}/>
-      <textarea value={item.content||''} onChange={e=>upd(i,'content',e.target.value)} style={{minHeight:100,fontSize:13}}/>
+
+  // 話者名を赤くハイライトしてレンダリング
+  const renderHighlighted = (content) => {
+    const lines = (content||'').split('\n');
+    return lines.map((line,li) => {
+      const m = line.match(/^([^:\uff1a]{1,20})[\uff1a:]/);
+      if (m) {
+        const sp = m[1].trim();
+        const isUnknown = (unknownSpeakers||[]).some(u => u === sp);
+        const rest = line.slice(m[0].length);
+        return (
+          <div key={li} style={{lineHeight:1.8}}>
+            <span style={isUnknown
+              ? {color:'#C53030',fontWeight:700,background:'#FED7D7',borderRadius:3,padding:'0 4px',border:'1px solid #FC8181'}
+              : {color:'#1F3864',fontWeight:700}}>
+              {sp}
+            </span>
+            <span style={{color: isUnknown ? '#C53030' : '#555'}}>：{rest}</span>
+          </div>
+        );
+      }
+      return <div key={li} style={{lineHeight:1.8,color:'#333'}}>{line||'\u00A0'}</div>;
+    });
+  };
+
+  const checked = unknownSpeakers !== null;
+  const hasUnknown = checked && unknownSpeakers.length > 0;
+
+  return (
+    <div>
+      {/* チェック結果バナー */}
+      {checked && (
+        <div style={{marginBottom:12,padding:'8px 14px',borderRadius:8,
+          background: hasUnknown ? '#FFF5F5' : '#F0FFF4',
+          border: `1.5px solid ${hasUnknown ? '#FC8181' : '#9AE6B4'}`}}>
+          {hasUnknown ? (
+            <>
+              <span style={{fontSize:12,fontWeight:700,color:'#C53030'}}>⚠️ 出席者リストにいない話者が検出されました（赤字で表示）</span>
+              <div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:6}}>
+                {unknownSpeakers.map((sp,i)=>(
+                  <span key={i} style={{background:'#FED7D7',color:'#C53030',padding:'2px 8px',
+                    borderRadius:10,fontSize:11,fontWeight:700,border:'1px solid #FC8181'}}>{sp}</span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <span style={{fontSize:12,fontWeight:700,color:'#276749'}}>✅ 全ての話者が出席者リストと一致しています</span>
+          )}
+        </div>
+      )}
+
+      {data.map((item,i)=>(
+        <div key={i} style={{marginBottom:16,borderBottom:'1px solid #eee',paddingBottom:12}}>
+          <label style={{fontSize:12,color:'#1F3864',fontWeight:700}}>議題 {i+1}</label>
+          <input value={item.title||''} onChange={e=>upd(i,'title',e.target.value)} style={{marginBottom:6,fontSize:14,fontWeight:600}}/>
+          {checked ? (
+            <div style={{border:`1.5px solid ${hasUnknown?'#FC8181':'#9AE6B4'}`,borderRadius:6,
+              padding:'9px 12px',minHeight:100,fontSize:13,
+              fontFamily:'Meiryo UI,Meiryo,sans-serif',background:'#FAFAFA',lineHeight:1.8,
+              whiteSpace:'pre-wrap',wordBreak:'break-word'}}>
+              {renderHighlighted(item.content)}
+            </div>
+          ) : (
+            <textarea value={item.content||''} onChange={e=>upd(i,'content',e.target.value)} style={{minHeight:100,fontSize:13}}/>
+          )}
+        </div>
+      ))}
     </div>
-  ));
+  );
 }
 
 // ── Step 4 ─────────────────────────────────────────────────
@@ -3262,7 +3346,7 @@ function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}
   const [unknownSpeakers,setUnknownSpeakers]=useState(null); // null=未実行, []=結果
   const upd=(key,val)=>{setHasEdits(true);setResult(p=>({...p,[key]:val}));};
 
-  // 話者チェック実行
+  // 話者チェック：議事内容テキストから話者名を抽出してチェック
   const runSpeakerCheck = () => {
     const knownNames = [];
     (attendees||[]).forEach(org => {
@@ -3270,12 +3354,13 @@ function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}
         if (n) knownNames.push(n.trim());
       });
     });
+    const allContent = (result.minutes_by_agenda||[]).map(m=>m.content||'').join('\n');
     const speakerRe = /^([^:\uff1a\n]{1,20})[\uff1a:]/gm;
     const foundSpeakers = new Set();
     let m;
-    while ((m = speakerRe.exec(transcript||'')) !== null) {
+    while ((m = speakerRe.exec(allContent)) !== null) {
       const sp = m[1].trim();
-      if (sp && !/^\s*$/.test(sp) && !/^[\d\-\[\(（【]/.test(sp)) {
+      if (sp && !/^\s*$/.test(sp) && !/^[\d\-\[\(（【\s]/.test(sp)) {
         foundSpeakers.add(sp);
       }
     }
@@ -3286,7 +3371,8 @@ function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}
       )
     );
     setUnknownSpeakers(unknown);
-    setShowSpeakerCheck(true);
+    setShowSpeakerCheck(false); // モーダルは使わない
+    setTab('minutes'); // 議事内容タブに切り替え
   };
   const handleBack=()=>{
     if(hasEdits){
@@ -3314,44 +3400,19 @@ function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}
       <div className="card-title">📄 Step 4 ― プレビュー・編集</div>
       <div className="notice notice-info" style={{marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
         <span>各タブで内容を確認・編集できます。重要度・優先度はAIが自動判定しましたが、必要に応じて修正してください。</span>
-        <button className="btn-form-sub" onClick={runSpeakerCheck} style={{flexShrink:0,gap:5}}>
-          👤 話者チェック
-        </button>
+        {unknownSpeakers === null ? (
+          <button className="btn-form-sub" onClick={runSpeakerCheck} style={{flexShrink:0}}>
+            👤 話者チェック
+          </button>
+        ) : (
+          <button className="btn-form-sub" onClick={()=>{setUnknownSpeakers(null);}} style={{flexShrink:0,borderColor:'#e53e3e',color:'#e53e3e'}}>
+            ✕ チェック解除
+          </button>
+        )}
       </div>
-
-      {/* 話者チェック結果モーダル */}
-      {showSpeakerCheck && (
-        <div className="modal-overlay" onClick={()=>setShowSpeakerCheck(false)}>
-          <div className="modal" style={{maxWidth:500}} onClick={e=>e.stopPropagation()}>
-            <div className="modal-title">👤 話者チェック結果</div>
-            {unknownSpeakers && unknownSpeakers.length === 0 ? (
-              <div className="notice notice-ok" style={{marginBottom:12}}>
-                ✅ 全ての話者が出席者リストと一致しています。
-              </div>
-            ) : (
-              <>
-                <div style={{fontSize:12,color:'#666',marginBottom:10}}>
-                  以下の話者名が出席者リストに見当たりません。<br/>
-                  Step 1で追加するか、文字起こしの話者名を修正してください。
-                </div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>
-                  {(unknownSpeakers||[]).map((sp,i)=>(
-                    <span key={i} style={{background:'#FED7D7',color:'#C53030',padding:'4px 12px',borderRadius:14,fontSize:12,fontWeight:700,border:'1px solid #FC8181'}}>
-                      {sp}
-                    </span>
-                  ))}
-                </div>
-              </>
-            )}
-            <div style={{display:'flex',justifyContent:'flex-end'}}>
-              <button className="btn btn-primary" onClick={()=>setShowSpeakerCheck(false)}>閉じる</button>
-            </div>
-          </div>
-        </div>
-      )}
       <div className="tabs">{tabs.map(t=><div key={t.id} className={`tab ${tab===t.id?'active':''}`} onClick={()=>setTab(t.id)}>{t.label}</div>)}</div>
       <div className="tab-content">
-        {tab==='minutes'&&<MinutesEditor data={result.minutes_by_agenda} setData={v=>upd('minutes_by_agenda',v)}/>}
+        {tab==='minutes'&&<MinutesEditor data={result.minutes_by_agenda} setData={v=>upd('minutes_by_agenda',v)} unknownSpeakers={unknownSpeakers}/>}
         {tab==='decisions'&&<TableEditor data={result.decisions} setData={v=>upd('decisions',v)} cols={[{key:'content',label:'決定内容',w:200,tall:true},...IP,{key:'decided_by',label:'決定者',w:80},{key:'scope',label:'影響範囲',w:100}]}/>}
         {tab==='todos'&&<TableEditor data={result.todos} setData={v=>upd('todos',v)} cols={[{key:'content',label:'アクション内容',w:200,tall:true},...IP,{key:'assignee',label:'担当者',w:80},{key:'due',label:'期日',w:90}]}/>}
         {tab==='risks'&&<TableEditor data={result.risks} setData={v=>upd('risks',v)} cols={[{key:'content',label:'リスク内容',w:200,tall:true},...IP,{key:'impact',label:'影響度',w:70},{key:'owner',label:'担当者',w:80},{key:'response',label:'対応方針',w:150,tall:true}]}/>}
@@ -3618,7 +3679,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v12</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v14</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
