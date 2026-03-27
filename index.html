@@ -2196,8 +2196,10 @@ function PersonMasterModal({ onClose }) {
                     placeholder="メールアドレス" style={{flex:3,minWidth:140,padding:'4px 8px',border:'1.5px solid #2E75B6',borderRadius:4,fontSize:13}}/>
                   <select value={editing.org} onChange={e=>setEditing({...editing,org:e.target.value})}
                     style={{flex:1,minWidth:80,padding:'4px 6px',border:'1.5px solid #2E75B6',borderRadius:4,fontSize:13}}>
-                    {[...orgList,...(['KE','IBM','PwC','MSOL','Hopes'].filter(o=>!orgList.includes(o)))].map(o=><option key={o} value={o}>{o}</option>)}
-                    <option value={editing.org}>{editing.org}</option>
+                    {[...new Set([
+                      ...(orgList.includes(editing.org)?[]:(editing.org?[editing.org]:[])),
+                      ...orgList
+                    ])].filter(Boolean).map(o=><option key={o} value={o}>{o}</option>)}
                   </select>
                   <button onClick={commitEdit} style={{background:'#1F7A4D',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>✓</button>
                   <button onClick={()=>setEditing(null)} style={{background:'#e2e8f0',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>✕</button>
@@ -2301,7 +2303,8 @@ function IcsStepB({ domains, onComplete, onSkip }) {
 function IcsStepC({ members: initMembers, onComplete, onSkip }) {
   const [members, setMembers] = React.useState(initMembers.map(m => ({...m})));
   const upd = (i, key, val) => setMembers(members.map((m,idx) => idx===i ? {...m,[key]:val} : m));
-  const orgList = ['KE','IBM','PwC','MSOL','Hopes',...new Set(loadDomainMaster().map(d=>d.org))];
+  // 組織マスターから現在登録されている組織名のみ取得（ハードコードなし）
+  const masterOrgs = [...new Set(loadDomainMaster().map(d=>d.org).filter(Boolean))];
 
   return (
     <div className="modal-overlay">
@@ -2314,7 +2317,13 @@ function IcsStepC({ members: initMembers, onComplete, onSkip }) {
           <div style={{display:'grid',gridTemplateColumns:'24px 180px 1fr 80px',background:'#1F3864',color:'#fff',padding:'8px 10px',fontSize:11,fontWeight:600,gap:8,position:'sticky',top:0}}>
             <span>✓</span><span>氏名</span><span>メールアドレス</span><span>組織</span>
           </div>
-          {members.map((m,i) => (
+          {members.map((m,i) => {
+            // マスターに存在する組織名のみ表示。現在選択値がマスターにない場合は先頭に追加して選択状態を保つ
+            const opts = [...new Set([
+              ...(masterOrgs.includes(m.orgName) ? [] : (m.orgName ? [m.orgName] : [])),
+              ...masterOrgs
+            ])].filter(Boolean);
+            return (
             <div key={i} style={{display:'grid',gridTemplateColumns:'24px 180px 1fr 80px',padding:'7px 10px',borderTop:'1px solid #f0f0f0',alignItems:'center',gap:8,background:m.include?'':'#f9f9f9'}}>
               <input type="checkbox" checked={m.include} onChange={e=>upd(i,'include',e.target.checked)}/>
               <input value={m.displayName} onChange={e=>upd(i,'displayName',e.target.value)}
@@ -2322,10 +2331,14 @@ function IcsStepC({ members: initMembers, onComplete, onSkip }) {
               <span style={{fontSize:11,color:'#666',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.email}</span>
               <select value={m.orgName} onChange={e=>upd(i,'orgName',e.target.value)}
                 style={{padding:'3px 4px',border:'1px solid #d0d8e4',borderRadius:4,fontSize:11,width:'100%'}}>
-                {[...new Set([m.detectedOrg, m.orgName, ...orgList])].filter(Boolean).map(o=><option key={o} value={o}>{o}</option>)}
+                {opts.length===0
+                  ? <option value="">（未設定）</option>
+                  : opts.map(o=><option key={o} value={o}>{o}</option>)
+                }
               </select>
             </div>
-          ))}
+            );
+          })}
         </div>
         <div style={{display:'flex',gap:8,justifyContent:'space-between',alignItems:'center'}}>
           <span style={{fontSize:11,color:'#888'}}>
@@ -2550,7 +2563,8 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       // 実際には主催者のみ残す（最初の1件）
       raws = icsRaws.slice(0, 1);
     }
-    const initOrgs = [{org:'KE',names:[]},{org:'IBM',names:[]},{org:'PwC',names:[]}];
+    const initOrgs = loadDomainMaster().map(d=>({org:d.org,names:[]}))
+      .filter((o,i,arr)=>arr.findIndex(x=>x.org===o.org)===i); // 組織名で重複排除
     setIcsOrgs(initOrgs);
     processStepB(raws, initOrgs);
   };
