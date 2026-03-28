@@ -346,34 +346,51 @@ function generateDocx(basicInfo, result){
     ? result.todos.map((t,i)=>`${i+1}．${t.content||''}（${t.assignee||''}、${t.due||''}）★`).join('\n')
     : 'なし';
 
-  // ── 議事内容：★N を解析して該当行全体を青字アンダーライン＋（N★）に変換 ──
-  // AIが ★1, ★2 ... と番号付きで出力することを前提
+  // ── 議事内容：★N / 保N / リN / 課N を解析して色付きアンダーラインに変換 ──
   function buildMinutesParasXml(content){
-    const BLUE = '2E75B6';
-    const NML = '000000';
-    const rPrBase = (color, underline=false) =>
+    const BLUE   = '2E75B6'; // ToDo：青
+    const PURPLE = '7030A0'; // 保留：紫
+    const RED    = 'C00000'; // リスク：赤
+    const GREEN  = '375623'; // 課題：濃緑
+    const NML    = '000000';
+
+    // タグパターンと対応する色・ラベル
+    const TAG_DEFS = [
+      { re: /★(\d+)/, color: BLUE,   label: n => `（${n}★）` },
+      { re: /保(\d+)/, color: PURPLE, label: n => `（保・継${n}）` },
+      { re: /リ(\d+)/, color: RED,    label: n => `（リスク${n}）` },
+      { re: /課(\d+)/, color: GREEN,  label: n => `（課題${n}）` },
+    ];
+
+    const rPr = (color, underline=false) =>
       `<w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/>`
       +(color!==NML?`<w:color w:val="${color}"/>`:'')
       +(underline?`<w:u w:val="single"/>`:'')
       +`</w:rPr>`;
 
     return (content||'（記録なし）').split('\n').map(line => {
-      // ★N（半角数字1〜3桁）を検出
-      const starMatch = line.match(/★(\d+)/);
-      if (!starMatch) {
-        // ★なし：通常行
-        return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
-          +`<w:r>${rPrBase(NML)}<w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`;
+      // どのタグが含まれるか確認
+      let matchedDef = null, matchedNum = null;
+      for (const def of TAG_DEFS) {
+        const m = line.match(def.re);
+        if (m) { matchedDef = def; matchedNum = parseInt(m[1], 10); break; }
       }
-      // ★N あり：行全体を青字アンダーライン、末尾に（N★）付加
-      const todoNum = parseInt(starMatch[1], 10);
-      // ★N を除去した本文
-      const lineText = line.replace(/★\d+/g, '').trimEnd();
+
+      if (!matchedDef) {
+        // タグなし：通常行
+        return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
+          +`<w:r>${rPr(NML)}<w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`;
+      }
+
+      // タグあり：行全体を色付きアンダーライン＋末尾ラベル
+      // タグ記号を除去した本文
+      const lineText = line
+        .replace(/★\d+/g,'').replace(/保\d+/g,'').replace(/リ\d+/g,'').replace(/課\d+/g,'')
+        .trimEnd();
+      const { color, label } = matchedDef;
       return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
-        // 本文（青字+アンダーライン）
-        +`<w:r>${rPrBase(BLUE,true)}<w:t xml:space="preserve">${esc(lineText)}</w:t></w:r>`
-        // （N★）（青字+アンダーライン）
-        +`<w:r>${rPrBase(BLUE,true)}<w:t xml:space="preserve">（${todoNum}★）</w:t></w:r>`
+        +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(lineText)}</w:t></w:r>`
+        +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(label(matchedNum))}</w:t></w:r>`
         +`</w:p>`;
     }).join('');
   }
@@ -1368,6 +1385,9 @@ minutes_by_agenda の content は以下の基準で作成すること：
 - 1議題あたり5〜15行程度を目安とし、議論の流れが伝わるよう構成する
 - 決定に至る経緯・反対意見・条件なども記載する
 - 【ToDoの記載と番号付け：最重要】todos 配列の各アクションは、それが議論された議題の content に必ず記載すること。記載する際は、該当の文の末尾に「★N」（Nは todos 配列の1始まりのインデックス番号）を付けること。例：todos[0]（1番目）のToDo→「★1」、todos[1]（2番目）→「★2」。ToDoの記載行は必ず独立した1行とし、話者名から始めること。全てのToDoについて漏れなく★N付きで記載すること。★なしでToDoの内容が議事内容に含まれることは絶対に不可。
+- 【保留・継続審議の記載と番号付け】pending 配列の各保留事項は、それが議論された議題の content に必ず記載すること。記載する際は該当の文の末尾に「保N」（Nは pending 配列の1始まりのインデックス番号）を付けること。例：pending[0]→「保1」、pending[1]→「保2」。
+- 【リスクの記載と番号付け】risks 配列の各リスクは、それが議論された議題の content に必ず記載すること。記載する際は該当の文の末尾に「リN」（Nは risks 配列の1始まりのインデックス番号）を付けること。例：risks[0]→「リ1」、risks[1]→「リ2」。
+- 【課題の記載と番号付け】issues 配列の各課題は、それが議論された議題の content に必ず記載すること。記載する際は該当の文の末尾に「課N」（Nは issues 配列の1始まりのインデックス番号）を付けること。例：issues[0]→「課1」、issues[1]→「課2」。
 
 以下のJSON構造で出力してください（マークダウン不要、JSONのみ）:
 {"agenda_items":["議題1","議題2"],"minutes_by_agenda":[{"title":"議題名","content":"発言者名: ビジネス文書体に整形した発言内容の記録。発言の流れを維持し、決定経緯・懸念点・条件も含める。"}],"decisions":[{"content":"決定内容（主語+述語で明確に）","decided_by":"決定者","scope":"影響範囲・対象システム/フェーズ","importance":"高","priority":"高"}],"todos":[{"content":"アクション内容（何を・誰が・いつまでに、が明確になるよう記載）","assignee":"担当者（実名）","due":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗・対応状況（なければ空文字）","match_reason":"同一・類似と判定した具体的根拠（新規の場合は空文字）"}],"pending":[{"content":"保留事項（具体的に）","reason":"保留理由","next_action":"次回の扱い・期限"}],"risks":[{"content":"リスク内容（影響・発生条件を含めて記述）","category":"スケジュール","impact":"高","probability":"中","response":"対応方針（具体的なアクションを含む）","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容（何が問題か・現状を明確に記述）","category":"設計・要件","owner":"担当者","due":"YYYY/MM/DD","resolution":"解決策・対応内容（未定の場合は「調査中」等）","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"役員への報告内容（背景含む・経営判断が必要な理由を明確に）","decision_needed":"要","background":"背景・経緯","recipient":"報告先役員名","deadline":"YYYY/MM/DD","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"室長への報告内容（対応の方向性を含む）","action_needed":"要","background":"背景・経緯","recipient":"担当室長名","deadline":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
@@ -3797,7 +3817,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v23</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v24</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
