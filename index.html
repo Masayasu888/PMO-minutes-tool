@@ -2290,59 +2290,172 @@ function searchPersonMaster(query, excludeNames=[]) {
 
 // ── 手入力出席者コンポーネント ───────────────────────────────
 // 各行「組織名　田中、山下、宮城」形式で入力 → attendees配列に変換
+// ── チェックボックス式出席者選択コンポーネント ────────────────
 function ManualAttendeesInput({ value, onChange }) {
-  const toText = (attendees) => {
-    if (!attendees || attendees.length === 0) return '';
-    return attendees.map(o => {
-      const names = Array.isArray(o.names) ? o.names.join('、') : (o.names||'');
-      return `${o.org}　${names}`;
-    }).join('\n');
-  };
+  const master = loadOrgAttMaster(); // { org: [name,...] }
+  const orgs = Object.keys(master).sort();
 
-  const [text, setText] = React.useState(() => toText(value));
-
-  const handleChange = (val) => {
-    setText(val);
-    const lines = val.split('\n').map(l=>l.trim()).filter(Boolean);
-    const attendees = lines.map(line => {
-      // 「組織名　名前1、名前2」形式：全角/半角スペース・タブで組織名と名前部分を分割
-      const m = line.match(/^([^\s\u3000　,、]+)[\s\u3000　]+(.+)$/);
-      if (m) {
-        const org = m[1].trim();
-        const names = m[2].split(/[、,，]+/).map(n=>n.trim()).filter(Boolean);
-        return { org, names };
-      }
-      return { org: line.trim(), names: [] };
+  // チェック状態: { "org::name": true/false }
+  const toChecked = (attendees) => {
+    const map = {};
+    (attendees||[]).forEach(o => {
+      (o.names||[]).forEach(n => { map[`${o.org}::${n}`] = true; });
     });
+    return map;
+  };
+  const [checked, setChecked] = React.useState(() => toChecked(value));
+  // 手入力追加用
+  const [addOrg, setAddOrg] = React.useState('');
+  const [addNames, setAddNames] = React.useState('');
+
+  // checkedからattendees配列を再構築してonChange
+  const buildAndNotify = (newChecked) => {
+    const map = {};
+    Object.entries(newChecked).forEach(([key, v]) => {
+      if (!v) return;
+      const [org, name] = key.split('::');
+      if (!map[org]) map[org] = [];
+      map[org].push(name);
+    });
+    // masterのorg順に並べる、未登録手入力組織は後ろ
+    const masterOrgs = Object.keys(master).sort();
+    const allOrgs = [...new Set([...masterOrgs, ...Object.keys(map)])];
+    const attendees = allOrgs.filter(o => map[o] && map[o].length > 0)
+      .map(o => ({ org: o, names: map[o] }));
     onChange(attendees);
   };
 
+  const toggleName = (org, name) => {
+    const key = `${org}::${name}`;
+    const next = { ...checked, [key]: !checked[key] };
+    setChecked(next);
+    buildAndNotify(next);
+  };
+
+  const toggleOrg = (org) => {
+    const names = master[org] || [];
+    const allChecked = names.every(n => checked[`${org}::${n}`]);
+    const next = { ...checked };
+    names.forEach(n => { next[`${org}::${n}`] = !allChecked; });
+    setChecked(next);
+    buildAndNotify(next);
+  };
+
+  // 手入力で追加（マスター未登録者）
+  const handleAdd = () => {
+    const org = addOrg.trim();
+    const names = addNames.split(/[、,，]+/).map(n=>n.trim()).filter(Boolean);
+    if (!org || !names.length) return;
+    const next = { ...checked };
+    names.forEach(n => { next[`${org}::${n}`] = true; });
+    setChecked(next);
+    buildAndNotify(next);
+    setAddOrg(''); setAddNames('');
+  };
+
+  const selectedCount = Object.values(checked).filter(Boolean).length;
+
+  if (orgs.length === 0) {
+    // マスター未登録時はテキスト入力にフォールバック
+    return (
+      <div>
+        <div style={{background:'#FFF8EC',border:'1.5px solid #E6A817',borderRadius:8,padding:'10px 14px',marginBottom:10,fontSize:12,color:'#7D4E00'}}>
+          ⚠️ 組織別出席者マスターに登録がありません。右上の「🏢 組織別マスター」からメンバーを登録すると、チェックボックスで素早く選択できます。
+        </div>
+        <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
+          <input value={addOrg} onChange={e=>setAddOrg(e.target.value)}
+            placeholder="組織名" style={{width:140,padding:'7px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}/>
+          <input value={addNames} onChange={e=>setAddNames(e.target.value)}
+            placeholder="田中、山下、宮城"
+            style={{flex:1,minWidth:160,padding:'7px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}
+            onKeyDown={e=>e.key==='Enter'&&handleAdd()}/>
+          <button onClick={handleAdd}
+            style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>
+            追加
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div style={{fontSize:11,color:'#888',marginBottom:6}}>
-        💡 1行に「<strong>組織名　田中、山下、宮城</strong>」の形式で入力。Enterで改行すると別の組織を追加できます。
+      <div style={{fontSize:11,color:'#718096',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <span>💡 組織名をクリックで全員選択 / 名前を個別にチェック</span>
+        {selectedCount > 0 && <span style={{color:'#1F7A4D',fontWeight:700}}>{selectedCount}名選択中</span>}
       </div>
+
+      {/* チェックボックス一覧 */}
       <div style={{border:'1.5px solid #d0d8e4',borderRadius:8,overflow:'hidden',background:'#fff'}}>
-        <textarea
-          value={text}
-          onChange={e=>handleChange(e.target.value)}
-          placeholder={'Hopes ISE　安田 真和\nKokusai Electric　渡邉泰、池畑誠、宮守秀勝\nIBM　GOTO HIDEHIKO、Juen Yuto'}
-          style={{width:'100%',minHeight:120,padding:'10px 12px',border:'none',outline:'none',
-            fontSize:13,fontFamily:'Meiryo UI,Meiryo,sans-serif',resize:'vertical',
-            boxSizing:'border-box',lineHeight:1.8}}
-        />
+        {orgs.map((org, oi) => {
+          const names = master[org] || [];
+          const checkedCount = names.filter(n => checked[`${org}::${n}`]).length;
+          const allChk = checkedCount === names.length && names.length > 0;
+          const someChk = checkedCount > 0 && !allChk;
+          return (
+            <div key={org} style={{borderBottom: oi < orgs.length-1 ? '1px solid #eef2f7' : 'none'}}>
+              {/* 組織ヘッダー行 */}
+              <div
+                onClick={() => toggleOrg(org)}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
+                  background: checkedCount > 0 ? '#EBF3FB' : '#f8fafc',
+                  cursor:'pointer',userSelect:'none'}}>
+                <span style={{
+                  width:16, height:16, border:'2px solid '+(allChk?'#2E75B6':someChk?'#2E75B6':'#aab'),
+                  borderRadius:3, display:'flex', alignItems:'center', justifyContent:'center',
+                  background: allChk?'#2E75B6': someChk?'#EBF3FB':'#fff', flexShrink:0}}>
+                  {allChk && <span style={{color:'#fff',fontSize:11,fontWeight:900,lineHeight:1}}>✓</span>}
+                  {someChk && <span style={{color:'#2E75B6',fontSize:11,fontWeight:900,lineHeight:1}}>−</span>}
+                </span>
+                <span style={{fontWeight:700,fontSize:13,color:'#1F3864',flex:1}}>【{org}】</span>
+                <span style={{fontSize:11,color:'#888'}}>{checkedCount}/{names.length}名</span>
+              </div>
+              {/* メンバー行 */}
+              <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'6px 12px 8px 36px'}}>
+                {names.map(name => {
+                  const key = `${org}::${name}`;
+                  const isChk = !!checked[key];
+                  return (
+                    <label key={name}
+                      style={{display:'inline-flex',alignItems:'center',gap:4,cursor:'pointer',
+                        padding:'4px 10px',borderRadius:20,userSelect:'none',
+                        background: isChk ? '#2E75B6' : '#f0f4f8',
+                        color: isChk ? '#fff' : '#333',
+                        border: '1.5px solid '+(isChk?'#2E75B6':'#d0d8e4'),
+                        fontSize:12,fontWeight: isChk?700:400,transition:'.12s'}}>
+                      <input type="checkbox" checked={isChk}
+                        onChange={()=>toggleName(org,name)}
+                        style={{display:'none'}}/>
+                      {isChk && <span style={{fontSize:10}}>✓</span>}
+                      {name}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
-      {value && value.length > 0 && (
-        <div style={{marginTop:6,display:'flex',flexWrap:'wrap',gap:6}}>
-          {value.map((o,i)=>(
-            <span key={i} style={{background:'#EBF3FB',border:'1px solid #bee3f8',
-              padding:'3px 10px',borderRadius:14,fontSize:12,color:'#1a4a7a'}}>
-              <strong>{o.org}</strong>
-              {o.names && o.names.length>0 && <>　{o.names.join('、')}</>}
-            </span>
-          ))}
+
+      {/* 手入力で未登録者を追加 */}
+      <div style={{marginTop:10,padding:'10px 12px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8}}>
+        <div style={{fontSize:11,color:'#888',marginBottom:6}}>マスター未登録の方を追加</div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <input value={addOrg} onChange={e=>setAddOrg(e.target.value)}
+            placeholder="組織名" list="org-hint-list"
+            style={{width:130,padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}/>
+          <datalist id="org-hint-list">{orgs.map(o=><option key={o} value={o}/>)}</datalist>
+          <input value={addNames} onChange={e=>setAddNames(e.target.value)}
+            placeholder="田中、山下（カンマ区切り）"
+            style={{flex:1,minWidth:150,padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}
+            onKeyDown={e=>e.key==='Enter'&&handleAdd()}/>
+          <button onClick={handleAdd}
+            style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,
+              padding:'6px 14px',cursor:'pointer',fontSize:12,fontWeight:700,whiteSpace:'nowrap'}}>
+            ＋ 追加
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -4455,7 +4568,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v42</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v43</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
