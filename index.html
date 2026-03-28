@@ -2809,6 +2809,7 @@ function OrgAttendeeMasterModal({ onClose }) {
 }
 
 
+function PersonMasterModal({ onClose }) {
   const [list, setList] = useState(()=>loadPersonMaster());
   const [editing, setEditing] = useState(null);
   const domains = loadDomainMaster();
