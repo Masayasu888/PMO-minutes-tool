@@ -349,17 +349,17 @@ function generateDocx(basicInfo, result){
   // ── 議事内容：★N / 保N / リN / 課N を解析して色付きアンダーラインに変換 ──
   function buildMinutesParasXml(content){
     const BLUE   = '2E75B6'; // ToDo：青
-    const PURPLE = '7030A0'; // 保留：紫
-    const RED    = 'C00000'; // リスク：赤
-    const GREEN  = '375623'; // 課題：濃緑
+    const GREEN  = '375623'; // 保留・継続：緑（保留テーブルヘッダーと同色）
+    const BROWN  = '843C0C'; // リスク：茶色（リスクテーブルヘッダーと同色）
+    const PURPLE = '7030A0'; // 課題：紫（課題テーブルヘッダーと同色）
     const NML    = '000000';
 
     // タグパターンと対応する色・ラベル
     const TAG_DEFS = [
       { re: /★(\d+)/, color: BLUE,   label: n => `（${n}★）` },
-      { re: /保(\d+)/, color: PURPLE, label: n => `（保・継${n}）` },
-      { re: /リ(\d+)/, color: RED,    label: n => `（リスク${n}）` },
-      { re: /課(\d+)/, color: GREEN,  label: n => `（課題${n}）` },
+      { re: /保(\d+)/, color: GREEN,  label: n => `（保・継${n}）` },
+      { re: /リ(\d+)/, color: BROWN,  label: n => `（リスク${n}）` },
+      { re: /課(\d+)/, color: PURPLE, label: n => `（課題${n}）` },
     ];
 
     const rPr = (color, underline=false) =>
@@ -494,9 +494,11 @@ ${row(820,  cell('【ToDo】\n'+todoLines,W,{span:4}))}
         result.exec_report.map((r,i)=>[i+1,r.content||'',r.decision_needed||'',r.background||'']))
     : itemPara('（該当なし）');
 
-  // 保留
+  // 保留・継続審議（表形式、ヘッダー色：緑）
+  const PENDING_CLR = '375623'; // 緑（室長報告ヘッダーと同色）
   const pendingXml = result.pending.length
-    ? result.pending.map((p,i)=>itemPara(`${i+1}. ${p.content||''}（理由: ${p.reason||''}）`)).join('')
+    ? makeTable(['No.','保留・継続審議内容','理由','次回の扱い・期限'],[567,3685,2178,2736],PENDING_CLR,
+        result.pending.map((p,i)=>[i+1,p.content||'',p.reason||'',p.next_action||'']))
     : itemPara('（該当なし）');
 
   function pageBreak(){ return `<w:p><w:r><w:rPr/><w:br w:type="page"/></w:r></w:p>`; }
@@ -3817,7 +3819,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v24</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v25</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
