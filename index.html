@@ -2635,7 +2635,180 @@ function DomainMasterModal({ onClose, icsRaws }) {
 }
 
 // ── 出席者マスター管理モーダル ─────────────────────────────────
-function PersonMasterModal({ onClose }) {
+// ── 組織別出席者マスター ─────────────────────────────────
+// データ構造: { [org]: string[] }  例: { "KE": ["田中","山田","山下（信）"] }
+const ORG_ATT_MASTER_KEY = 'pmo_org_attendee_master';
+function loadOrgAttMaster(){ try{ return JSON.parse(localStorage.getItem(ORG_ATT_MASTER_KEY)||'{}'); }catch(e){ return {}; } }
+function saveOrgAttMaster(data){ localStorage.setItem(ORG_ATT_MASTER_KEY, JSON.stringify(data)); }
+
+function OrgAttendeeMasterModal({ onClose }) {
+  const [master, setMaster] = useState(()=>loadOrgAttMaster());
+  const [bulkInput, setBulkInput] = useState('');
+  // 重複チェック結果: [{org, name, existing}]
+  const [conflicts, setConflicts] = useState([]);
+  // 確認待ちキュー: [{org, name, rename:''}]
+  const [queue, setQueue] = useState([]);
+  const [queueIdx, setQueueIdx] = useState(0);
+  const [renameVal, setRenameVal] = useState('');
+  // 一括入力を解析して登録処理
+  const handleBulkRegister = () => {
+    const lines = bulkInput.split('\n').map(l=>l.trim()).filter(Boolean);
+    const toRegister = []; // {org, name}
+    for (const line of lines) {
+      const m = line.match(/^([^\s\u3000　,、]+)[\s\u3000　]+(.+)$/);
+      if (!m) continue;
+      const org = m[1].trim();
+      const names = m[2].split(/[、,，]+/).map(n=>n.trim()).filter(Boolean);
+      names.forEach(name => toRegister.push({org, name}));
+    }
+    if (!toRegister.length) return;
+    // 重複チェック
+    const cur = {...master};
+    const dups = [];
+    const ok = [];
+    for (const {org, name} of toRegister) {
+      const existing = cur[org] || [];
+      if (existing.includes(name)) {
+        dups.push({org, name, rename:''});
+      } else {
+        ok.push({org, name});
+      }
+    }
+    // 重複なしはすぐ登録
+    const next = {...cur};
+    ok.forEach(({org, name}) => {
+      if (!next[org]) next[org] = [];
+      if (!next[org].includes(name)) next[org].push(name);
+    });
+    setMaster(next); saveOrgAttMaster(next);
+    setBulkInput('');
+    if (dups.length > 0) {
+      setQueue(dups); setQueueIdx(0); setRenameVal(dups[0].name);
+    }
+  };
+
+  // 重複確認：別名で登録
+  const resolveRename = () => {
+    const item = queue[queueIdx];
+    const name = renameVal.trim();
+    if (name && name !== item.name) {
+      const next = {...master};
+      if (!next[item.org]) next[item.org] = [];
+      if (!next[item.org].includes(name)) {
+        next[item.org].push(name);
+        setMaster(next); saveOrgAttMaster(next);
+      }
+    }
+    advanceQueue();
+  };
+  // 重複確認：スキップ
+  const resolveSkip = () => advanceQueue();
+  const advanceQueue = () => {
+    const next = queueIdx + 1;
+    if (next < queue.length) {
+      setQueueIdx(next); setRenameVal(queue[next].name);
+    } else {
+      setQueue([]); setQueueIdx(0); setRenameVal('');
+    }
+  };
+
+  // 氏名個別削除
+  const delName = (org, name) => {
+    const next = {...master};
+    next[org] = (next[org]||[]).filter(n=>n!==name);
+    if (next[org].length===0) delete next[org];
+    setMaster(next); saveOrgAttMaster(next);
+  };
+  // 組織ごと削除
+  const delOrg = (org) => {
+    if (!window.confirm(`「${org}」の全メンバーを削除しますか？`)) return;
+    const next = {...master};
+    delete next[org];
+    setMaster(next); saveOrgAttMaster(next);
+  };
+
+  const orgs = Object.keys(master).sort();
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">🏢 組織別出席者マスター</div>
+
+        {/* 重複確認ダイアログ */}
+        {queue.length > 0 && queueIdx < queue.length && (
+          <div style={{background:'#FFF8EC',border:'1.5px solid #E6A817',borderRadius:8,padding:14,marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:'#7D4E00',marginBottom:8}}>
+              ⚠️ 重複確認 （{queueIdx+1}/{queue.length}件）
+            </div>
+            <div style={{fontSize:13,marginBottom:10}}>
+              <strong>「{queue[queueIdx].org}」</strong> に <strong>「{queue[queueIdx].name}」</strong> はすでに登録されています。
+            </div>
+            <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
+              <input value={renameVal} onChange={e=>setRenameVal(e.target.value)}
+                placeholder="別名で登録（例：山下（信））"
+                style={{flex:1,minWidth:160,padding:'6px 10px',border:'1.5px solid #E6A817',borderRadius:6,fontSize:13}}
+                onKeyDown={e=>e.key==='Enter'&&resolveRename()}/>
+              <button onClick={resolveRename}
+                style={{background:'#1F7A4D',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>
+                別名で登録
+              </button>
+              <button onClick={resolveSkip}
+                style={{background:'#e2e8f0',border:'none',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:13}}>
+                スキップ
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 一括入力 */}
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,color:'#718096',marginBottom:6}}>
+            💡 「<strong>組織名　田中、山田、山下</strong>」形式で入力（複数行可）。Enterで改行して別組織を追加できます。
+          </div>
+          <textarea value={bulkInput} onChange={e=>setBulkInput(e.target.value)}
+            placeholder={'KE　田中、山田、山下\nIBM　長田、寿円、筒井'}
+            style={{width:'100%',minHeight:72,padding:'8px 10px',border:'1.5px solid #d0d8e4',
+              borderRadius:6,fontSize:13,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'}}/>
+          <button onClick={handleBulkRegister}
+            style={{marginTop:6,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,
+              padding:'7px 18px',cursor:'pointer',fontSize:13,fontWeight:700,width:'100%'}}>
+            ＋ 登録する
+          </button>
+        </div>
+
+        {/* 登録済み一覧 */}
+        <div style={{fontSize:12,color:'#555',marginBottom:6,fontWeight:700}}>登録済み一覧</div>
+        <div style={{maxHeight:280,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {orgs.length===0 && <div style={{padding:16,color:'#888',fontSize:13,textAlign:'center'}}>登録された出席者はありません</div>}
+          {orgs.map(org=>(
+            <div key={org}>
+              <div style={{display:'flex',alignItems:'center',background:'#EBF3FB',padding:'6px 12px',borderBottom:'1px solid #d0d8e4'}}>
+                <span style={{flex:1,fontSize:13,fontWeight:700,color:'#1F3864'}}>【{org}】</span>
+                <button onClick={()=>delOrg(org)}
+                  style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:14}}>🗑 組織削除</button>
+              </div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'8px 12px',borderBottom:'1px solid #f0f0f0'}}>
+                {(master[org]||[]).map(name=>(
+                  <span key={name} style={{display:'inline-flex',alignItems:'center',gap:4,background:'#fff',
+                    border:'1px solid #bee3f8',borderRadius:14,padding:'3px 10px',fontSize:12}}>
+                    {name}
+                    <button onClick={()=>delName(org,name)}
+                      style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:12,padding:0,lineHeight:1}}>✕</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
   const [list, setList] = useState(()=>loadPersonMaster());
   const [editing, setEditing] = useState(null);
   const domains = loadDomainMaster();
@@ -3044,6 +3217,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const [locationList, setLocationList] = useState(()=>loadLocationMaster());
   const [showAuthorMaster, setShowAuthorMaster] = useState(false);
   const [authorList, setAuthorList] = useState(()=>loadAuthorMaster());
+  const [showOrgAttMaster, setShowOrgAttMaster] = useState(false);
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
   // 入力モード：'ics'（ICS自動）or 'manual'（全項目手入力）
@@ -3459,6 +3633,9 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
               🌐 組織マスター
             </button>
           </>}
+          <button onClick={()=>setShowOrgAttMaster(true)} className="btn-form-sub">
+            🏢 組織別マスター
+          </button>
         </div>
       </div>
 
@@ -3470,8 +3647,24 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)} onOpenPersonMaster={()=>onOpenPersonMaster('person')}/>
         </>
       ) : (
-        <ManualAttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
+        <>
+          <ManualAttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
+          {/* 組織別マスターから一括読み込みボタン */}
+          {Object.keys(loadOrgAttMaster()).length > 0 && (
+            <button onClick={()=>{
+              const m = loadOrgAttMaster();
+              const orgs = Object.keys(m).sort();
+              const attendees = orgs.map(org=>({org, names: m[org]||[]}));
+              upd('attendees', attendees);
+            }}
+              style={{marginTop:8,background:'#EBF3FB',border:'1.5px solid #2E75B6',color:'#1F3864',
+                borderRadius:6,padding:'6px 14px',cursor:'pointer',fontSize:12,fontWeight:600,width:'100%'}}>
+              📂 組織別マスターから全員を読み込む
+            </button>
+          )}
+        </>
       )}
+      {showOrgAttMaster && <OrgAttendeeMasterModal onClose={()=>setShowOrgAttMaster(false)}/>}
       <div className="form-row-1" style={{marginTop:8}}>
         <label style={{marginBottom:6}}>配布・投影資料</label>
         <MaterialsInput value={data.materials} onChange={v=>upd('materials',v)}/>
@@ -4237,7 +4430,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v40</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v41</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
