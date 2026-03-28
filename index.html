@@ -368,7 +368,7 @@ function generateDocx(basicInfo, result){
       +(underline?`<w:u w:val="single"/>`:'')
       +`</w:rPr>`;
 
-    return (content||'（記録なし）').split('\n').map(line => {
+    return (content||'（記録なし）').split('\n').filter(line => line.trim() !== '').map(line => {
       // どのタグが含まれるか確認
       let matchedDef = null, matchedNum = null;
       for (const def of TAG_DEFS) {
@@ -2676,29 +2676,58 @@ function parseIcs(text) {
     if (!desc) return '';
     const lines = desc.split('\n').map(l => l.trim()).filter(Boolean);
 
-    // 「アジェンダ」「議題」「Agenda」というキーワードを含む行以降を取得
-    const agendaKeyRe = /アジェンダ|議題|Agenda|agenda/i;
+    // メタ情報行の除外パターン
+    const isMetaLine = (l) =>
+      /^【日時[】:]/.test(l) ||           // 【日時】
+      /^【会議体[】:]/.test(l) ||          // 【会議体】
+      /^【場所[】:]/.test(l) ||            // 【場所】
+      /^【開催[】:]/.test(l) ||            // 【開催】
+      /^【参加[】:]/.test(l) ||            // 【参加】
+      /^【出席[】:]/.test(l) ||            // 【出席】
+      /https?:\/\//.test(l) ||             // URL含む行
+      /\d{1,2}[\/\-]\d{1,2}.*\d{1,2}:\d{2}/.test(l) || // 日時パターン
+      /アクセス[・\s]/.test(l) ||          // アクセス情報
+      /ショップ|レストラン|フロア|ビル|タワー|階/.test(l) ||  // 施設情報
+      /^\d{3}-\d{4}/.test(l) ||            // 郵便番号
+      /^〒/.test(l) ||                      // 〒
+      l.length < 3;                         // 短すぎる行
+
+    // 「アジェンダ」「議題」キーワードを含む行以降を取得
+    const agendaKeyRe = /^[\s・\-]*(アジェンダ|議題|Agenda|agenda|議事)[：:）\s]*/i;
     const agendaStartIdx = lines.findIndex(l => agendaKeyRe.test(l));
 
     let items = [];
     if (agendaStartIdx >= 0) {
-      // アジェンダ行以降の箇条書き/番号付きを収集
+      // アジェンダセクション以降の項目を収集
       for (let i = agendaStartIdx + 1; i < lines.length; i++) {
         const l = lines[i];
-        if (/^[\-・●▶►▸\d\.\)）※]/.test(l) || l.length > 2) {
-          // 次のセクションヘッダーで止める
-          if (i > agendaStartIdx + 1 && agendaKeyRe.test(l) && l.length < 20) break;
-          items.push(l.replace(/^[\-・●▶►▸\d\.\)）※\s]+/, '').trim());
-        }
+        if (isMetaLine(l)) continue;
+        // 次のセクションヘッダーで止める
+        if (/^【.{2,10}[】:]/.test(l) && !agendaKeyRe.test(l)) break;
+        const cleaned = l.replace(/^[\s\-・●▶►▸\d\.\)）①②③④⑤\s]+/, '').trim();
+        if (cleaned.length > 2) items.push(cleaned);
       }
     } else {
-      // アジェンダ記載なし → 目的・内容から推測（最初の5行まで）
-      items = lines.slice(0, Math.min(5, lines.length))
-        .filter(l => l.length > 3 && !/^https?:\/\//.test(l));
+      // アジェンダ明記なし → メタ情報を除いた意味のある行を収集
+      for (const l of lines) {
+        if (isMetaLine(l)) continue;
+        // 目的・内容を示す行（招待文の本文）
+        const cleaned = l
+          .replace(/を開催いたします[。.]?/g, '')
+          .replace(/のご案内[。.]?/g, '')
+          .replace(/について[。.]?$/g, '')
+          .replace(/^[\-・●▶\s]+/, '')
+          .trim();
+        if (cleaned.length > 4) items.push(cleaned);
+        if (items.length >= 5) break;
+      }
     }
 
-    // 番号を振る
-    return items.filter(Boolean).map((item, i) => `${i + 1}．${item}`).join('\n');
+    // 番号を振る（既に番号がある場合は振り直し）
+    return items
+      .filter(Boolean)
+      .map((item, i) => `${i + 1}．${item}`)
+      .join('\n');
   };
 
   const agenda = parseAgenda();
@@ -3877,7 +3906,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v28</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v30</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
