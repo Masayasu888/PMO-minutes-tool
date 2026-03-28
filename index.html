@@ -2152,6 +2152,65 @@ function searchPersonMaster(query, excludeNames=[]) {
   }).slice(0, 8);
 }
 
+// ── 手入力出席者コンポーネント ───────────────────────────────
+// 各行「組織名　田中、山下、宮城」形式で入力 → attendees配列に変換
+function ManualAttendeesInput({ value, onChange }) {
+  const toText = (attendees) => {
+    if (!attendees || attendees.length === 0) return '';
+    return attendees.map(o => {
+      const names = Array.isArray(o.names) ? o.names.join('、') : (o.names||'');
+      return `${o.org}　${names}`;
+    }).join('\n');
+  };
+
+  const [text, setText] = React.useState(() => toText(value));
+
+  const handleChange = (val) => {
+    setText(val);
+    const lines = val.split('\n').map(l=>l.trim()).filter(Boolean);
+    const attendees = lines.map(line => {
+      // 「組織名　名前1、名前2」形式：全角/半角スペース・タブで組織名と名前部分を分割
+      const m = line.match(/^([^\s\u3000　,、]+)[\s\u3000　]+(.+)$/);
+      if (m) {
+        const org = m[1].trim();
+        const names = m[2].split(/[、,，]+/).map(n=>n.trim()).filter(Boolean);
+        return { org, names };
+      }
+      return { org: line.trim(), names: [] };
+    });
+    onChange(attendees);
+  };
+
+  return (
+    <div>
+      <div style={{fontSize:11,color:'#888',marginBottom:6}}>
+        💡 1行に「<strong>組織名　田中、山下、宮城</strong>」の形式で入力。Enterで改行すると別の組織を追加できます。
+      </div>
+      <div style={{border:'1.5px solid #d0d8e4',borderRadius:8,overflow:'hidden',background:'#fff'}}>
+        <textarea
+          value={text}
+          onChange={e=>handleChange(e.target.value)}
+          placeholder={'Hopes ISE　安田 真和\nKokusai Electric　渡邉泰、池畑誠、宮守秀勝\nIBM　GOTO HIDEHIKO、Juen Yuto'}
+          style={{width:'100%',minHeight:120,padding:'10px 12px',border:'none',outline:'none',
+            fontSize:13,fontFamily:'Meiryo UI,Meiryo,sans-serif',resize:'vertical',
+            boxSizing:'border-box',lineHeight:1.8}}
+        />
+      </div>
+      {value && value.length > 0 && (
+        <div style={{marginTop:6,display:'flex',flexWrap:'wrap',gap:6}}>
+          {value.map((o,i)=>(
+            <span key={i} style={{background:'#EBF3FB',border:'1px solid #bee3f8',
+              padding:'3px 10px',borderRadius:14,fontSize:12,color:'#1a4a7a'}}>
+              <strong>{o.org}</strong>
+              {o.names && o.names.length>0 && <>　{o.names.join('、')}</>}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AttendeesInput({ value, onChange, onOpenPersonMaster }){
   const orgs = (value && value.length > 0)
     ? value.filter(function(o){ return o.names && o.names.length > 0; })
@@ -3208,19 +3267,43 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 
       <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <span>出席者</span>
-        <div style={{display:'flex',gap:6}}>
-          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }} className="btn-form-sub">
-            👥 出席者マスター
-          </button>
-          <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }} className="btn-form-sub">
-            🌐 組織マスター
-          </button>
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          {/* 入力モード切り替え */}
+          <div style={{display:'flex',background:'#f0f4f8',borderRadius:6,padding:2,gap:2}}>
+            <button onClick={()=>upd('_attMode','ics')}
+              style={{padding:'4px 10px',borderRadius:4,border:'none',fontSize:11,fontWeight:600,cursor:'pointer',
+                background:(!data._attMode||data._attMode==='ics')?'#2E75B6':'transparent',
+                color:(!data._attMode||data._attMode==='ics')?'#fff':'#666',transition:'.15s'}}>
+              📅 ICS
+            </button>
+            <button onClick={()=>upd('_attMode','manual')}
+              style={{padding:'4px 10px',borderRadius:4,border:'none',fontSize:11,fontWeight:600,cursor:'pointer',
+                background:data._attMode==='manual'?'#2E75B6':'transparent',
+                color:data._attMode==='manual'?'#fff':'#666',transition:'.15s'}}>
+              ✏️ 手入力
+            </button>
+          </div>
+          {(!data._attMode||data._attMode==='ics') && <>
+            <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }} className="btn-form-sub">
+              👥 出席者マスター
+            </button>
+            <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }} className="btn-form-sub">
+              🌐 組織マスター
+            </button>
+          </>}
         </div>
       </div>
-      <div style={{fontSize:11,color:'#888',marginBottom:6}}>
-        💡 名前を入力して <strong>Enter</strong> で追加。「、」または「,」で区切ると複数名を一括登録できます。
-      </div>
-      <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)} onOpenPersonMaster={()=>onOpenPersonMaster('person')}/>
+
+      {(!data._attMode||data._attMode==='ics') ? (
+        <>
+          <div style={{fontSize:11,color:'#888',marginBottom:6}}>
+            💡 名前を入力して <strong>Enter</strong> で追加。「、」または「,」で区切ると複数名を一括登録できます。
+          </div>
+          <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)} onOpenPersonMaster={()=>onOpenPersonMaster('person')}/>
+        </>
+      ) : (
+        <ManualAttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
+      )}
       <div className="form-row-1" style={{marginTop:8}}>
         <label style={{marginBottom:6}}>配布・投影資料</label>
         <MaterialsInput value={data.materials} onChange={v=>upd('materials',v)}/>
@@ -3986,7 +4069,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v36</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v37</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
