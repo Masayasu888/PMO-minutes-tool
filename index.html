@@ -317,9 +317,11 @@ async function generateDocx(basicInfo, result, templateFile){
     const sz = 22;
     const jc = opts.center ? '<w:jc w:val="center"/>' : '';
     const lines = String(text||'').split('\n');
-    const parasXml = lines.map(line =>
-      `<w:p><w:pPr>${jc}<w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${FONT}${bold}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:color w:val="${txtColor}"/></w:rPr><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`
-    ).join('');
+    const parasXml = lines.map((line, li) => {
+      // boldFirstLine: 最初の行のみ太字
+      const lineBold = (opts.boldFirstLine && li === 0) ? '<w:b/><w:bCs/>' : bold;
+      return `<w:p><w:pPr>${jc}<w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${FONT}${lineBold}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:color w:val="${txtColor}"/></w:rPr><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`;
+    }).join('');
     return `<w:tc><w:tcPr>${wElem}${span}${tcBdr}${shade}${vA}${mar}</w:tcPr>${parasXml}</w:tc>`;
   }
 
@@ -458,7 +460,7 @@ ${row(454,  labelCell('場所', 2178) + cell(basicInfo.location||'',3685) + labe
 ${row(1021, labelCell('(敬称略) (順不同)',2178) + cell(attendeesCell,7769,{span:3}))}
 ${(()=>{
     const mats=Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name):[];
-    if(!mats.length) return row(1021,cell('【配布資料/投影資料】\n・なし',W,{span:4}));
+    if(!mats.length) return row(1021,cell('【配布資料/投影資料】\n・なし',W,{span:4,boldFirstLine:true}));
     const matParas=mats.map(m=>{
       const isBlob = m.url && m.url.startsWith('blob:');
       if(m.url && !isBlob){
@@ -477,8 +479,8 @@ ${(()=>{
     const mar='<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
     return '<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="'+W+'" w:type="dxa"/><w:gridSpan w:val="4"/>'+bdr+'<w:vAlign w:val="center"/>'+mar+'</w:tcPr>'+hdr+matParas+'</w:tc></w:tr>';
   })()}
-${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4}))}
-${row(820,  cell('【ToDo】\n'+todoLines,W,{span:4}))}
+${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4,boldFirstLine:true}))}
+${row(820,  cell('【ToDo】\n'+todoLines,W,{span:4,boldFirstLine:true}))}
 ${agendaRowXml}
 <w:tr>${minutesCellXml}</w:tr>
 </w:tbl>`;
@@ -4069,7 +4071,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v37</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v38</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
