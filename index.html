@@ -1703,7 +1703,141 @@ function MeetingMasterModal({onClose}){
 }
 
 
-// ── 出席者履歴管理 ────────────────────────────────────────
+// ── 場所・形式マスター ────────────────────────────────────
+const LOCATION_MASTER_KEY = 'pmo_location_master';
+function loadLocationMaster(){
+  try{
+    const v = localStorage.getItem(LOCATION_MASTER_KEY);
+    return v ? JSON.parse(v) : ['Microsoft Teams 会議','大手町本社 応接室','富山事業所 会議室','オンライン（Zoom）'];
+  }catch(e){ return []; }
+}
+function saveLocationMaster(list){ localStorage.setItem(LOCATION_MASTER_KEY, JSON.stringify(list)); }
+
+function LocationMasterModal({onClose}){
+  const [list, setList] = useState(()=>loadLocationMaster());
+  const [input, setInput] = useState('');
+  const [editIdx, setEditIdx] = useState(null);
+  const [editVal, setEditVal] = useState('');
+  const add = () => {
+    const v = input.trim(); if(!v||list.includes(v)) return;
+    const next=[...list,v]; setList(next); saveLocationMaster(next); setInput('');
+  };
+  const del = (i) => { const next=list.filter((_,idx)=>idx!==i); setList(next); saveLocationMaster(next); };
+  const startEdit = (i) => { setEditIdx(i); setEditVal(list[i]); };
+  const saveEdit = () => {
+    if(editVal.trim()&&editIdx!==null){
+      const next=[...list]; next[editIdx]=editVal.trim();
+      setList(next); saveLocationMaster(next);
+    }
+    setEditIdx(null); setEditVal('');
+  };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">📍 場所・形式マスター管理</div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&add()}
+            placeholder="場所・形式を入力してEnterまたは追加" style={{flex:1}}/>
+          <button className="btn btn-blue" style={{padding:'9px 14px',fontSize:13}} onClick={add}>追加</button>
+        </div>
+        <div style={{maxHeight:300,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {list.length===0 && <div style={{padding:12,color:'#888',fontSize:13,textAlign:'center'}}>登録された場所はありません</div>}
+          {list.map((name,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'8px 12px',borderBottom:'1px solid #f0f0f0',gap:6}}>
+              {editIdx===i ? (
+                <>
+                  <input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveEdit()}
+                    style={{flex:1,padding:'4px 8px',fontSize:13,border:'1.5px solid #2E75B6',borderRadius:4}}/>
+                  <button onClick={saveEdit} style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>保存</button>
+                  <button onClick={()=>setEditIdx(null)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:12}}>✕</button>
+                </>
+              ) : (
+                <>
+                  <span style={{flex:1,fontSize:13}}>{name}</span>
+                  <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'#555'}}>✏️</button>
+                  <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 作成者マスター ────────────────────────────────────────
+const AUTHOR_MASTER_KEY = 'pmo_author_master';
+function loadAuthorMaster(){
+  try{
+    const v = localStorage.getItem(AUTHOR_MASTER_KEY);
+    return v ? JSON.parse(v) : ['安田 真和'];
+  }catch(e){ return []; }
+}
+function saveAuthorMaster(list){ localStorage.setItem(AUTHOR_MASTER_KEY, JSON.stringify(list)); }
+
+function AuthorMasterModal({onClose}){
+  const [list, setList] = useState(()=>loadAuthorMaster());
+  const [input, setInput] = useState('');
+  const [editIdx, setEditIdx] = useState(null);
+  const [editVal, setEditVal] = useState('');
+  const add = () => {
+    const v = input.trim(); if(!v||list.includes(v)) return;
+    const next=[...list,v]; setList(next); saveAuthorMaster(next); setInput('');
+  };
+  const del = (i) => { const next=list.filter((_,idx)=>idx!==i); setList(next); saveAuthorMaster(next); };
+  const startEdit = (i) => { setEditIdx(i); setEditVal(list[i]); };
+  const saveEdit = () => {
+    if(editVal.trim()&&editIdx!==null){
+      const next=[...list]; next[editIdx]=editVal.trim();
+      setList(next); saveAuthorMaster(next);
+    }
+    setEditIdx(null); setEditVal('');
+  };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">✍️ 作成者マスター管理</div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&add()}
+            placeholder="作成者名を入力してEnterまたは追加" style={{flex:1}}/>
+          <button className="btn btn-blue" style={{padding:'9px 14px',fontSize:13}} onClick={add}>追加</button>
+        </div>
+        <div style={{maxHeight:300,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {list.length===0 && <div style={{padding:12,color:'#888',fontSize:13,textAlign:'center'}}>登録された作成者はありません</div>}
+          {list.map((name,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'8px 12px',borderBottom:'1px solid #f0f0f0',gap:6}}>
+              {editIdx===i ? (
+                <>
+                  <input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveEdit()}
+                    style={{flex:1,padding:'4px 8px',fontSize:13,border:'1.5px solid #2E75B6',borderRadius:4}}/>
+                  <button onClick={saveEdit} style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>保存</button>
+                  <button onClick={()=>setEditIdx(null)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:12}}>✕</button>
+                </>
+              ) : (
+                <>
+                  <span style={{flex:1,fontSize:13}}>{name}</span>
+                  <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'#555'}}>✏️</button>
+                  <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 const ATTENDEE_KEY = 'pmo_attendee_history';
 
 function loadAttendeeHistory(){
@@ -2906,6 +3040,10 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const [showMaster, setShowMaster] = useState(false);
   const [meetingList, setMeetingList] = useState(()=>loadMeetingMaster());
   const refreshList = () => setMeetingList(loadMeetingMaster());
+  const [showLocationMaster, setShowLocationMaster] = useState(false);
+  const [locationList, setLocationList] = useState(()=>loadLocationMaster());
+  const [showAuthorMaster, setShowAuthorMaster] = useState(false);
+  const [authorList, setAuthorList] = useState(()=>loadAuthorMaster());
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
   // 入力モード：'ics'（ICS自動）or 'manual'（全項目手入力）
@@ -3275,11 +3413,31 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           <input type="time" value={data.endTime} onChange={e=>upd('endTime',e.target.value)}/></div>
       </div>
       <div className="form-row">
-        <div><label>場所・形式</label>
-          <input value={data.location} onChange={e=>upd('location',e.target.value)}/></div>
-        <div><label>作成者</label>
-          <input value={data.author} onChange={e=>upd('author',e.target.value)}/></div>
+        <div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+            <label style={{margin:0}}>場所・形式</label>
+            <button onClick={()=>setShowLocationMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+          </div>
+          <input list="location-list" value={data.location} onChange={e=>upd('location',e.target.value)}
+            placeholder="Microsoft Teams 会議（プルダウンまたは手入力）"/>
+          <datalist id="location-list">
+            {locationList.map((v,i)=><option key={i} value={v}/>)}
+          </datalist>
+        </div>
+        <div>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+            <label style={{margin:0}}>作成者</label>
+            <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+          </div>
+          <input list="author-list" value={data.author} onChange={e=>upd('author',e.target.value)}
+            placeholder="安田 真和"/>
+          <datalist id="author-list">
+            {authorList.map((v,i)=><option key={i} value={v}/>)}
+          </datalist>
+        </div>
       </div>
+      {showLocationMaster && <LocationMasterModal onClose={()=>{setShowLocationMaster(false);setLocationList(loadLocationMaster());}}/>}
+      {showAuthorMaster  && <AuthorMasterModal   onClose={()=>{setShowAuthorMaster(false); setAuthorList(loadAuthorMaster()); }}/>}
       <div className="section-divider">📋 アジェンダ</div>
       <div style={{marginBottom:12}}>
         <div style={{fontSize:11,color:'#718096',marginBottom:4}}>
@@ -4079,7 +4237,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v39</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v40</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
