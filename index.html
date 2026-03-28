@@ -400,13 +400,10 @@ async function generateDocx(basicInfo, result, templateFile){
   }
 
   // 議事内容テキスト（テーブル内セル用にXMLを直接生成）
-  // アジェンダがあれば先頭に転記
-  const agendaPrefix = (basicInfo.agenda||'').trim()
-    ? `【アジェンダ】\n${basicInfo.agenda.trim()}\n\n`
-    : '';
-  const minutesRawText = agendaPrefix + (result.minutes_by_agenda.length
+  // アジェンダは議事内容には含めない（別行で表示済み）
+  const minutesRawText = result.minutes_by_agenda.length
     ? result.minutes_by_agenda.map((m,i)=>`${i+1}. ${m.title||''}\n${(m.content||'').split('\n').map(l=>l?'　'+l:'').join('\n')}`).join('\n\n')
-    : '（記録なし）');
+    : '（記録なし）';
 
   // 議事内容セルの XML（青字★込み）
   const minutesCellBdr = `<w:tcBorders>`
@@ -3989,7 +3986,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v35</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v36</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
