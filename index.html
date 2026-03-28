@@ -424,20 +424,45 @@ function generateDocx(basicInfo, result){
     +minutesCellBdr+`<w:vAlign w:val="top"/>`+minutesCellMar
     +`</w:tcPr>`+minutesTitlePara+buildMinutesParasXml(minutesRawText)+`</w:tc>`;
 
-  // ── ヘッダー表（実測: 2178/3685/1673/2411、空Row8は除外）────
+  // ── ヘッダー表（新テンプレート：網掛けなし、白背景、黒文字）────
+  // ラベルセル（新テンプレート：網掛けなし・太字・黒文字）
+  function labelCell(text, w){
+    const mar = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
+    const wElem = `<w:tcW w:w="${w}" w:type="dxa"/>`;
+    const vA = `<w:vAlign w:val="center"/>`;
+    const lines = text.split('\n');
+    const parasXml = lines.map(line =>
+      `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${FONT}<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="000000"/></w:rPr><w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`
+    ).join('');
+    return `<w:tc><w:tcPr>${wElem}${vA}${mar}</w:tcPr>${parasXml}</w:tc>`;
+  }
+
   const materialRels = []; // ハイパーリンク用リレーションシップ
+
+  // アジェンダ行のXML生成
+  const agendaRowXml = (()=>{
+    const ag = (basicInfo.agenda||'').trim();
+    const bdr='<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/><w:insideV w:val="nil"/></w:tcBorders>';
+    const mar='<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>';
+    const hdr=`<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${FONT}<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t>【アジェンダ】</w:t></w:r></w:p>`;
+    const lines = ag ? ag.split('\n').filter(l=>l.trim()) : [];
+    const content = lines.length
+      ? lines.map(l=>`<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t xml:space="preserve">${esc(l)}</w:t></w:r></w:p>`).join('')
+      : `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr><w:r><w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr><w:t></w:t></w:r></w:p>`;
+    return `<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="${W}" w:type="dxa"/><w:gridSpan w:val="4"/>${bdr}<w:vAlign w:val="top"/>${mar}</w:tcPr>${hdr}${content}</w:tc></w:tr>`;
+  })();
+
   const headerTableXml = `<w:tbl>
 <w:tblPr><w:tblW w:w="${W}" w:type="dxa"/>${tblBdr}${tblLook}</w:tblPr>
 <w:tblGrid><w:gridCol w:w="2178"/><w:gridCol w:w="3685"/><w:gridCol w:w="1673"/><w:gridCol w:w="2411"/></w:tblGrid>
-${row(454,  cell('議題', 2178,{shade:HDR}) + cell(meetingTitle,3685,{bold:true}) + cell('回数',1673,{shade:HDR}) + cell(basicInfo.meetingNo?`第${basicInfo.meetingNo}回`:'',2411))}
-${row(454,  cell('日時', 2178,{shade:HDR}) + cell(`${date} ${basicInfo.startTime||''}〜${basicInfo.endTime||''}`,3685) + cell('作成日',1673,{shade:HDR}) + cell(todayStr,2411))}
-${row(454,  cell('場所', 2178,{shade:HDR}) + cell(basicInfo.location||'',3685) + cell('作成者',1673,{shade:HDR}) + cell(basicInfo.author||'',2411))}
-${row(1021, cell('出席者\n(敬称略) (順不同)',2178,{shade:HDR}) + cell(attendeesCell,7769,{span:3}))}
+${row(454,  labelCell('議題', 2178) + cell(meetingTitle,3685,{bold:true}) + labelCell('回数',1673) + cell(basicInfo.meetingNo?`第${basicInfo.meetingNo}回`:'',2411))}
+${row(454,  labelCell('日時', 2178) + cell(`${date} ${basicInfo.startTime||''}〜${basicInfo.endTime||''}`,3685) + labelCell('作成日',1673) + cell(todayStr,2411))}
+${row(454,  labelCell('場所', 2178) + cell(basicInfo.location||'',3685) + labelCell('作成者',1673) + cell(basicInfo.author||'',2411))}
+${row(1021, labelCell('(敬称略) (順不同)',2178) + cell(attendeesCell,7769,{span:3}))}
 ${(()=>{
     const mats=Array.isArray(basicInfo.materials)?basicInfo.materials.filter(m=>m.name):[];
     if(!mats.length) return row(1021,cell('【配布資料/投影資料】\n・なし',W,{span:4}));
     const matParas=mats.map(m=>{
-      // blob: URL はローカルのみ有効なためWordにリンクは埋め込まない（テキストのみ）
       const isBlob = m.url && m.url.startsWith('blob:');
       if(m.url && !isBlob){
         const rId='rMat'+materialRels.length;
@@ -457,6 +482,7 @@ ${(()=>{
   })()}
 ${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4}))}
 ${row(820,  cell('【ToDo】\n'+todoLines,W,{span:4}))}
+${agendaRowXml}
 <w:tr>${minutesCellXml}</w:tr>
 </w:tbl>`;
   // ※ テンプレートの空Row8（高さ13608）は出力に含めない → 保留セクションが同ページに続く
@@ -524,7 +550,7 @@ ${row(820,  cell('【ToDo】\n'+todoLines,W,{span:4}))}
   const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <w:body>
-<w:p><w:pPr><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr>${FONT}<w:b/><w:bCs/><w:sz w:val="28"/><w:szCs w:val="28"/><w:color w:val="${HDR}"/></w:rPr><w:t>${esc(meetingTitle)}　議事録</w:t></w:r></w:p>
+<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="160"/></w:pPr><w:r><w:rPr>${FONT}<w:b/><w:bCs/><w:sz w:val="32"/><w:szCs w:val="32"/><w:color w:val="000000"/></w:rPr><w:t>議　事　録</w:t></w:r></w:p>
 ${headerTableXml}
 ${pageBreak()}
 ${secHdr('【保留・継続審議事項】')}
@@ -2705,12 +2731,16 @@ function parseIcs(text) {
 
     let items = [];
     if (agendaStartIdx >= 0) {
+      // キーワードと同一行の残りテキストを最初のアイテム候補とする
+      const sameLine = lines[agendaStartIdx].replace(agendaKeyRe, '').trim();
+      if (sameLine.length > 2 && !isMetaLine(sameLine)) items.push(sameLine);
+
       // セクション以降・次のセクションヘッダーまでを収集
       for (let i = agendaStartIdx + 1; i < lines.length; i++) {
         const l = lines[i];
         if (/^【.{1,10}[】:：]/.test(l)) break; // 次のセクションで終了
         if (isMetaLine(l)) continue;
-        const cleaned = l.replace(/^[\s\-・●▶►▸\d\.\)）①②③④⑤\s]+/, '').trim();
+        const cleaned = l.replace(/^[\s\-・●▶►▸\d\.\)）①②③④⑤　]+/, '').trim();
         if (cleaned.length > 2) items.push(cleaned);
       }
     } else {
@@ -3918,7 +3948,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v32</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v34</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
