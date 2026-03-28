@@ -2840,6 +2840,23 @@ function OrgAttendeeMasterModal({ onClose }) {
     setMaster(next); saveOrgAttMaster(next);
   };
 
+  // 組織名変更
+  const [editOrgName, setEditOrgName] = useState(null); // { oldOrg, newOrg }
+  const startEditOrg = (org) => setEditOrgName({ oldOrg: org, newOrg: org });
+  const commitEditOrg = () => {
+    if (!editOrgName) return;
+    const { oldOrg, newOrg } = editOrgName;
+    const trimmed = newOrg.trim();
+    if (!trimmed || trimmed === oldOrg) { setEditOrgName(null); return; }
+    if (master[trimmed]) { alert(`「${trimmed}」はすでに存在します`); return; }
+    const next = {};
+    Object.keys(master).forEach(k => {
+      next[k === oldOrg ? trimmed : k] = master[k];
+    });
+    setMaster(next); saveOrgAttMaster(next);
+    setEditOrgName(null);
+  };
+
   const orgs = Object.keys(master).sort();
 
   return (
@@ -2895,10 +2912,28 @@ function OrgAttendeeMasterModal({ onClose }) {
           {orgs.length===0 && <div style={{padding:16,color:'#888',fontSize:13,textAlign:'center'}}>登録された出席者はありません</div>}
           {orgs.map(org=>(
             <div key={org}>
-              <div style={{display:'flex',alignItems:'center',background:'#EBF3FB',padding:'6px 12px',borderBottom:'1px solid #d0d8e4'}}>
-                <span style={{flex:1,fontSize:13,fontWeight:700,color:'#1F3864'}}>【{org}】</span>
-                <button onClick={()=>delOrg(org)}
-                  style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:14}}>🗑 組織削除</button>
+              <div style={{display:'flex',alignItems:'center',background:'#EBF3FB',padding:'6px 12px',borderBottom:'1px solid #d0d8e4',gap:6}}>
+                {editOrgName && editOrgName.oldOrg === org ? (
+                  <>
+                    <input value={editOrgName.newOrg}
+                      onChange={e=>setEditOrgName({...editOrgName,newOrg:e.target.value})}
+                      onKeyDown={e=>{if(e.key==='Enter')commitEditOrg();if(e.key==='Escape')setEditOrgName(null);}}
+                      autoFocus
+                      style={{flex:1,padding:'4px 8px',fontSize:13,fontWeight:700,border:'1.5px solid #2E75B6',borderRadius:4}}/>
+                    <button onClick={commitEditOrg}
+                      style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12,fontWeight:700}}>保存</button>
+                    <button onClick={()=>setEditOrgName(null)}
+                      style={{background:'none',border:'1px solid #ccc',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:12}}>✕</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{flex:1,fontSize:13,fontWeight:700,color:'#1F3864'}}>【{org}】</span>
+                    <button onClick={()=>startEditOrg(org)}
+                      style={{background:'none',border:'1px solid #aac',borderRadius:4,padding:'2px 8px',cursor:'pointer',fontSize:11,color:'#555'}}>✏️ 組織名変更</button>
+                    <button onClick={()=>delOrg(org)}
+                      style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:12}}>🗑 削除</button>
+                  </>
+                )}
               </div>
               <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'8px 12px',borderBottom:'1px solid #f0f0f0'}}>
                 {(master[org]||[]).map(name=>(
@@ -4568,7 +4603,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v43</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v44</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
