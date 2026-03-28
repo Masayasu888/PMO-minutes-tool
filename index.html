@@ -296,33 +296,17 @@ function generateDocx(basicInfo, result){
     const span  = opts.span  ? `<w:gridSpan w:val="${opts.span}"/>` : '';
     const vA    = `<w:vAlign w:val="center"/>`;
     const BLK = '000000';
-    // 全セルに明示ボーダー。全辺黒線で統一（元テンプレートに合わせる）
+    // セルレベルでは「span セルの内部幽霊縦線を消す」目的のみで tcBorders を使う
+    // 通常セル・HDRセルはテーブルレベルの insideV:single に任せる
     let tcBdr = '';
-    if (opts.shade === HDR) {
-      // ヘッダーセル：全辺黒線
+    if (opts.span) {
+      // span セル：右ボーダー明示 ＋ 内部縦線を nil で幽霊線抑制
       tcBdr = `<w:tcBorders>`
         +`<w:top    w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:left   w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:right  w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`<w:insideV w:val="nil"/>`
-        +`</w:tcBorders>`;
-    } else if (opts.span) {
-      // spanセル：外枠のみ、内部縦線nil
-      tcBdr = `<w:tcBorders>`
-        +`<w:top    w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:left   w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:right  w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:insideV w:val="nil"/>`
-        +`</w:tcBorders>`;
-    } else {
-      // 通常セル：全辺明示
-      tcBdr = `<w:tcBorders>`
-        +`<w:top    w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:left   w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:bottom w:val="single" w:sz="4" w:color="${BLK}"/>`
-        +`<w:right  w:val="single" w:sz="4" w:color="${BLK}"/>`
         +`</w:tcBorders>`;
     }
     const mar   = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
@@ -346,15 +330,14 @@ function generateDocx(basicInfo, result){
     return names ? `【${o.org}】　${names}` : `【${o.org}】`;
   }).join('\n') || '';
 
-  // テーブル外枠・横線のみ定義。insideV=nil でWordの幽霊縦線を抑制
-  // tblLook で自動書式を完全無効化
+  // テーブルレベル：全境界線を定義（insideVも有効にして縦線を確保）
   const tblBdr = `<w:tblBorders>
 <w:top    w:val="single" w:sz="4" w:color="000000"/>
 <w:left   w:val="single" w:sz="4" w:color="000000"/>
 <w:bottom w:val="single" w:sz="4" w:color="000000"/>
 <w:right  w:val="single" w:sz="4" w:color="000000"/>
 <w:insideH w:val="single" w:sz="4" w:color="000000"/>
-<w:insideV w:val="nil" w:sz="0" w:color="auto"/>
+<w:insideV w:val="single" w:sz="4" w:color="000000"/>
 </w:tblBorders>`;
   const tblLook = `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>`;
 
@@ -3720,7 +3703,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v17</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v18</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
