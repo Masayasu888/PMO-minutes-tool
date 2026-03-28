@@ -3636,7 +3636,21 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 
   return(
     <div className="card">
-      <div className="card-title">📋 Step 1 ― 基本情報の入力</div>
+      <div className="card-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <span>📋 Step 1 ― 基本情報の入力</span>
+        <button onClick={()=>{
+          if(!window.confirm('Step 1の入力内容をクリアしますか？')) return;
+          setData(p=>({...p,
+            meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',
+            location:'',agenda:'',attendees:[],materials:[{name:'',url:''}],
+            entryMode: p.entryMode // モードは保持
+          }));
+        }}
+          style={{fontSize:11,background:'none',border:'1px solid #ccc',borderRadius:6,
+            padding:'3px 10px',cursor:'pointer',color:'#666',fontWeight:400}}>
+          🗑 クリア
+        </button>
+      </div>
 
       {/* ── 入力モード切り替え ── */}
       <div style={{display:'flex',gap:0,background:'#f0f4f8',borderRadius:8,padding:3,marginBottom:14,width:'fit-content'}}>
@@ -3851,7 +3865,20 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
 
   return(
     <div className="card">
-      <div className="card-title">📁 Step 2 ― ファイルアップロード</div>
+      <div className="card-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <span>📁 Step 2 ― ファイルアップロード</span>
+        <button onClick={()=>{
+          if(!window.confirm('Step 2の入力内容をクリアしますか？\n（文字起こし・テンプレートファイルがすべて削除されます）')) return;
+          setTranscript('');
+          setDocxTemplateFile(null);
+          setXlsxTemplateFile(null);
+          setXlsxDataFile(null);
+        }}
+          style={{fontSize:11,background:'none',border:'1px solid #ccc',borderRadius:6,
+            padding:'3px 10px',cursor:'pointer',color:'#666',fontWeight:400}}>
+          🗑 クリア
+        </button>
+      </div>
 
       <div className="section-divider">📄 文字起こし <span className="req">*</span></div>
 
@@ -4303,7 +4330,18 @@ function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}
   ];
   return(
     <div className="card">
-      <div className="card-title">📄 Step 4 ― プレビュー・編集</div>
+      <div className="card-title" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <span>📄 Step 4 ― プレビュー・編集</span>
+        <button onClick={()=>{
+          if(!window.confirm('AI解析結果をクリアしますか？\nStep 3で再解析が必要になります。')) return;
+          setResult(null);
+          onBack();
+        }}
+          style={{fontSize:11,background:'none',border:'1px solid #ccc',borderRadius:6,
+            padding:'3px 10px',cursor:'pointer',color:'#666',fontWeight:400}}>
+          🗑 クリア
+        </button>
+      </div>
       <div className="notice notice-info" style={{marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}>
         <span>各タブで内容を確認・編集できます。重要度・優先度はAIが自動判定しましたが、必要に応じて修正してください。</span>
         {unknownSpeakers === null ? (
@@ -4446,7 +4484,10 @@ function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, onNewMeetin
             onClick={()=>click(onNewMeeting)}
             style={{color:'#1F3864',fontWeight:700}}>
             <span style={{fontSize:14}}>📄</span>
-            <span>新しい議事録を作成</span>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700}}>新しい議事録を作成</div>
+              <div style={{fontSize:10,color:'#888',fontWeight:400}}>全ステップの入力をクリア</div>
+            </div>
           </button>
           <div className="header-gear-sep"/>
           <div className="header-gear-label">API</div>
@@ -4613,7 +4654,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v46</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v47</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
