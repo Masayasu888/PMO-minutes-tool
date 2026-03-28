@@ -2908,6 +2908,8 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const refreshList = () => setMeetingList(loadMeetingMaster());
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
+  // 入力モード：'ics'（ICS自動）or 'manual'（全項目手入力）
+  const [entryMode, setEntryMode] = useState('ics');
 
   // ── ICS取り込み状態管理（新仕様）──────────────────────────
   // icsPhase: null | 'stepA' | 'stepB' | 'stepC' | 'stepD'
@@ -3164,31 +3166,52 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   return(
     <div className="card">
       <div className="card-title">📋 Step 1 ― 基本情報の入力</div>
-      <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
-        <span style={{fontSize:12,color:'#1a4a7a',flex:1}}>
-          📅 Outlookの会議ファイル（.ics）をアップロードすると基本情報が自動入力されます
-        </span>
-        <input ref={icsRef} type="file" accept=".ics" style={{display:'none'}}
-          onChange={e=>{if(e.target.files[0]){handleIcs(e.target.files[0]); e.target.value='';} }}/>
-        <button className="btn btn-blue" style={{padding:'6px 14px',fontSize:12,whiteSpace:'nowrap'}}
-          onClick={()=>icsRef.current.click()}>
-          📅 .icsを読み込む
+
+      {/* ── 入力モード切り替え ── */}
+      <div style={{display:'flex',gap:0,background:'#f0f4f8',borderRadius:8,padding:3,marginBottom:14,width:'fit-content'}}>
+        <button onClick={()=>setEntryMode('ics')}
+          style={{padding:'7px 18px',borderRadius:6,border:'none',fontSize:12,fontWeight:700,cursor:'pointer',
+            background:entryMode==='ics'?'#1F3864':'transparent',
+            color:entryMode==='ics'?'#fff':'#718096',transition:'.15s'}}>
+          📅 ICSから自動入力
         </button>
-        {icsLoaded && (
-          <span style={{display:'flex',alignItems:'center',gap:6}}>
-            <span style={{fontSize:12,color:'#1F7A4D',whiteSpace:'nowrap'}}>✅ 読み込み済み</span>
-            <button onClick={()=>{
-              setIcsLoaded(false);
-              setIcsPhase(null);
-              setIcsRaws([]);
-              if(icsRef.current){ icsRef.current.value=''; icsRef.current.click(); }
-            }}
-              style={{background:'#EBF3FB',border:'1px solid #2E75B6',color:'#2E75B6',borderRadius:4,fontSize:11,cursor:'pointer',padding:'2px 8px',whiteSpace:'nowrap'}}>
-              🔄 再取り込み
-            </button>
-          </span>
-        )}
+        <button onClick={()=>setEntryMode('manual')}
+          style={{padding:'7px 18px',borderRadius:6,border:'none',fontSize:12,fontWeight:700,cursor:'pointer',
+            background:entryMode==='manual'?'#1F3864':'transparent',
+            color:entryMode==='manual'?'#fff':'#718096',transition:'.15s'}}>
+          ✏️ 手入力
+        </button>
       </div>
+
+      {entryMode==='ics' ? (
+        <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+          <span style={{fontSize:12,color:'#1a4a7a',flex:1}}>
+            📅 Outlookの会議ファイル（.ics）をアップロードすると基本情報が自動入力されます
+          </span>
+          <input ref={icsRef} type="file" accept=".ics" style={{display:'none'}}
+            onChange={e=>{if(e.target.files[0]){handleIcs(e.target.files[0]); e.target.value='';} }}/>
+          <button className="btn btn-blue" style={{padding:'6px 14px',fontSize:12,whiteSpace:'nowrap'}}
+            onClick={()=>icsRef.current.click()}>
+            📅 .icsを読み込む
+          </button>
+          {icsLoaded && (
+            <span style={{display:'flex',alignItems:'center',gap:6}}>
+              <span style={{fontSize:12,color:'#1F7A4D',whiteSpace:'nowrap'}}>✅ 読み込み済み</span>
+              <button onClick={()=>{
+                setIcsLoaded(false); setIcsPhase(null); setIcsRaws([]);
+                if(icsRef.current){ icsRef.current.value=''; icsRef.current.click(); }
+              }}
+                style={{background:'#EBF3FB',border:'1px solid #2E75B6',color:'#2E75B6',borderRadius:4,fontSize:11,cursor:'pointer',padding:'2px 8px',whiteSpace:'nowrap'}}>
+                🔄 再取り込み
+              </button>
+            </span>
+          )}
+        </div>
+      ) : (
+        <div style={{background:'#FFF8EC',border:'1.5px solid #E6A817',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#7D4E00'}}>
+          ✏️ <strong>手入力モード</strong> — ICSファイルが作成できない場合は、以下の各項目をすべて手入力してください。
+        </div>
+      )}
       {/* ICS Step A/B/C/D ダイアログ */}
       {icsPhase==='stepA' && (
         <IcsStepA
@@ -3270,22 +3293,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <span>出席者</span>
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          {/* 入力モード切り替え */}
-          <div style={{display:'flex',background:'#f0f4f8',borderRadius:6,padding:2,gap:2}}>
-            <button onClick={()=>upd('_attMode','ics')}
-              style={{padding:'4px 10px',borderRadius:4,border:'none',fontSize:11,fontWeight:600,cursor:'pointer',
-                background:(!data._attMode||data._attMode==='ics')?'#2E75B6':'transparent',
-                color:(!data._attMode||data._attMode==='ics')?'#fff':'#666',transition:'.15s'}}>
-              📅 ICS
-            </button>
-            <button onClick={()=>upd('_attMode','manual')}
-              style={{padding:'4px 10px',borderRadius:4,border:'none',fontSize:11,fontWeight:600,cursor:'pointer',
-                background:data._attMode==='manual'?'#2E75B6':'transparent',
-                color:data._attMode==='manual'?'#fff':'#666',transition:'.15s'}}>
-              ✏️ 手入力
-            </button>
-          </div>
-          {(!data._attMode||data._attMode==='ics') && <>
+          {entryMode==='ics' && <>
             <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }} className="btn-form-sub">
               👥 出席者マスター
             </button>
@@ -3296,7 +3304,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         </div>
       </div>
 
-      {(!data._attMode||data._attMode==='ics') ? (
+      {entryMode==='ics' ? (
         <>
           <div style={{fontSize:11,color:'#888',marginBottom:6}}>
             💡 名前を入力して <strong>Enter</strong> で追加。「、」または「,」で区切ると複数名を一括登録できます。
@@ -4071,7 +4079,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v38</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v39</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
