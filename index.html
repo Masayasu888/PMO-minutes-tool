@@ -4461,7 +4461,7 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
 // ── 会議中モード（LiveMeetingMode） ───────────────────────────
 // ── 分析エントリ（折りたたみ対応） ──────────────────────────
 
-function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, onNewMeeting }) {
+function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
   React.useEffect(() => {
@@ -4479,17 +4479,6 @@ function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain, onNewMeetin
       </button>
       {open && (
         <div className="header-gear-menu">
-          <div className="header-gear-label">作業</div>
-          <button className="header-gear-item"
-            onClick={()=>click(onNewMeeting)}
-            style={{color:'#1F3864',fontWeight:700}}>
-            <span style={{fontSize:14}}>📄</span>
-            <div style={{flex:1}}>
-              <div style={{fontWeight:700}}>新しい議事録を作成</div>
-              <div style={{fontSize:10,color:'#888',fontWeight:400}}>全ステップの入力をクリア</div>
-            </div>
-          </button>
-          <div className="header-gear-sep"/>
           <div className="header-gear-label">API</div>
           <button className="header-gear-item" onClick={()=>click(onOpenKey)}>
             <span style={{fontSize:14}}>{apiKey?'🔑':'🔓'}</span>
@@ -4654,7 +4643,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v47</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v48</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
@@ -4665,9 +4654,15 @@ function App(){
             🔴 会議中支援ツールへ
           </a>
         </div>
+        <button onClick={handleNewMeeting}
+          style={{background:'rgba(255,255,255,.12)',border:'1px solid rgba(255,255,255,.25)',
+            color:'rgba(255,255,255,.9)',borderRadius:8,padding:'7px 14px',fontSize:12,
+            cursor:'pointer',fontFamily:'Meiryo UI,Meiryo,sans-serif',fontWeight:600,
+            display:'flex',alignItems:'center',gap:6,whiteSpace:'nowrap',flexShrink:0}}>
+          📄 新規作成
+        </button>
         <HeaderMenu apiKey={apiKey} onOpenKey={()=>setShowKeyModal(true)}
-          onOpenPerson={()=>setShowPersonMaster(true)} onOpenDomain={()=>setShowDomainMaster(true)}
-          onNewMeeting={handleNewMeeting}/>
+          onOpenPerson={()=>setShowPersonMaster(true)} onOpenDomain={()=>setShowDomainMaster(true)}/>
       </div>
 
       <StepIndicator step={step} setStep={analyzing ? ()=>{} : setStep} maxReached={maxReached} hasResult={!!result}
