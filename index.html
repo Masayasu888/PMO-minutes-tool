@@ -281,7 +281,7 @@ const EMPTY = {agenda_items:[],minutes_by_agenda:[],decisions:[],todos:[],pendin
 // ── XML escape ───────────────────────────────────────────
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function generateDocx(basicInfo, result){
+async function generateDocx(basicInfo, result, templateFile){
   const W = 9947;
   const FONT = `<w:rFonts w:ascii="Meiryo UI" w:hAnsi="Meiryo UI" w:cs="Meiryo UI" w:eastAsia="Meiryo UI"/>`;
   const HDR  = '143D69';
@@ -568,24 +568,64 @@ ${execXml}
 <w:sectPr>
 <w:headerReference w:type="default" r:id="rId8"/>
 <w:footerReference w:type="default" r:id="rId9"/>
-<w:pgSz w:w="11906" w:h="16838"/>
-<w:pgMar w:top="1418" w:right="851" w:bottom="1418" w:left="851" w:header="851" w:footer="992"/>
+${finalPgSz}
+${finalPgMar}
 </w:sectPr>
 </w:body>
 </w:document>`;
 
   const zip = new JSZip();
+  // ── テンプレートから各XMLを取得（アップロードあれば優先）─────
+  let headerXml = null, footerXml = null, stylesXml = null, pgSzXml = null, pgMarXml = null;
+  if (templateFile) {
+    try {
+      const ab = await templateFile.arrayBuffer();
+      const tplZip = await JSZip.loadAsync(ab);
+
+      // header1.xml
+      const hf = tplZip.file('word/header1.xml') || tplZip.file('word/header2.xml');
+      if (hf) headerXml = await hf.async('string');
+
+      // footer1.xml
+      const ff = tplZip.file('word/footer1.xml') || tplZip.file('word/footer2.xml');
+      if (ff) footerXml = await ff.async('string');
+
+      // styles.xml
+      const sf = tplZip.file('word/styles.xml');
+      if (sf) stylesXml = await sf.async('string');
+
+      // ページサイズ・余白をdocument.xmlから抽出
+      const df = tplZip.file('word/document.xml');
+      if (df) {
+        const docStr = await df.async('string');
+        const pgSzM = docStr.match(/<w:pgSz[^/]*/);
+        if (pgSzM) pgSzXml = pgSzM[0] + '/>';
+        const pgMarM = docStr.match(/<w:pgMar[^/]*/);
+        if (pgMarM) pgMarXml = pgMarM[0] + '/>';
+      }
+    } catch(e) {
+      console.warn('テンプレート読み込みエラー（デフォルトを使用）:', e);
+    }
+  }
+
+  // デフォルト値（テンプレートなし or 読み込み失敗時）
+  const decodeB64 = (b64) => decodeURIComponent(escape(atob(b64)));
+  const HEADER_B64 = 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9InllcyI/Pgo8dzpoZHIgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIgogICAgICAgeG1sbnM6cj0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcyI+Cjx3OnA+Cjx3OnBQcj48dzpqYyB3OnZhbD0icmlnaHQiLz48dzpzcGFjaW5nIHc6YmVmb3JlPSIwIiB3OmFmdGVyPSIwIi8+Cjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OmIvPjx3OmJDcy8+PHc6Y29sb3Igdzp2YWw9IkNDMzMwMCIvPjx3OnN6IHc6dmFsPSIyMCIvPjx3OnN6Q3Mgdzp2YWw9IjIwIi8+Cjx3OmJkciB3OnZhbD0ic2luZ2xlIiB3OnN6PSI2IiB3OnNwYWNlPSI0IiB3OmNvbG9yPSJDQzMzMDAiLz4KPC93OnJQcj48L3c6cFByPgo8dzpyPjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OmIvPjx3OmJDcy8+PHc6Y29sb3Igdzp2YWw9IkNDMzMwMCIvPjx3OnN6IHc6dmFsPSIyMCIvPjx3OnN6Q3Mgdzp2YWw9IjIwIi8+Cjx3OmJkciB3OnZhbD0ic2luZ2xlIiB3OnN6PSI2IiB3OnNwYWNlPSI0IiB3OmNvbG9yPSJDQzMzMDAiLz4KPC93OnJQcj48dzp0PkNPTkZJREVOVElBTDwvdzp0PjwvdzpyPgo8L3c6cD4KPC93Omhkcj4=';
+  const FOOTER_B64 = 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9InllcyI/Pgo8dzpmdHIgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj4KPHc6cD4KPHc6cFByPjx3OmpjIHc6dmFsPSJjZW50ZXIiLz48dzpzcGFjaW5nIHc6YmVmb3JlPSIwIiB3OmFmdGVyPSIwIi8+Cjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OnN6IHc6dmFsPSIxOCIvPjx3OnN6Q3Mgdzp2YWw9IjE4Ii8+CjwvdzpyUHI+PC93OnBQcj4KPHc6cj48dzpyUHI+PHc6ckZvbnRzIHc6YXNjaWk9Ik1laXJ5byBVSSIgdzpoQW5zaT0iTWVpcnlvIFVJIiB3OmNzPSJNZWlyeW8gVUkiIHc6ZWFzdEFzaWE9Ik1laXJ5byBVSSIvPgo8dzpzeiB3OnZhbD0iMTgiLz48dzpzekNzIHc6dmFsPSIxOCIvPjwvdzpyUHI+Cjx3OmZsZENoYXIgdzpmbGRDaGFyVHlwZT0iYmVnaW4iLz48L3c6cj4KPHc6cj48dzpyUHI+PHc6ckZvbnRzIHc6YXNjaWk9Ik1laXJ5byBVSSIgdzpoQW5zaT0iTWVpcnlvIFVJIiB3OmNzPSJNZWlyeW8gVUkiIHc6ZWFzdEFzaWE9Ik1laXJ5byBVSSIvPgo8dzpzeiB3OnZhbD0iMTgiLz48dzpzekNzIHc6dmFsPSIxOCIvPjwvdzpyUHI+Cjx3Omluc3RyVGV4dCB4bWw6c3BhY2U9InByZXNlcnZlIj4gUEFHRSA8L3c6aW5zdHJUZXh0PjwvdzpyPgo8dzpyPjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OnN6IHc6dmFsPSIxOCIvPjx3OnN6Q3Mgdzp2YWw9IjE4Ii8+PC93OnJQcj4KPHc6ZmxkQ2hhciB3OmZsZENoYXJUeXBlPSJzZXBhcmF0ZSIvPjwvdzpyPgo8dzpyPjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OnN6IHc6dmFsPSIxOCIvPjx3OnN6Q3Mgdzp2YWw9IjE4Ii8+PHc6bm9Qcm9vZi8+PC93OnJQcj4KPHc6dD4xPC93OnQ+PC93OnI+Cjx3OnI+PHc6clByPjx3OnJGb250cyB3OmFzY2lpPSJNZWlyeW8gVUkiIHc6aEFuc2k9Ik1laXJ5byBVSSIgdzpjcz0iTWVpcnlvIFVJIiB3OmVhc3RBc2lhPSJNZWlyeW8gVUkiLz4KPHc6c3ogdzp2YWw9IjE4Ii8+PHc6c3pDcyB3OnZhbD0iMTgiLz48L3c6clByPgo8dzpmbGRDaGFyIHc6ZmxkQ2hhclR5cGU9ImVuZCIvPjwvdzpyPgo8L3c6cD4KPC93OmZ0cj4=';
+
+  const finalHeader = headerXml || decodeB64(HEADER_B64);
+  const finalFooter = footerXml || decodeB64(FOOTER_B64);
+  const finalStyles = stylesXml || `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Meiryo UI" w:hAnsi="Meiryo UI" w:cs="Meiryo UI" w:eastAsia="Meiryo UI"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`;
+  const finalPgSz  = pgSzXml  || `<w:pgSz w:w="11906" w:h="16838"/>`;
+  const finalPgMar = pgMarXml || `<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="709" w:footer="709" w:gutter="0"/>`;
+
   zip.file('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>`);
   zip.file('_rels/.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
   zip.file('word/document.xml', docXml);
-  // ヘッダー・フッター（テンプレートから取得）
-  const HEADER_B64 = 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9InllcyI/Pgo8dzpoZHIgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIgogICAgICAgeG1sbnM6cj0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL29mZmljZURvY3VtZW50LzIwMDYvcmVsYXRpb25zaGlwcyI+Cjx3OnA+Cjx3OnBQcj48dzpqYyB3OnZhbD0icmlnaHQiLz48dzpzcGFjaW5nIHc6YmVmb3JlPSIwIiB3OmFmdGVyPSIwIi8+Cjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OmIvPjx3OmJDcy8+PHc6Y29sb3Igdzp2YWw9IkNDMzMwMCIvPjx3OnN6IHc6dmFsPSIyMCIvPjx3OnN6Q3Mgdzp2YWw9IjIwIi8+Cjx3OmJkciB3OnZhbD0ic2luZ2xlIiB3OnN6PSI2IiB3OnNwYWNlPSI0IiB3OmNvbG9yPSJDQzMzMDAiLz4KPC93OnJQcj48L3c6cFByPgo8dzpyPjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OmIvPjx3OmJDcy8+PHc6Y29sb3Igdzp2YWw9IkNDMzMwMCIvPjx3OnN6IHc6dmFsPSIyMCIvPjx3OnN6Q3Mgdzp2YWw9IjIwIi8+Cjx3OmJkciB3OnZhbD0ic2luZ2xlIiB3OnN6PSI2IiB3OnNwYWNlPSI0IiB3OmNvbG9yPSJDQzMzMDAiLz4KPC93OnJQcj48dzp0PkNPTkZJREVOVElBTDwvdzp0PjwvdzpyPgo8L3c6cD4KPC93Omhkcj4=';
-  const FOOTER_B64 = 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9InllcyI/Pgo8dzpmdHIgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj4KPHc6cD4KPHc6cFByPjx3OmpjIHc6dmFsPSJjZW50ZXIiLz48dzpzcGFjaW5nIHc6YmVmb3JlPSIwIiB3OmFmdGVyPSIwIi8+Cjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OnN6IHc6dmFsPSIxOCIvPjx3OnN6Q3Mgdzp2YWw9IjE4Ii8+CjwvdzpyUHI+PC93OnBQcj4KPHc6cj48dzpyUHI+PHc6ckZvbnRzIHc6YXNjaWk9Ik1laXJ5byBVSSIgdzpoQW5zaT0iTWVpcnlvIFVJIiB3OmNzPSJNZWlyeW8gVUkiIHc6ZWFzdEFzaWE9Ik1laXJ5byBVSSIvPgo8dzpzeiB3OnZhbD0iMTgiLz48dzpzekNzIHc6dmFsPSIxOCIvPjwvdzpyUHI+Cjx3OmZsZENoYXIgdzpmbGRDaGFyVHlwZT0iYmVnaW4iLz48L3c6cj4KPHc6cj48dzpyUHI+PHc6ckZvbnRzIHc6YXNjaWk9Ik1laXJ5byBVSSIgdzpoQW5zaT0iTWVpcnlvIFVJIiB3OmNzPSJNZWlyeW8gVUkiIHc6ZWFzdEFzaWE9Ik1laXJ5byBVSSIvPgo8dzpzeiB3OnZhbD0iMTgiLz48dzpzekNzIHc6dmFsPSIxOCIvPjwvdzpyUHI+Cjx3Omluc3RyVGV4dCB4bWw6c3BhY2U9InByZXNlcnZlIj4gUEFHRSA8L3c6aW5zdHJUZXh0PjwvdzpyPgo8dzpyPjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OnN6IHc6dmFsPSIxOCIvPjx3OnN6Q3Mgdzp2YWw9IjE4Ii8+PC93OnJQcj4KPHc6ZmxkQ2hhciB3OmZsZENoYXJUeXBlPSJzZXBhcmF0ZSIvPjwvdzpyPgo8dzpyPjx3OnJQcj48dzpyRm9udHMgdzphc2NpaT0iTWVpcnlvIFVJIiB3OmhBbnNpPSJNZWlyeW8gVUkiIHc6Y3M9Ik1laXJ5byBVSSIgdzplYXN0QXNpYT0iTWVpcnlvIFVJIi8+Cjx3OnN6IHc6dmFsPSIxOCIvPjx3OnN6Q3Mgdzp2YWw9IjE4Ii8+PHc6bm9Qcm9vZi8+PC93OnJQcj4KPHc6dD4xPC93OnQ+PC93OnI+Cjx3OnI+PHc6clByPjx3OnJGb250cyB3OmFzY2lpPSJNZWlyeW8gVUkiIHc6aEFuc2k9Ik1laXJ5byBVSSIgdzpjcz0iTWVpcnlvIFVJIiB3OmVhc3RBc2lhPSJNZWlyeW8gVUkiLz4KPHc6c3ogdzp2YWw9IjE4Ii8+PHc6c3pDcyB3OnZhbD0iMTgiLz48L3c6clByPgo8dzpmbGRDaGFyIHc6ZmxkQ2hhclR5cGU9ImVuZCIvPjwvdzpyPgo8L3c6cD4KPC93OmZ0cj4=';
-  const decodeB64 = (b64) => decodeURIComponent(escape(atob(b64)));
-  zip.file('word/header1.xml', decodeB64(HEADER_B64));
-  zip.file('word/footer1.xml', decodeB64(FOOTER_B64));
+  zip.file('word/header1.xml', finalHeader);
+  zip.file('word/footer1.xml', finalFooter);
+  zip.file('word/styles.xml', finalStyles);
   zip.file('word/_rels/document.xml.rels',`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>${materialRels.map(r=>`<Relationship Id="${r.id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${r.url}" TargetMode="External"/>`).join('')}</Relationships>`);
-  zip.file('word/styles.xml',`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Meiryo UI" w:hAnsi="Meiryo UI" w:cs="Meiryo UI" w:eastAsia="Meiryo UI"/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults></w:styles>`);
   return zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
 }
 // ── Excel生成（ExcelJS版・完全書式対応） ────────────────────
@@ -3282,6 +3322,7 @@ function Step2({transcript,setTranscript,docxTemplateFile,setDocxTemplateFile,xl
       <div className="section-divider" style={{marginTop:16}}>📝 議事録テンプレート（.docx）</div>
       <div className="notice notice-warn">
         <strong>【初回・テンプレート変更時】</strong> 必ずテンプレートをアップロードしてください。<br/>
+        テンプレートから<strong>ヘッダー・フッター・スタイル・ページ設定（サイズ・余白）</strong>を読み取り議事録に反映します。<br/>
         2回目以降は不要です（前回と同じテンプレートを使用する場合）。
       </div>
       <div className="upload-area" onClick={()=>docxTplRef.current.click()}>
@@ -3712,7 +3753,7 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
   const dlWord=async()=>{
     if(validationErrors.length) return;
     setDownloading('word');
-    try{const blob=await generateDocx(basicInfo,result);downloadBlob(blob,makeDocxFilename(basicInfo.meetingName,basicInfo.date,docVersion));setDocVersion(v=>v+1);}
+    try{const blob=await generateDocx(basicInfo,result,docxTemplateFile);downloadBlob(blob,makeDocxFilename(basicInfo.meetingName,basicInfo.date,docVersion));setDocVersion(v=>v+1);}
     catch(e){alert('Word生成エラー: '+e.message);}
     setDownloading('');
   };
@@ -3948,7 +3989,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v34</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v35</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
