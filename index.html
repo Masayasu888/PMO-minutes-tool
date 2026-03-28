@@ -355,11 +355,12 @@ function generateDocx(basicInfo, result){
     const NML    = '000000';
 
     // タグパターンと対応する色・ラベル
+    // AIが 保1 / 保・継1 / 保 1 / リ1 / リスク1 / 課1 / 課題1 など様々な形式で出力することに対応
     const TAG_DEFS = [
-      { re: /★(\d+)/, color: BLUE,   label: n => `（${n}★）` },
-      { re: /保(\d+)/, color: GREEN,  label: n => `（保・継${n}）` },
-      { re: /リ(\d+)/, color: BROWN,  label: n => `（リスク${n}）` },
-      { re: /課(\d+)/, color: PURPLE, label: n => `（課題${n}）` },
+      { re: /★\s*(\d+)/,           clean: /★\s*\d+/g,              color: BLUE,   label: n => `（${n}★）` },
+      { re: /保[・継\s]*(\d+)/,     clean: /保[・継\s]*\d+/g,        color: GREEN,  label: n => `（保・継${n}）` },
+      { re: /リ(?:スク)?\s*(\d+)/,  clean: /リ(?:スク)?\s*\d+/g,    color: BROWN,  label: n => `（リスク${n}）` },
+      { re: /課(?:題)?\s*(\d+)/,    clean: /課(?:題)?\s*\d+/g,      color: PURPLE, label: n => `（課題${n}）` },
     ];
 
     const rPr = (color, underline=false) =>
@@ -383,10 +384,13 @@ function generateDocx(basicInfo, result){
       }
 
       // タグあり：行全体を色付きアンダーライン＋末尾ラベル
-      // タグ記号を除去した本文
-      const lineText = line
-        .replace(/★\d+/g,'').replace(/保\d+/g,'').replace(/リ\d+/g,'').replace(/課\d+/g,'')
-        .trimEnd();
+      // タグ記号を除去した本文（各def固有のcleanパターンで除去）
+      let lineText = line;
+      for (const def of TAG_DEFS) lineText = lineText.replace(def.clean, '');
+      lineText = lineText.replace(/（[^）]*）/g, s => {
+        // 既存の（N★）（保・継N）等のラベルだけ除去（括弧内が数字+記号のみ）
+        return /^（[\d★保継・リスク課題\s]+）$/.test(s) ? '' : s;
+      }).trimEnd();
       const { color, label } = matchedDef;
       return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
         +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(lineText)}</w:t></w:r>`
@@ -2678,40 +2682,42 @@ function parseIcs(text) {
 
     // メタ情報行の除外パターン
     const isMetaLine = (l) =>
-      /^【日時[】:]/.test(l) ||           // 【日時】
-      /^【会議体[】:]/.test(l) ||          // 【会議体】
-      /^【場所[】:]/.test(l) ||            // 【場所】
-      /^【開催[】:]/.test(l) ||            // 【開催】
-      /^【参加[】:]/.test(l) ||            // 【参加】
-      /^【出席[】:]/.test(l) ||            // 【出席】
-      /https?:\/\//.test(l) ||             // URL含む行
-      /\d{1,2}[\/\-]\d{1,2}.*\d{1,2}:\d{2}/.test(l) || // 日時パターン
-      /アクセス[・\s]/.test(l) ||          // アクセス情報
-      /ショップ|レストラン|フロア|ビル|タワー|階/.test(l) ||  // 施設情報
-      /^\d{3}-\d{4}/.test(l) ||            // 郵便番号
-      /^〒/.test(l) ||                      // 〒
-      l.length < 3;                         // 短すぎる行
+      /^【日時[】:]/.test(l) ||
+      /^【会議体[】:]/.test(l) ||
+      /^【場所[】:]/.test(l) ||
+      /^【開催[】:]/.test(l) ||
+      /^【参加[】:]/.test(l) ||
+      /^【出席[】:]/.test(l) ||
+      /^【備考[】:]/.test(l) ||
+      /^【注意[】:]/.test(l) ||
+      /https?:\/\//.test(l) ||
+      /\d{1,2}[\/\-]\d{1,2}.*\d{1,2}:\d{2}/.test(l) ||
+      /アクセス[・\s]/.test(l) ||
+      /ショップ|レストラン|フロア|タワー|ビル|〒/.test(l) ||
+      /^〒/.test(l) ||
+      l.length < 3;
 
-    // 「アジェンダ」「議題」キーワードを含む行以降を取得
-    const agendaKeyRe = /^[\s・\-]*(アジェンダ|議題|Agenda|agenda|議事)[：:）\s]*/i;
+    // セクションヘッダー（【内容】【アジェンダ】等）を検出
+    const agendaKeyRe = /^【?\s*(アジェンダ|議題|Agenda|agenda|内容|議事|目的)[】:：）\s]*/i;
+
+    // 【内容】または【アジェンダ】セクションを探す
     const agendaStartIdx = lines.findIndex(l => agendaKeyRe.test(l));
 
     let items = [];
     if (agendaStartIdx >= 0) {
-      // アジェンダセクション以降の項目を収集
+      // セクション以降・次のセクションヘッダーまでを収集
       for (let i = agendaStartIdx + 1; i < lines.length; i++) {
         const l = lines[i];
+        if (/^【.{1,10}[】:：]/.test(l)) break; // 次のセクションで終了
         if (isMetaLine(l)) continue;
-        // 次のセクションヘッダーで止める
-        if (/^【.{2,10}[】:]/.test(l) && !agendaKeyRe.test(l)) break;
         const cleaned = l.replace(/^[\s\-・●▶►▸\d\.\)）①②③④⑤\s]+/, '').trim();
         if (cleaned.length > 2) items.push(cleaned);
       }
     } else {
-      // アジェンダ明記なし → メタ情報を除いた意味のある行を収集
+      // キーワードなし → メタ情報除外・目的行を収集
       for (const l of lines) {
         if (isMetaLine(l)) continue;
-        // 目的・内容を示す行（招待文の本文）
+        if (/^【.{1,10}[】:：]/.test(l)) continue; // セクションヘッダーをスキップ
         const cleaned = l
           .replace(/を開催いたします[。.]?/g, '')
           .replace(/のご案内[。.]?/g, '')
@@ -2723,11 +2729,17 @@ function parseIcs(text) {
       }
     }
 
-    // 番号を振る（既に番号がある場合は振り直し）
-    return items
-      .filter(Boolean)
-      .map((item, i) => `${i + 1}．${item}`)
-      .join('\n');
+    // 重複除去（大文字・小文字・空白を正規化して比較）
+    const seen = new Set();
+    items = items.filter(item => {
+      const key = item.replace(/\s/g, '').toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // 番号を振る
+    return items.filter(Boolean).map((item, i) => `${i + 1}．${item}`).join('\n');
   };
 
   const agenda = parseAgenda();
@@ -3906,7 +3918,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v30</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v32</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
