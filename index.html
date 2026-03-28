@@ -341,10 +341,61 @@ function generateDocx(basicInfo, result){
 </w:tblBorders>`;
   const tblLook = `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>`;
 
-  // 議事内容は文字起こしから抽出した内容を全て1セルに詰める
-  const minutesContent = result.minutes_by_agenda.length
+  // ── ToDo：番号付き、★は末尾 ───────────────────────────────
+  const todoLines = result.todos.length
+    ? result.todos.map((t,i)=>`${i+1}．${t.content||''}（${t.assignee||''}、${t.due||''}）★`).join('\n')
+    : 'なし';
+
+  // ── 議事内容：★ を青字アンダーライン（N★）に変換 ─────────
+  // ★の出現順をToDoの番号に対応させてカウント
+  function buildMinutesParasXml(content){
+    let starCount = 0;
+    return (content||'（記録なし）').split('\n').map(line => {
+      if (!line.includes('★')) {
+        return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
+          +`<w:r><w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>`
+          +`<w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`;
+      }
+      // ★が含まれる行：★の前後を分割して青字インライン挿入
+      let xml = `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`;
+      const parts = line.split('★');
+      parts.forEach((part, pi) => {
+        if (part) {
+          xml += `<w:r><w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>`
+            +`<w:t xml:space="preserve">${esc(part)}</w:t></w:r>`;
+        }
+        if (pi < parts.length - 1) {
+          starCount++;
+          xml += `<w:r><w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/>`
+            +`<w:color w:val="2E75B6"/><w:u w:val="single"/></w:rPr>`
+            +`<w:t xml:space="preserve">（${starCount}★）</w:t></w:r>`;
+        }
+      });
+      xml += `</w:p>`;
+      return xml;
+    }).join('');
+  }
+
+  // 議事内容テキスト（テーブル内セル用にXMLを直接生成）
+  const minutesRawText = result.minutes_by_agenda.length
     ? result.minutes_by_agenda.map((m,i)=>`${i+1}. ${m.title||''}\n${(m.content||'').split('\n').map(l=>l?'　'+l:'').join('\n')}`).join('\n\n')
     : '（記録なし）';
+
+  // 議事内容セルの XML（青字★込み）
+  const minutesCellBdr = `<w:tcBorders>`
+    +`<w:top w:val="single" w:sz="4" w:color="000000"/>`
+    +`<w:left w:val="single" w:sz="4" w:color="000000"/>`
+    +`<w:bottom w:val="single" w:sz="4" w:color="000000"/>`
+    +`<w:right w:val="single" w:sz="4" w:color="000000"/>`
+    +`<w:insideV w:val="nil"/>`
+    +`</w:tcBorders>`;
+  const minutesCellMar = `<w:tcMar><w:top w:w="80" w:type="dxa"/><w:left w:w="120" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/><w:right w:w="120" w:type="dxa"/></w:tcMar>`;
+  const minutesTitlePara = `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
+    +`<w:r><w:rPr>${FONT}<w:b/><w:bCs/><w:sz w:val="22"/><w:szCs w:val="22"/></w:rPr>`
+    +`<w:t xml:space="preserve">【議事内容】　★＝ToDo</w:t></w:r></w:p>`;
+  const minutesCellXml = `<w:tc><w:tcPr><w:tcW w:w="${W}" w:type="dxa"/><w:gridSpan w:val="4"/>`
+    +minutesCellBdr+`<w:vAlign w:val="top"/>`+minutesCellMar
+    +`</w:tcPr>`+minutesTitlePara+buildMinutesParasXml(minutesRawText)+`</w:tc>`;
 
   // ── ヘッダー表（実測: 2178/3685/1673/2411、空Row8は除外）────
   const materialRels = []; // ハイパーリンク用リレーションシップ
@@ -378,8 +429,8 @@ ${(()=>{
     return '<w:tr><w:trPr><w:trHeight w:val="1021"/></w:trPr><w:tc><w:tcPr><w:tcW w:w="'+W+'" w:type="dxa"/><w:gridSpan w:val="4"/>'+bdr+'<w:vAlign w:val="center"/>'+mar+'</w:tcPr>'+hdr+matParas+'</w:tc></w:tr>';
   })()}
 ${row(1021, cell('【決定事項】\n'+(result.decisions.length?result.decisions.map(d=>`・${d.content||''}`).join('\n'):'・なし'),W,{span:4}))}
-${row(820,  cell('【ToDo】\n'+(result.todos.length?result.todos.map(t=>`★ ${t.content||''}（${t.assignee||''}、${t.due||''}）`).join('\n'):'なし'),W,{span:4}))}
-<w:tr>${cell('【議事内容】　★＝ToDo\n'+minutesContent, W,{span:4})}</w:tr>
+${row(820,  cell('【ToDo】\n'+todoLines,W,{span:4}))}
+<w:tr>${minutesCellXml}</w:tr>
 </w:tbl>`;
   // ※ テンプレートの空Row8（高さ13608）は出力に含めない → 保留セクションが同ページに続く
 
@@ -1314,6 +1365,7 @@ minutes_by_agenda の content は以下の基準で作成すること：
 - 固有名詞（システム名・ベンダー名・フェーズ名）は正確に記載
 - 1議題あたり5〜15行程度を目安とし、議論の流れが伝わるよう構成する
 - 決定に至る経緯・反対意見・条件なども記載する
+- 【重要】todos に挙げたアクション・タスクは、それが議論された議題の content に必ず記載すること。記載する際は文末に「★」を付けること（例：「〇〇を実施することとなった。★」）。ToDoが複数ある場合はそれぞれ個別の行に★を付けて漏れなく記載すること。★なしでToDoの内容が議事内容に含まれることは不可。
 
 以下のJSON構造で出力してください（マークダウン不要、JSONのみ）:
 {"agenda_items":["議題1","議題2"],"minutes_by_agenda":[{"title":"議題名","content":"発言者名: ビジネス文書体に整形した発言内容の記録。発言の流れを維持し、決定経緯・懸念点・条件も含める。"}],"decisions":[{"content":"決定内容（主語+述語で明確に）","decided_by":"決定者","scope":"影響範囲・対象システム/フェーズ","importance":"高","priority":"高"}],"todos":[{"content":"アクション内容（何を・誰が・いつまでに、が明確になるよう記載）","assignee":"担当者（実名）","due":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗・対応状況（なければ空文字）","match_reason":"同一・類似と判定した具体的根拠（新規の場合は空文字）"}],"pending":[{"content":"保留事項（具体的に）","reason":"保留理由","next_action":"次回の扱い・期限"}],"risks":[{"content":"リスク内容（影響・発生条件を含めて記述）","category":"スケジュール","impact":"高","probability":"中","response":"対応方針（具体的なアクションを含む）","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容（何が問題か・現状を明確に記述）","category":"設計・要件","owner":"担当者","due":"YYYY/MM/DD","resolution":"解決策・対応内容（未定の場合は「調査中」等）","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"役員への報告内容（背景含む・経営判断が必要な理由を明確に）","decision_needed":"要","background":"背景・経緯","recipient":"報告先役員名","deadline":"YYYY/MM/DD","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"室長への報告内容（対応の方向性を含む）","action_needed":"要","background":"背景・経緯","recipient":"担当室長名","deadline":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
@@ -1380,10 +1432,19 @@ function ApiKeyModal({onSave,onClose,current,currentAdmin,onSaveAdmin}){
   );
 }
 
-function StepIndicator({step,setStep,maxReached,hasResult,validation}){
+function StepIndicator({step,setStep,maxReached,hasResult,validation,analyzing}){
   // validation: { 1: {ok:bool, warnings:[]}, 2: {ok:bool, warnings:[]}, ... }
   return(
-    <div className="steps" style={{alignItems:'center'}}>
+    <div className="steps" style={{alignItems:'center',position:'relative'}}>
+      {analyzing && (
+        <div style={{position:'absolute',inset:0,borderRadius:10,background:'rgba(255,255,255,0.65)',
+          zIndex:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'not-allowed'}}>
+          <span style={{fontSize:11,color:'#718096',fontWeight:600,background:'#fff',
+            padding:'3px 12px',borderRadius:20,border:'1px solid #d0d8e4'}}>
+            🔒 AI解析中は移動できません
+          </span>
+        </div>
+      )}
       {STEPS.map((s,idx)=>{
         const isActive = s.n === step;
         const isAI = s.n === 3;
@@ -1642,7 +1703,11 @@ function MaterialsInput({ value, onChange }){
 
   return(
     <div>
-      {items.map((item,i)=>(
+      {items.map((item,i)=>{
+        // ファイル名からBox検索URL生成（拡張子除去して検索しやすく）
+        const searchName = (item.name||'').replace(/\.[^.]+$/, '');
+        const boxSearchUrl = `https://app.box.com/search?query=${encodeURIComponent(searchName)}`;
+        return (
         <div key={i} style={{marginBottom:4}}>
           <div className="material-item" style={{alignItems:'center'}}>
             <span className="material-link-icon">{item.isLocal ? '💾' : '📄'}</span>
@@ -1653,8 +1718,29 @@ function MaterialsInput({ value, onChange }){
             <span className="material-link-icon" style={{color: item.url?'#2E75B6':'#a0aec0'}}>🔗</span>
             <input className="material-url" value={item.url}
               onChange={e=>upd(i,'url',e.target.value)}
-              placeholder={item.isLocal ? 'BOX/SharePoint URL（Word文書に埋め込み）' : 'URL（任意）'}
+              onFocus={async(e)=>{
+                // フォーカス時にクリップボードにBOX URLがあれば自動貼り付け
+                if(!item.url && navigator.clipboard){
+                  try{
+                    const txt=(await navigator.clipboard.readText()).trim();
+                    if(txt.startsWith('https://') && (txt.includes('box.com') || txt.includes('sharepoint.com'))){
+                      upd(i,'url',txt);
+                    }
+                  }catch(e){}
+                }
+              }}
+              placeholder={item.isLocal ? 'BOX URL（クリックで自動貼り付け）' : 'URL（任意）'}
               style={{color:'#2E75B6'}}/>
+            {item.name && !item.url && (
+              <a href={boxSearchUrl} target="_blank" rel="noreferrer"
+                title={`「${searchName}」をBOXで検索して開く`}
+                style={{flexShrink:0,background:'#0061D5',color:'#fff',
+                  borderRadius:5,padding:'3px 8px',fontSize:11,fontWeight:700,
+                  textDecoration:'none',whiteSpace:'nowrap',lineHeight:1.5,
+                  display:'flex',alignItems:'center',gap:3}}>
+                <span style={{fontSize:13}}>📦</span> BOX検索
+              </a>
+            )}
             {item.url && (
               <a href={item.url} target="_blank" rel="noreferrer"
                 style={{fontSize:11,color:'#2E75B6',textDecoration:'none',flexShrink:0,padding:'0 4px'}}
@@ -1663,12 +1749,14 @@ function MaterialsInput({ value, onChange }){
             <button className="material-del" onClick={()=>del(i)}>🗑</button>
           </div>
           {item.isLocal && !item.url && (
-            <div style={{fontSize:10,color:'#E6A817',paddingLeft:28,marginTop:1}}>
-              💡 Word文書にリンクを埋め込むには BOX/SharePoint の共有URLを上のURL欄に入力してください
+            <div style={{fontSize:10,color:'#0061D5',paddingLeft:28,marginTop:2,lineHeight:1.6}}>
+              💡 <strong>📦 BOX検索</strong>ボタン → ファイルを開く → URLをコピー →
+              URL欄をクリックで自動貼り付け
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
 
       {/* 重複ファイル警告 */}
       {dupWarning.length > 0 && (
@@ -3597,6 +3685,7 @@ function App(){
   const [logs,setLogs]=useState([]);
   const [error,setError]=useState('');
   const [docVersion,setDocVersion]=useState(1);
+  const [lastCost,setLastCost]=useState(null); // {usd, usage} 最後のAPI料金
 
   // 会議中ツールからの引き渡しチェック
   const [liveHandoff]=useState(()=>{
@@ -3621,7 +3710,10 @@ function App(){
     }
   },[]);
 
-  const goTo=(n)=>{setStep(n);setMaxReached(m=>Math.max(m,n));if(n===3)setError('');};
+  const goTo=(n)=>{
+    if(analyzing){return;} // 解析中はステップ移動を禁止
+    setStep(n);setMaxReached(m=>Math.max(m,n));if(n===3)setError('');
+  };
   const saveApiKey=(key,admin)=>{
     setApiKey(key);localStorage.setItem('claude_api_key',key);
     if(admin!==undefined){setAdminKey(admin);localStorage.setItem('claude_admin_api_key',admin);}
@@ -3688,7 +3780,7 @@ function App(){
       }
       const r=await callClaude(apiKey,basicInfo,transcript,addLog,existingData);
       addLog('📊 データを整理・照合中...');
-      if(r._cost!==undefined)addLog('💰 APIコスト: '+formatCost(r._cost)+'（'+formatTokens(r._usage)+'）');
+      if(r._cost!==undefined){addLog('💰 APIコスト: '+formatCost(r._cost)+'（'+formatTokens(r._usage)+'）');setLastCost({usd:r._cost,usage:r._usage});}
       setResult({...EMPTY,...r,_existingData:existingData});
       goTo(4);
     }catch(e){setError(e.message);}
@@ -3703,7 +3795,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v18</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v22</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
@@ -3718,8 +3810,23 @@ function App(){
           onOpenPerson={()=>setShowPersonMaster(true)} onOpenDomain={()=>setShowDomainMaster(true)}/>
       </div>
 
-      <StepIndicator step={step} setStep={setStep} maxReached={maxReached} hasResult={!!result}
-        validation={buildValidation(basicInfo,transcript,result)}/>
+      <StepIndicator step={step} setStep={analyzing ? ()=>{} : setStep} maxReached={maxReached} hasResult={!!result}
+        validation={buildValidation(basicInfo,transcript,result)} analyzing={analyzing}/>
+
+      {/* APIコスト表示バー */}
+      {lastCost && lastCost.usd !== null && (
+        <div style={{background:'rgba(30,40,60,.85)',color:'rgba(255,255,255,.75)',
+          fontSize:11,padding:'4px 16px',borderRadius:6,marginBottom:8,
+          display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span>💰 前回のAPIコスト：</span>
+          <span style={{color:'#68D391',fontWeight:700}}>{formatCost(lastCost.usd)}</span>
+          {lastCost.usage && (
+            <span style={{color:'rgba(255,255,255,.45)',fontSize:10}}>
+              （{formatTokens(lastCost.usage)}）
+            </span>
+          )}
+        </div>
+      )}
       {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}
         onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
