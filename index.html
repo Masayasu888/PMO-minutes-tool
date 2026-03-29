@@ -3372,11 +3372,15 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const [showMaster, setShowMaster] = useState(false);
   const [meetingList, setMeetingList] = useState(()=>loadMeetingMaster());
   const refreshList = () => setMeetingList(loadMeetingMaster());
+  useEffect(()=>{ if(!showMaster) setMeetingList(loadMeetingMaster()); },[showMaster]);
   const [showLocationMaster, setShowLocationMaster] = useState(false);
   const [locationList, setLocationList] = useState(()=>loadLocationMaster());
   const [showAuthorMaster, setShowAuthorMaster] = useState(false);
   const [authorList, setAuthorList] = useState(()=>loadAuthorMaster());
   const [showOrgAttMaster, setShowOrgAttMaster] = useState(false);
+  // モーダルが閉じるたびにリストを再読み込み
+  useEffect(()=>{ if(!showLocationMaster) setLocationList(loadLocationMaster()); },[showLocationMaster]);
+  useEffect(()=>{ if(!showAuthorMaster)   setAuthorList(loadAuthorMaster());    },[showAuthorMaster]);
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
   // 入力モードはbasicInfo経由で永続化（ステップ移動後も保持）
@@ -3643,8 +3647,9 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           if(!window.confirm('Step 1の入力内容をクリアしますか？')) return;
           setData(p=>({...p,
             meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',
-            location:'',agenda:'',attendees:[],materials:[{name:'',url:''}],
-            entryMode: p.entryMode // モードは保持
+            location:'',author:'',agenda:'',attendees:[],materials:[{name:'',url:''}],
+            entryMode: p.entryMode,
+            _clearKey: (p._clearKey||0) + 1 // ManualAttendeesInputのリセット用
           }));
         }}
           style={{fontSize:11,background:'none',border:'1px solid #ccc',borderRadius:6,
@@ -3822,7 +3827,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         </>
       ) : (
         <>
-          <ManualAttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)}/>
+          <ManualAttendeesInput key={data._clearKey||0} value={data.attendees} onChange={v=>upd('attendees',v)}/>
           {/* 組織別マスターから一括読み込みボタン */}
           {Object.keys(loadOrgAttMaster()).length > 0 && (
             <button onClick={()=>{
@@ -3831,9 +3836,10 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
               const attendees = orgs.map(org=>({org, names: m[org]||[]}));
               upd('attendees', attendees);
             }}
-              style={{marginTop:8,background:'#EBF3FB',border:'1.5px solid #2E75B6',color:'#1F3864',
-                borderRadius:6,padding:'6px 14px',cursor:'pointer',fontSize:12,fontWeight:600,width:'100%'}}>
-              📂 組織別マスターから全員を読み込む
+              style={{marginTop:8,background:'#1F3864',border:'none',color:'#fff',
+                borderRadius:6,padding:'8px 14px',cursor:'pointer',fontSize:12,fontWeight:700,width:'100%',
+                display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+              <span>📂</span> 組織別マスターから全員を読み込む
             </button>
           )}
         </>
@@ -4508,7 +4514,7 @@ function App(){
   const [showDomainMaster,setShowDomainMaster]=useState(false);
   const [step,setStep]=useState(1);
   const [maxReached,setMaxReached]=useState(1);
-  const [basicInfo,setBasicInfo]=useState({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'安田 真和',agenda:'',entryMode:'ics',attendees:[],materials:[{name:'',url:''}]});
+  const [basicInfo,setBasicInfo]=useState({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'',agenda:'',entryMode:'ics',attendees:[],materials:[{name:'',url:''}]});
   const [transcript,setTranscript]=useState('');
   const [docxTemplateFile,setDocxTemplateFile]=useState(null);
   const [xlsxTemplateFile,setXlsxTemplateFile]=useState(null);
@@ -4564,7 +4570,7 @@ function App(){
     if(analyzing) return; // グレーアウト中は無効（ボタン側でも制御）
     if(!window.confirm('現在の入力内容をすべてクリアして、新しい議事録の作成を始めますか？\n（マスターデータは保持されます）')) return;
     if(abortControllerRef.current){ abortControllerRef.current.abort(); abortControllerRef.current=null; }
-    setBasicInfo({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'安田 真和',agenda:'',entryMode:'ics',attendees:[],materials:[{name:'',url:''}]});
+    setBasicInfo({meetingName:'',meetingNo:'',date:'',startTime:'',endTime:'',location:'',author:'',agenda:'',entryMode:'ics',attendees:[],materials:[{name:'',url:''}],_clearKey:1});
     setTranscript('');
     setDocxTemplateFile(null);
     setXlsxTemplateFile(null);
@@ -4667,7 +4673,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v49</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v52</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
