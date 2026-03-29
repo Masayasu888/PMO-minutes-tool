@@ -2304,9 +2304,6 @@ function ManualAttendeesInput({ value, onChange }) {
     return map;
   };
   const [checked, setChecked] = React.useState(() => toChecked(value));
-  // 手入力追加用
-  const [addOrg, setAddOrg] = React.useState('');
-  const [addNames, setAddNames] = React.useState('');
   const [expandedOrgs, setExpandedOrgs] = React.useState({});
 
   // checkedからattendees配列を再構築してonChange
@@ -2341,50 +2338,13 @@ function ManualAttendeesInput({ value, onChange }) {
     buildAndNotify(next);
   };
 
-  // 手入力で追加 → マスターにも即時保存してチェックリストを更新
-  const handleAdd = () => {
-    const org = addOrg.trim();
-    const names = addNames.split(/[、,，\s]+/).map(n=>n.trim()).filter(Boolean);
-    if (!org || !names.length) return;
-
-    // 1. マスターに保存（未登録の名前だけ追加）
-    const curMaster = loadOrgAttMaster();
-    const newMaster = { ...curMaster };
-    if (!newMaster[org]) newMaster[org] = [];
-    names.forEach(n => { if (!newMaster[org].includes(n)) newMaster[org].push(n); });
-    saveOrgAttMaster(newMaster);
-    setMasterData(newMaster); // チェックリストを即時更新
-
-    // 2. チェック状態にも追加（即選択済みにする）
-    const next = { ...checked };
-    names.forEach(n => { next[`${org}::${n}`] = true; });
-    setChecked(next);
-    buildAndNotify(next);
-    setAddOrg(''); setAddNames('');
-  };
-
   const selectedCount = Object.values(checked).filter(Boolean).length;
-  const orgs = Object.keys(masterData).sort(); // masterDataの変化を反映
+  const orgs = Object.keys(masterData).sort();
 
   if (orgs.length === 0) {
-    // マスター未登録時：入力するとマスターに保存してチェック表示に切り替わる
     return (
-      <div>
-        <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 14px',marginBottom:10,fontSize:12,color:'#1a4a7a'}}>
-          💡 組織名と名前を入力して「追加」すると、マスターに登録されてチェックボックスで選択できるようになります。
-        </div>
-        <div style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
-          <input value={addOrg} onChange={e=>setAddOrg(e.target.value)}
-            placeholder="組織名（例：KE）" style={{width:150,padding:'7px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}/>
-          <input value={addNames} onChange={e=>setAddNames(e.target.value)}
-            placeholder="田中、山下、宮城（カンマ区切り）"
-            style={{flex:1,minWidth:160,padding:'7px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}
-            onKeyDown={e=>e.key==='Enter'&&handleAdd()}/>
-          <button onClick={handleAdd}
-            style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>
-            ＋ 追加
-          </button>
-        </div>
+      <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'12px 14px',fontSize:12,color:'#1a4a7a'}}>
+        💡 右上の「✏️ 手入力出席者マスター」からメンバーを登録すると、ここで選択できるようになります。
       </div>
     );
   }
@@ -2474,24 +2434,9 @@ function ManualAttendeesInput({ value, onChange }) {
         })}
       </div>
 
-      {/* マスター未登録者を追加 */}
-      <div style={{marginTop:10,padding:'10px 12px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8}}>
-        <div style={{fontSize:11,color:'#888',marginBottom:6}}>マスター未登録の方を追加</div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          <input value={addOrg} onChange={e=>setAddOrg(e.target.value)}
-            placeholder="組織名" list="org-hint-list"
-            style={{width:130,padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}/>
-          <datalist id="org-hint-list">{orgs.map(o=><option key={o} value={o}/>)}</datalist>
-          <input value={addNames} onChange={e=>setAddNames(e.target.value)}
-            placeholder="田中、山下（カンマ区切り）"
-            style={{flex:1,minWidth:150,padding:'6px 10px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:13}}
-            onKeyDown={e=>e.key==='Enter'&&handleAdd()}/>
-          <button onClick={handleAdd}
-            style={{background:'#1F3864',color:'#fff',border:'none',borderRadius:6,
-              padding:'6px 14px',cursor:'pointer',fontSize:12,fontWeight:700,whiteSpace:'nowrap'}}>
-            ＋ 追加
-          </button>
-        </div>
+      {/* マスター未登録の方は「✏️ 手入力出席者マスター」から登録してください */}
+      <div style={{marginTop:8,fontSize:11,color:'#aaa',textAlign:'center'}}>
+        メンバーを追加するには右上の「✏️ 手入力出席者マスター」から登録してください
       </div>
     </div>
   );
@@ -3542,6 +3487,8 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   const [showAuthorMaster, setShowAuthorMaster] = useState(false);
   const [authorList, setAuthorList] = useState(()=>loadAuthorMaster());
   const [showOrgAttMaster, setShowOrgAttMaster] = useState(false);
+  // 手入力出席者マスターが閉じたらManualAttendeesInputをリフレッシュ
+  useEffect(()=>{ if(!showOrgAttMaster) upd('_masterKey', (data._masterKey||0)+1); },[showOrgAttMaster]);
   // モーダルが閉じるたびにリストを再読み込み
   useEffect(()=>{ if(!showLocationMaster) setLocationList(loadLocationMaster()); },[showLocationMaster]);
   useEffect(()=>{ if(!showAuthorMaster)   setAuthorList(loadAuthorMaster());    },[showAuthorMaster]);
@@ -3994,7 +3941,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         </>
       ) : (
         <>
-          <ManualAttendeesInput key={data._clearKey||0} value={data.attendees} onChange={v=>upd('attendees',v)}/>
+          <ManualAttendeesInput key={`${data._clearKey||0}-${data._masterKey||0}`} value={data.attendees} onChange={v=>upd('attendees',v)}/>
         </>
       )}
       {showOrgAttMaster && <OrgAttendeeMasterModal onClose={()=>setShowOrgAttMaster(false)}/>}
@@ -4826,7 +4773,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v61</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v62</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
