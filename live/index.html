@@ -530,8 +530,13 @@ function ApiKeyModal({onSave,onClose,current}){
     </div>
   );
 }
-function AnalysisEntry({ entry, ei, total, framework, onDelete }) {
+function AnalysisEntry({ entry, ei, total, framework, onDelete, briefing }) {
   const [collapsed, setCollapsed] = React.useState(ei !== 0); // 最新以外は初期折りたたみ
+  // 現場視点の表示順：進捗→リスク→実行性→体制→変革→DX目的
+  const DISPLAY_ORDER = ['⑤','③','④','⑥','②','①'];
+  const orderedCats = DISPLAY_ORDER
+    .map(id => framework.cats.find(c => c.id === id))
+    .filter(c => c && c.enabled);
   const catColors = {
     '①':['#065A82','#EBF8FF'], '②':['#B7410E','#FFF3ED'],
     '③':['#B7791F','#FFFBEB'], '④':['#276749','#E8F5EF'],
@@ -541,7 +546,7 @@ function AnalysisEntry({ entry, ei, total, framework, onDelete }) {
     (entry.exec_summary?`【役員サマリー】\n${entry.exec_summary}\n\n`:'')+
     (entry.summary?`【要約】\n${entry.summary}\n\n`:'')+
     (entry.top_questions?.length?`【確認すべき質問】\n${entry.top_questions.map(q=>`・${q}`).join('\n')}\n\n`:'')+
-    (entry.categories ? framework.cats.filter(c=>c.enabled).map(c=>
+    (entry.categories ? orderedCats.map(c=>
       entry.categories[c.id]?.items?.length ?
       `【${c.id} ${c.name}】\n${entry.categories[c.id].items.map(x=>`・${x}`).join('\n')}` : ''
     ).filter(Boolean).join('\n\n') : '');
@@ -574,6 +579,20 @@ function AnalysisEntry({ entry, ei, total, framework, onDelete }) {
       {/* 折りたたみコンテンツ */}
       {!collapsed && (
         <div style={{padding:'8px 12px',display:'flex',flexDirection:'column',gap:8}}>
+          {/* ── 会議ブリーフィング最優先枠 ── */}
+          {briefing && briefing.trim() && (
+            <div style={{border:'2px solid #276749',borderRadius:6,overflow:'hidden',boxShadow:'0 0 0 3px rgba(56,161,105,.15)'}}>
+              <div style={{background:'linear-gradient(135deg,#276749,#38A169)',color:'#fff',padding:'5px 10px',
+                fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:5}}>
+                <span style={{background:'rgba(255,255,255,.25)',borderRadius:8,padding:'1px 7px',fontSize:9,fontWeight:900,letterSpacing:.5}}>最優先</span>
+                📋 この会議のブリーフィング（AI分析の最優先指示）
+              </div>
+              <div style={{background:'#F0FFF4',padding:'6px 10px',fontSize:10.5,color:'#1B4332',
+                whiteSpace:'pre-wrap',lineHeight:1.7,borderLeft:'3px solid #38A169'}}>
+                {briefing}
+              </div>
+            </div>
+          )}
           {entry.exec_summary && (
             <div style={{background:'#FFF4EB',borderLeft:'3px solid #C55A11',borderRadius:'0 4px 4px 0',
               padding:'6px 10px',fontSize:11,color:'#7A3B0E',fontWeight:600,lineHeight:1.6}}>
@@ -586,7 +605,7 @@ function AnalysisEntry({ entry, ei, total, framework, onDelete }) {
               📋 {entry.summary}
             </div>
           )}
-          {entry.categories && framework.cats.filter(c=>c.enabled).map(cat => {
+          {entry.categories && orderedCats.map(cat => {
             const catData = entry.categories[cat.id];
             if (!catData || !catData.items || catData.items.length===0) return null;
             const [fg,bg] = catColors[cat.id] || ['#444','#f8fafc'];
@@ -2287,6 +2306,7 @@ ${catJsonDef}
             {/* 全履歴を新しい順で表示（各エントリは折りたたみ可能） */}
             {analysisHistory.map((entry, ei) => (
               <AnalysisEntry key={ei} entry={entry} ei={ei} total={analysisHistory.length} framework={framework}
+                briefing={briefing}
                 onDelete={()=>setAnalysisHistory(prev=>prev.filter((_,i)=>i!==ei))}/>
             ))}
           </div>
