@@ -3554,7 +3554,7 @@ function parseIcs(text) {
 }
 
 // ── Step 1 ─────────────────────────────────────────────────
-function Step1({data,setData,onNext,onOpenPersonMaster}){
+function Step1({data,setData,onNext,onOpenPersonMaster,apiKey}){
   const upd=(k,v)=>setData(p=>({...p,[k]:v}));
   const [showMaster, setShowMaster] = useState(false);
   const [meetingList, setMeetingList] = useState(()=>loadMeetingMaster());
@@ -3572,6 +3572,10 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
   useEffect(()=>{ if(!showAuthorMaster)   setAuthorList(loadAuthorMaster());    },[showAuthorMaster]);
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [pasteAnalyzing, setPasteAnalyzing] = useState(false);
+  const csvRef = useRef();
   // 入力モードはbasicInfo経由で永続化（ステップ移動後も保持）
   const entryMode = data.entryMode || 'ics';
   const setEntryMode = (mode) => upd('entryMode', mode);
@@ -3600,6 +3604,89 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       );
     }
     return [...orgs, { org, names: [name] }];
+  };
+
+  // ── CSV取り込み（Outlookの「状況確認→CSVダウンロード」対応）──
+  const handleCsvImport = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result;
+        const lines = text.split(/\r?\n/).filter(l=>l.trim());
+        if (!lines.length) return;
+        // ヘッダー行を検出
+        const header = lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim());
+        const nameIdx   = header.findIndex(h=>/name|名前/i.test(h));
+        const emailIdx  = header.findIndex(h=>/email|メール/i.test(h));
+        // 出席者をPersonMasterに登録してアコーディオンに反映
+        const persons = loadPersonMaster();
+        const newPersons = [...persons];
+        const domainMaster = loadDomainMaster();
+        lines.slice(1).forEach(line => {
+          const cols = line.split(',').map(c=>c.replace(/^"|"$/g,'').trim());
+          const name  = nameIdx  >= 0 ? cols[nameIdx]  : '';
+          const email = emailIdx >= 0 ? cols[emailIdx] : '';
+          if (!name && !email) return;
+          // 組織判定
+          const domain = email ? email.split('@')[1] : '';
+          const dm = domainMaster.find(d => domain && domain.includes(d.domain));
+          const org = dm ? dm.org : (domain ? domain.split('.')[0].toUpperCase() : '不明');
+          const displayName = reverseEnglishName(name) || name;
+          if (!newPersons.find(p => p.email === email || (p.name === displayName && p.org === org))) {
+            newPersons.push({ name: displayName, email, org });
+          }
+        });
+        savePersonMaster(newPersons);
+        setData(p => ({ ...p, _masterKey: (p._masterKey||0)+1 }));
+        alert(`✅ ${newPersons.length - persons.length}名をICS出席者マスターに登録しました`);
+      } catch(err) {
+        alert('CSVの読み込みに失敗しました: ' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  };
+
+  // ── テキスト貼り付け → AI解析 ──
+  const handlePasteAnalyze = async () => {
+    if (!pasteText.trim()) return;
+    if (!apiKey) { alert('APIキーを設定してください'); return; }
+    setPasteAnalyzing(true);
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-20250514', max_tokens:1500,
+          messages:[{role:'user', content:`以下のOutlook会議本文から会議情報を抽出してください。JSONのみ出力してください（説明不要）。
+
+テキスト:
+${pasteText}
+
+出力形式（値が不明な場合は空文字）:
+{"meetingName":"","date":"YYYY-MM-DD","startTime":"HH:MM","endTime":"HH:MM","location":"","agenda":"1．xxx\\n2．yyy","attendees":[{"org":"組織名","names":["田中","山下"]}]}`
+          }]
+        })
+      });
+      const data2 = await res.json();
+      const raw = data2.content?.[0]?.text?.trim().replace(/```json|```/g,'').trim();
+      const parsed = JSON.parse(raw);
+      // basicInfoに反映
+      setData(p => ({
+        ...p,
+        meetingName: parsed.meetingName || p.meetingName,
+        date:        parsed.date        || p.date,
+        startTime:   parsed.startTime   || p.startTime,
+        endTime:     parsed.endTime     || p.endTime,
+        location:    parsed.location    || p.location,
+        agenda:      parsed.agenda      || p.agenda,
+        attendees:   parsed.attendees?.length ? parsed.attendees : p.attendees,
+        _masterKey:  (p._masterKey||0)+1,
+      }));
+      setShowPasteModal(false); setPasteText('');
+    } catch(err) {
+      alert('解析に失敗しました: ' + err.message);
+    }
+    setPasteAnalyzing(false);
   };
 
   // ICS処理の完了（Step1に反映）
@@ -3864,7 +3951,8 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       </div>
 
       {entryMode==='ics' ? (
-        <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 14px',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+        <>
+        <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'10px 14px',marginBottom:8,display:'flex',alignItems:'center',gap:10}}>
           <span style={{fontSize:12,color:'#1a4a7a',flex:1}}>
             📅 Outlookの会議ファイル（.ics）をアップロードすると基本情報が自動入力されます
           </span>
@@ -3887,6 +3975,49 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
             </span>
           )}
         </div>
+        {/* 代替取り込み：テキスト貼り付け＆CSV */}
+        <div style={{display:'flex',gap:8,marginBottom:14}}>
+          <button onClick={()=>setShowPasteModal(true)}
+            style={{flex:1,background:'#fff',border:'1.5px solid #2E75B6',color:'#1F3864',
+              borderRadius:8,padding:'8px 12px',cursor:'pointer',fontSize:12,fontWeight:700,
+              display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            📋 予定本文を貼り付けて解析（ICS代替）
+          </button>
+          <input ref={csvRef} type="file" accept=".csv" style={{display:'none'}}
+            onChange={e=>{if(e.target.files[0]){handleCsvImport(e.target.files[0]); e.target.value='';} }}/>
+          <button onClick={()=>csvRef.current.click()}
+            style={{flex:1,background:'#fff',border:'1.5px solid #2E75B6',color:'#1F3864',
+              borderRadius:8,padding:'8px 12px',cursor:'pointer',fontSize:12,fontWeight:700,
+              display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+            📊 出席者CSVを取り込む（状況確認→CSV）
+          </button>
+        </div>
+        {/* テキスト貼り付けモーダル */}
+        {showPasteModal && (
+          <div className="modal-overlay" onClick={()=>setShowPasteModal(false)}>
+            <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
+              <div className="modal-title">📋 予定本文を貼り付けて解析</div>
+              <div style={{fontSize:12,color:'#718096',marginBottom:10}}>
+                OutlookのイベントウィンドウでCtrl+A → Ctrl+Cでコピーしたテキストを貼り付けてください。
+                会議名・日時・場所・アジェンダ・出席者を自動入力します。
+              </div>
+              <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)}
+                placeholder={'【GFI】FIリーダーズ定例\n開催日時：2026/03/26 9:00-10:00\n議題\n　進捗確認、課題検討\n参加者\nKE 有田さん、熊谷さん\nIBM 谷口さん、高橋さん'}
+                style={{width:'100%',minHeight:180,padding:'10px',border:'1.5px solid #d0d8e4',
+                  borderRadius:6,fontSize:12,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box',marginBottom:12}}
+                autoFocus/>
+              <div className="btn-row" style={{justifyContent:'space-between'}}>
+                <button className="btn btn-gray" onClick={()=>{setShowPasteModal(false);setPasteText('');}}>キャンセル</button>
+                <button className="btn btn-primary" onClick={handlePasteAnalyze}
+                  disabled={pasteAnalyzing || !pasteText.trim()}
+                  style={{opacity:pasteAnalyzing?0.7:1}}>
+                  {pasteAnalyzing ? '🤖 解析中...' : '🤖 AIで解析して自動入力'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        </>
       ) : (
         <div style={{background:'#FFF8EC',border:'1.5px solid #E6A817',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#7D4E00'}}>
           ✏️ <strong>手入力モード</strong> — ICSファイルが作成できない場合は、以下の各項目をすべて手入力してください。
@@ -4845,7 +4976,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v65</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v66</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
@@ -4897,6 +5028,7 @@ function App(){
         </div>
       )}
       {step===1&&<Step1 data={basicInfo} setData={setBasicInfo} onNext={()=>goTo(2)}
+        apiKey={apiKey}
         onOpenPersonMaster={(type)=>{if(type==='domain')setShowDomainMaster(true);else setShowPersonMaster(true);}}/>}
       {step===2&&<Step2 transcript={transcript} setTranscript={setTranscript}
         docxTemplateFile={docxTemplateFile} setDocxTemplateFile={setDocxTemplateFile}
