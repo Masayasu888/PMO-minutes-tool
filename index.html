@@ -3995,20 +3995,6 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       ) : (
         <>
           <ManualAttendeesInput key={data._clearKey||0} value={data.attendees} onChange={v=>upd('attendees',v)}/>
-          {/* 組織別マスターから一括読み込みボタン */}
-          {Object.keys(loadOrgAttMaster()).length > 0 && (
-            <button onClick={()=>{
-              const m = loadOrgAttMaster();
-              const orgs = Object.keys(m).sort();
-              const attendees = orgs.map(org=>({org, names: m[org]||[]}));
-              upd('attendees', attendees);
-            }}
-              style={{marginTop:8,background:'#1F3864',border:'none',color:'#fff',
-                borderRadius:6,padding:'8px 14px',cursor:'pointer',fontSize:12,fontWeight:700,width:'100%',
-                display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-              <span>📂</span> 手入力出席者マスターから全員を読み込む
-            </button>
-          )}
         </>
       )}
       {showOrgAttMaster && <OrgAttendeeMasterModal onClose={()=>setShowOrgAttMaster(false)}/>}
@@ -4840,7 +4826,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v60</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v61</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
