@@ -2307,6 +2307,7 @@ function ManualAttendeesInput({ value, onChange }) {
   // 手入力追加用
   const [addOrg, setAddOrg] = React.useState('');
   const [addNames, setAddNames] = React.useState('');
+  const [expandedOrgs, setExpandedOrgs] = React.useState({});
 
   // checkedからattendees配列を再構築してonChange
   const buildAndNotify = (newChecked) => {
@@ -2390,58 +2391,90 @@ function ManualAttendeesInput({ value, onChange }) {
 
   return (
     <div>
-      <div style={{fontSize:11,color:'#718096',marginBottom:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <span>💡 組織名をクリックで全員選択 / 名前を個別にチェック</span>
-        {selectedCount > 0 && <span style={{color:'#1F7A4D',fontWeight:700}}>{selectedCount}名選択中</span>}
-      </div>
+      {/* 選択済みサマリー */}
+      {selectedCount > 0 && (
+        <div style={{marginBottom:8,padding:'6px 12px',background:'#EBF3FB',borderRadius:6,
+          display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+          <span style={{fontSize:12,color:'#1F3864',fontWeight:700}}>✓ {selectedCount}名選択中</span>
+          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+            {Object.entries(
+              Object.entries(checked)
+                .filter(([,v])=>v)
+                .reduce((acc,[key])=>{
+                  const sep=key.indexOf('::'); const org=key.slice(0,sep); const name=key.slice(sep+2);
+                  if(!acc[org])acc[org]=[];acc[org].push(name);return acc;
+                },{})
+            ).map(([org,names])=>(
+              <span key={org} style={{fontSize:11,background:'#fff',border:'1px solid #bee3f8',
+                borderRadius:10,padding:'2px 8px',color:'#1F3864'}}>
+                {org}：{names.join('、')}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* 組織別ボタン選択UI */}
+      {/* アコーディオン：組織名タップで展開 */}
       <div style={{border:'1.5px solid #d0d8e4',borderRadius:8,overflow:'hidden',background:'#fff'}}>
         {orgs.map((org, oi) => {
           const names = masterData[org] || [];
           const checkedCount = names.filter(n => checked[`${org}::${n}`]).length;
           const allChk = checkedCount === names.length && names.length > 0;
+          const isOpen = !!expandedOrgs[org];
           return (
-            <div key={org} style={{borderBottom: oi < orgs.length-1 ? '1px solid #eef2f7' : 'none'}}>
-              {/* 組織ヘッダー：クリックで全員選択/解除 */}
-              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
-                background: checkedCount > 0 ? '#EBF3FB' : '#f8fafc'}}>
-                <span style={{fontWeight:700,fontSize:13,color:'#1F3864',flex:1}}>【{org}】</span>
-                <span style={{fontSize:11,color: checkedCount>0?'#1F7A4D':'#aaa',fontWeight:checkedCount>0?700:400}}>
-                  {checkedCount > 0 ? `${checkedCount}/${names.length}名選択中` : `${names.length}名`}
+            <div key={org} style={{borderBottom: oi < orgs.length-1 ? '1px solid #e8edf2' : 'none'}}>
+              {/* 組織ヘッダー行：クリックで展開/折りたたみ */}
+              <div
+                onClick={()=>setExpandedOrgs(p=>({...p,[org]:!isOpen}))}
+                style={{display:'flex',alignItems:'center',gap:8,padding:'10px 14px',cursor:'pointer',
+                  userSelect:'none',background: checkedCount>0 ? '#EBF3FB' : '#fff',
+                  transition:'.12s'}}>
+                <span style={{fontWeight:700,fontSize:13,color:'#1F3864',flex:1}}>
+                  {org}
+                  {checkedCount>0 && (
+                    <span style={{marginLeft:8,fontSize:11,fontWeight:400,color:'#1F7A4D'}}>
+                      ✓ {checkedCount}名選択
+                    </span>
+                  )}
                 </span>
-                <button onClick={()=>toggleOrg(org)}
-                  style={{fontSize:11,padding:'3px 10px',borderRadius:12,border:'1.5px solid',cursor:'pointer',
-                    fontWeight:700,transition:'.1s',whiteSpace:'nowrap',
-                    background: allChk ? '#1F3864' : '#fff',
-                    color: allChk ? '#fff' : '#1F3864',
-                    borderColor: '#1F3864'}}>
-                  {allChk ? '✓ 全員選択中' : '全員選択'}
-                </button>
+                <span style={{fontSize:11,color:'#aaa'}}>{names.length}名</span>
+                <span style={{fontSize:12,color:'#888',transform:isOpen?'rotate(180deg)':'rotate(0deg)',
+                  transition:'.15s',display:'inline-block'}}>▼</span>
               </div>
-              {/* メンバーボタン行 */}
-              <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'8px 12px 10px 12px',
-                borderTop:'1px solid #f0f4f8'}}>
-                {names.map(name => {
-                  const isChk = !!checked[`${org}::${name}`];
-                  return (
-                    <button key={name} onClick={()=>toggleName(org,name)}
-                      style={{padding:'6px 14px',borderRadius:20,cursor:'pointer',
-                        fontSize:13,fontWeight:isChk?700:400,transition:'.1s',
-                        background: isChk ? '#2E75B6' : '#fff',
-                        color: isChk ? '#fff' : '#555',
-                        border: '1.5px solid '+(isChk?'#2E75B6':'#ccd')}}>
-                      {isChk ? `✓ ${name}` : name}
-                    </button>
-                  );
-                })}
-              </div>
+
+              {/* 展開時：名前ボタン + 全員選択 */}
+              {isOpen && (
+                <div style={{padding:'10px 14px 12px',borderTop:'1px solid #f0f4f8',
+                  background: '#fafcff'}}>
+                  <div style={{display:'flex',flexWrap:'wrap',gap:7,marginBottom:8}}>
+                    {names.map(name => {
+                      const isChk = !!checked[`${org}::${name}`];
+                      return (
+                        <button key={name} onClick={()=>toggleName(org,name)}
+                          style={{padding:'6px 16px',borderRadius:20,cursor:'pointer',
+                            fontSize:13,fontWeight:isChk?700:400,transition:'.1s',
+                            background: isChk ? '#2E75B6' : '#f0f4f8',
+                            color: isChk ? '#fff' : '#444',
+                            border: '1.5px solid '+(isChk?'#2E75B6':'#d0d8e4')}}>
+                          {isChk ? `✓ ${name}` : name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button onClick={()=>toggleOrg(org)}
+                    style={{fontSize:11,padding:'3px 12px',borderRadius:10,border:'1.5px solid #2E75B6',
+                      cursor:'pointer',fontWeight:700,background:allChk?'#2E75B6':'#fff',
+                      color:allChk?'#fff':'#2E75B6',transition:'.1s'}}>
+                    {allChk ? '✓ 全員選択中（解除）' : '全員選択'}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* 手入力で未登録者を追加 */}
+      {/* マスター未登録者を追加 */}
       <div style={{marginTop:10,padding:'10px 12px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:8}}>
         <div style={{fontSize:11,color:'#888',marginBottom:6}}>マスター未登録の方を追加</div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -3791,17 +3824,17 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 
       {/* ── 入力モード切り替え ── */}
       <div style={{display:'flex',gap:0,background:'#f0f4f8',borderRadius:8,padding:3,marginBottom:14,width:'fit-content'}}>
-        <button onClick={()=>setEntryMode('ics')}
-          style={{padding:'7px 18px',borderRadius:6,border:'none',fontSize:12,fontWeight:700,cursor:'pointer',
-            background:entryMode==='ics'?'#1F3864':'transparent',
-            color:entryMode==='ics'?'#fff':'#718096',transition:'.15s'}}>
-          📅 ICSから自動入力
-        </button>
         <button onClick={()=>setEntryMode('manual')}
           style={{padding:'7px 18px',borderRadius:6,border:'none',fontSize:12,fontWeight:700,cursor:'pointer',
             background:entryMode==='manual'?'#1F3864':'transparent',
             color:entryMode==='manual'?'#fff':'#718096',transition:'.15s'}}>
           ✏️ 手入力
+        </button>
+        <button onClick={()=>setEntryMode('ics')}
+          style={{padding:'7px 18px',borderRadius:6,border:'none',fontSize:12,fontWeight:700,cursor:'pointer',
+            background:entryMode==='ics'?'#1F3864':'transparent',
+            color:entryMode==='ics'?'#fff':'#718096',transition:'.15s'}}>
+          📅 ICSから自動入力
         </button>
       </div>
 
@@ -4807,7 +4840,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v57</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v59</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
