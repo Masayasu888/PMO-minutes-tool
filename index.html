@@ -1776,7 +1776,7 @@ const AUTHOR_MASTER_KEY = 'pmo_author_master';
 function loadAuthorMaster(){
   try{
     const v = localStorage.getItem(AUTHOR_MASTER_KEY);
-    return v ? JSON.parse(v) : ['安田 真和'];
+    return v ? JSON.parse(v) : [];
   }catch(e){ return []; }
 }
 function saveAuthorMaster(list){ localStorage.setItem(AUTHOR_MASTER_KEY, JSON.stringify(list)); }
@@ -2471,6 +2471,7 @@ function ManualAttendeesInput({ value, onChange }) {
 }
 
 function AttendeesInput({ value, onChange, onOpenPersonMaster }){
+  const [showPicker, setShowPicker] = React.useState(false);
   const orgs = (value && value.length > 0)
     ? value.filter(function(o){ return o.names && o.names.length > 0; })
     : [];
@@ -2479,27 +2480,163 @@ function AttendeesInput({ value, onChange, onOpenPersonMaster }){
     onChange(orgs.map(function(o){ return o.org===orgKey ? {org:o.org, names:o.names.filter(function(n){ return n!==name; })} : o; }));
   };
 
+  // PersonMasterから選択して追加
+  const handlePickFromMaster = (selectedOrgs) => {
+    // 既存と合算
+    const merged = [...orgs];
+    selectedOrgs.forEach(({org, names}) => {
+      const idx = merged.findIndex(o => o.org === org);
+      if (idx >= 0) {
+        const combined = [...new Set([...merged[idx].names, ...names])];
+        merged[idx] = { org, names: combined };
+      } else {
+        merged.push({ org, names });
+      }
+    });
+    onChange(merged);
+    setShowPicker(false);
+  };
+
   return (
     <div style={{border:'1.5px solid #d0d8e4',borderRadius:8,padding:12}}>
+      {orgs.length === 0 && (
+        <div style={{color:'#aaa',fontSize:12,marginBottom:8,textAlign:'center'}}>
+          出席者が登録されていません
+        </div>
+      )}
       {orgs.map(function(o, i){
         return (
           <div key={i} style={{marginBottom:8}}>
-            <strong>[{o.org}]</strong>
+            <strong style={{fontSize:13,color:'#1F3864'}}>[{o.org}]</strong>
             {o.names.map(function(name, j){
               return (
-                <span key={j} style={{marginLeft:6,background:'#EBF3FB',padding:'2px 8px',borderRadius:12,fontSize:12}}>
+                <span key={j} style={{marginLeft:6,background:'#EBF3FB',padding:'3px 9px',borderRadius:12,fontSize:12,display:'inline-flex',alignItems:'center',gap:4}}>
                   {name}
-                  <button onClick={function(){ removeName(o.org, name); }} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',marginLeft:4}}>✕</button>
+                  <button onClick={function(){ removeName(o.org, name); }} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:12,lineHeight:1,padding:0}}>✕</button>
                 </span>
               );
             })}
           </div>
         );
       })}
-      <button onClick={function(){ if(onOpenPersonMaster) onOpenPersonMaster(); }}
-        style={{marginTop:8,background:'none',border:'1px dashed #2E75B6',color:'#2E75B6',borderRadius:6,padding:'6px 14px',cursor:'pointer',fontSize:12,width:'100%'}}>
-        ＋ 出席者マスターから追加
+      <button onClick={()=>setShowPicker(true)}
+        style={{marginTop:4,background:'#1F3864',border:'none',color:'#fff',
+          borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
+          width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+        ＋ 組織別マスターから選択して追加
       </button>
+      {showPicker && (
+        <AttendeePickerModal
+          current={orgs}
+          onAdd={handlePickFromMaster}
+          onClose={()=>setShowPicker(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ICSモード用：組織別マスターから出席者をチェックして追加するモーダル
+function AttendeePickerModal({ current, onAdd, onClose }) {
+  const master = loadOrgAttMaster();
+  const orgList = Object.keys(master).sort();
+  const [checked, setChecked] = React.useState({});
+
+  const toggleName = (org, name) => {
+    const key = `${org}::${name}`;
+    setChecked(p => ({ ...p, [key]: !p[key] }));
+  };
+  const toggleOrg = (org) => {
+    const names = master[org] || [];
+    const allChk = names.every(n => checked[`${org}::${n}`]);
+    const next = { ...checked };
+    names.forEach(n => { next[`${org}::${n}`] = !allChk; });
+    setChecked(next);
+  };
+
+  const handleAdd = () => {
+    const map = {};
+    Object.entries(checked).forEach(([key, v]) => {
+      if (!v) return;
+      const sep = key.indexOf('::');
+      const org = key.slice(0, sep), name = key.slice(sep + 2);
+      if (!map[org]) map[org] = [];
+      map[org].push(name);
+    });
+    onAdd(Object.keys(map).map(org => ({ org, names: map[org] })));
+  };
+
+  const selectedCount = Object.values(checked).filter(Boolean).length;
+
+  if (orgList.length === 0) {
+    return (
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}>
+          <div className="modal-title">👥 出席者を選択</div>
+          <div style={{padding:'20px 0',textAlign:'center',color:'#888',fontSize:13}}>
+            組織別マスターに登録がありません。<br/>
+            「🏢 組織別マスター」からメンバーを登録してください。
+          </div>
+          <div className="btn-row" style={{justifyContent:'flex-end'}}>
+            <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div className="modal-title" style={{margin:0}}>👥 出席者を選択して追加</div>
+          {selectedCount > 0 && <span style={{background:'#EBF3FB',color:'#1F3864',fontWeight:700,fontSize:12,padding:'3px 10px',borderRadius:12}}>{selectedCount}名選択中</span>}
+        </div>
+        <div style={{maxHeight:320,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:8,marginBottom:12}}>
+          {orgList.map((org, oi) => {
+            const names = master[org] || [];
+            const checkedCount = names.filter(n => checked[`${org}::${n}`]).length;
+            const allChk = checkedCount === names.length && names.length > 0;
+            const someChk = checkedCount > 0 && !allChk;
+            return (
+              <div key={org} style={{borderBottom: oi < orgList.length-1 ? '1px solid #f0f4f8':'none'}}>
+                <div onClick={()=>toggleOrg(org)}
+                  style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
+                    background: checkedCount>0?'#EBF3FB':'#f8fafc',cursor:'pointer',userSelect:'none'}}>
+                  <span style={{width:16,height:16,border:'2px solid '+(allChk||someChk?'#2E75B6':'#bbc'),
+                    borderRadius:3,display:'flex',alignItems:'center',justifyContent:'center',
+                    background:allChk?'#2E75B6':someChk?'#d4e8fa':'#fff',flexShrink:0}}>
+                    {allChk && <span style={{color:'#fff',fontSize:11,fontWeight:900}}>✓</span>}
+                    {someChk && <span style={{color:'#2E75B6',fontSize:11,fontWeight:900}}>−</span>}
+                  </span>
+                  <span style={{fontWeight:700,fontSize:13,color:'#1F3864',flex:1}}>【{org}】</span>
+                  <span style={{fontSize:11,color:'#888'}}>{checkedCount}/{names.length}名</span>
+                </div>
+                <div style={{display:'flex',flexWrap:'wrap',gap:5,padding:'6px 12px 8px 36px'}}>
+                  {names.map(name => {
+                    const isChk = !!checked[`${org}::${name}`];
+                    return (
+                      <button key={name} onClick={()=>toggleName(org,name)}
+                        style={{padding:'4px 12px',borderRadius:20,border:'1.5px solid '+(isChk?'#2E75B6':'#ccd'),
+                          background:isChk?'#2E75B6':'#fff',color:isChk?'#fff':'#444',
+                          fontSize:12,fontWeight:isChk?700:400,cursor:'pointer',transition:'.1s'}}>
+                        {isChk&&'✓ '}{name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div className="btn-row" style={{justifyContent:'space-between'}}>
+          <button className="btn btn-gray" onClick={onClose}>キャンセル</button>
+          <button className="btn btn-primary" onClick={handleAdd} disabled={selectedCount===0}
+            style={{opacity:selectedCount===0?0.5:1}}>
+            ＋ {selectedCount}名を追加
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -4673,7 +4810,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v52</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v54</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
