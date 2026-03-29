@@ -3974,7 +3974,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
       <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <span>出席者</span>
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
-          {entryMode==='ics' ? (
+          {entryMode==='ics' && (
             <>
               <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }} className="btn-form-sub">
                 👥 ICS出席者マスター
@@ -3983,26 +3983,15 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
                 🌐 ICS組織マスター
               </button>
             </>
-          ) : (
-            <button onClick={()=>setShowOrgAttMaster(true)} className="btn-form-sub">
-              ✏️ 手入力出席者マスター
-            </button>
           )}
+          <button onClick={()=>setShowOrgAttMaster(true)} className="btn-form-sub">
+            ✏️ 手入力出席者マスター
+          </button>
         </div>
       </div>
 
-      {entryMode==='ics' ? (
-        <>
-          <div style={{fontSize:11,color:'#888',marginBottom:6}}>
-            💡 名前を入力して <strong>Enter</strong> で追加。「、」または「,」で区切ると複数名を一括登録できます。
-          </div>
-          <AttendeesInput value={data.attendees} onChange={v=>upd('attendees',v)} onOpenPersonMaster={()=>onOpenPersonMaster('person')}/>
-        </>
-      ) : (
-        <>
-          <ManualAttendeesInput key={`${data._clearKey||0}-${data._masterKey||0}`} value={data.attendees} onChange={v=>upd('attendees',v)}/>
-        </>
-      )}
+      {/* ICS・手入力どちらも同じアコーディオンUIを使用 */}
+      <ManualAttendeesInput key={`${data._clearKey||0}-${data._masterKey||0}`} value={data.attendees} onChange={v=>upd('attendees',v)}/>
       {showOrgAttMaster && <OrgAttendeeMasterModal onClose={()=>setShowOrgAttMaster(false)}/>}
       <div className="form-row-1" style={{marginTop:8}}>
         <label style={{marginBottom:6}}>配布・投影資料</label>
@@ -4832,7 +4821,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v63</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v64</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
