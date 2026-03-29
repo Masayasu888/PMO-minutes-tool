@@ -3914,7 +3914,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
             <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
           </div>
           <input list="author-list" value={data.author} onChange={e=>upd('author',e.target.value)}
-            placeholder="安田 真和"/>
+            placeholder="作成者名を入力（マスターから選択も可）"/>
           <datalist id="author-list">
             {authorList.map((v,i)=><option key={i} value={v}/>)}
           </datalist>
@@ -4807,7 +4807,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v56</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v57</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
