@@ -2290,10 +2290,27 @@ function searchPersonMaster(query, excludeNames=[]) {
 }
 
 // ── 手入力出席者コンポーネント ───────────────────────────────
-// 各行「組織名　田中、山下、宮城」形式で入力 → attendees配列に変換
 // ── チェックボックス式出席者選択コンポーネント ────────────────
-function ManualAttendeesInput({ value, onChange }) {
-  const [masterData, setMasterData] = React.useState(() => loadOrgAttMaster());
+function ManualAttendeesInput({ value, onChange, masterSource='org' }) {
+  // masterSource: 'org' = 手入力出席者マスター(OrgAttMaster)
+  //               'ics' = ICS出席者マスター(PersonMaster) をorg別に集約
+
+  const loadMasterForSource = () => {
+    if (masterSource === 'ics') {
+      // PersonMaster [{name,email,org}] → { org: [name,...] } に変換
+      const persons = loadPersonMaster();
+      const map = {};
+      persons.forEach(p => {
+        if (!p.org || !p.name) return;
+        if (!map[p.org]) map[p.org] = [];
+        if (!map[p.org].includes(p.name)) map[p.org].push(p.name);
+      });
+      return map;
+    }
+    return loadOrgAttMaster();
+  };
+
+  const [masterData, setMasterData] = React.useState(() => loadMasterForSource());
 
   // チェック状態: { "org::name": true/false }
   const toChecked = (attendees) => {
@@ -2344,7 +2361,9 @@ function ManualAttendeesInput({ value, onChange }) {
   if (orgs.length === 0) {
     return (
       <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'12px 14px',fontSize:12,color:'#1a4a7a'}}>
-        💡 右上の「✏️ 手入力出席者マスター」からメンバーを登録すると、ここで選択できるようになります。
+        {masterSource === 'ics'
+          ? '💡 ICSファイルを取り込むと出席者が登録されます。取り込み後にここで選択できるようになります。'
+          : '💡 右上の「✏️ 手入力出席者マスター」からメンバーを登録すると、ここで選択できるようになります。'}
       </div>
     );
   }
@@ -3585,7 +3604,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
 
   // ICS処理の完了（Step1に反映）
   const finalizeIcs = (orgs) => {
-    setData(p => ({ ...p, attendees: orgs }));
+    setData(p => ({ ...p, attendees: orgs, _masterKey: (p._masterKey||0)+1 }));
     setIcsPhase(null);
     setIcsLoaded(true);
   };
@@ -3990,8 +4009,13 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
         </div>
       </div>
 
-      {/* ICS・手入力どちらも同じアコーディオンUIを使用 */}
-      <ManualAttendeesInput key={`${data._clearKey||0}-${data._masterKey||0}`} value={data.attendees} onChange={v=>upd('attendees',v)}/>
+      {/* ICS・手入力どちらも同じアコーディオンUI、データソースだけ切り替え */}
+      <ManualAttendeesInput
+        key={`${data._clearKey||0}-${data._masterKey||0}-${entryMode}`}
+        value={data.attendees}
+        onChange={v=>upd('attendees',v)}
+        masterSource={entryMode==='ics' ? 'ics' : 'org'}
+      />
       {showOrgAttMaster && <OrgAttendeeMasterModal onClose={()=>setShowOrgAttMaster(false)}/>}
       <div className="form-row-1" style={{marginTop:8}}>
         <label style={{marginBottom:6}}>配布・投影資料</label>
@@ -4821,7 +4845,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v64</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v65</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
