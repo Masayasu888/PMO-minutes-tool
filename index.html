@@ -2395,50 +2395,44 @@ function ManualAttendeesInput({ value, onChange }) {
         {selectedCount > 0 && <span style={{color:'#1F7A4D',fontWeight:700}}>{selectedCount}名選択中</span>}
       </div>
 
-      {/* チェックボックス一覧 */}
+      {/* 組織別ボタン選択UI */}
       <div style={{border:'1.5px solid #d0d8e4',borderRadius:8,overflow:'hidden',background:'#fff'}}>
         {orgs.map((org, oi) => {
           const names = masterData[org] || [];
           const checkedCount = names.filter(n => checked[`${org}::${n}`]).length;
           const allChk = checkedCount === names.length && names.length > 0;
-          const someChk = checkedCount > 0 && !allChk;
           return (
             <div key={org} style={{borderBottom: oi < orgs.length-1 ? '1px solid #eef2f7' : 'none'}}>
-              {/* 組織ヘッダー行 */}
-              <div
-                onClick={() => toggleOrg(org)}
-                style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
-                  background: checkedCount > 0 ? '#EBF3FB' : '#f8fafc',
-                  cursor:'pointer',userSelect:'none'}}>
-                <span style={{
-                  width:16, height:16, border:'2px solid '+(allChk?'#2E75B6':someChk?'#2E75B6':'#aab'),
-                  borderRadius:3, display:'flex', alignItems:'center', justifyContent:'center',
-                  background: allChk?'#2E75B6': someChk?'#EBF3FB':'#fff', flexShrink:0}}>
-                  {allChk && <span style={{color:'#fff',fontSize:11,fontWeight:900,lineHeight:1}}>✓</span>}
-                  {someChk && <span style={{color:'#2E75B6',fontSize:11,fontWeight:900,lineHeight:1}}>−</span>}
-                </span>
+              {/* 組織ヘッダー：クリックで全員選択/解除 */}
+              <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',
+                background: checkedCount > 0 ? '#EBF3FB' : '#f8fafc'}}>
                 <span style={{fontWeight:700,fontSize:13,color:'#1F3864',flex:1}}>【{org}】</span>
-                <span style={{fontSize:11,color:'#888'}}>{checkedCount}/{names.length}名</span>
+                <span style={{fontSize:11,color: checkedCount>0?'#1F7A4D':'#aaa',fontWeight:checkedCount>0?700:400}}>
+                  {checkedCount > 0 ? `${checkedCount}/${names.length}名選択中` : `${names.length}名`}
+                </span>
+                <button onClick={()=>toggleOrg(org)}
+                  style={{fontSize:11,padding:'3px 10px',borderRadius:12,border:'1.5px solid',cursor:'pointer',
+                    fontWeight:700,transition:'.1s',whiteSpace:'nowrap',
+                    background: allChk ? '#1F3864' : '#fff',
+                    color: allChk ? '#fff' : '#1F3864',
+                    borderColor: '#1F3864'}}>
+                  {allChk ? '✓ 全員選択中' : '全員選択'}
+                </button>
               </div>
-              {/* メンバー行 */}
-              <div style={{display:'flex',flexWrap:'wrap',gap:4,padding:'6px 12px 8px 36px'}}>
+              {/* メンバーボタン行 */}
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,padding:'8px 12px 10px 12px',
+                borderTop:'1px solid #f0f4f8'}}>
                 {names.map(name => {
-                  const key = `${org}::${name}`;
-                  const isChk = !!checked[key];
+                  const isChk = !!checked[`${org}::${name}`];
                   return (
-                    <label key={name}
-                      style={{display:'inline-flex',alignItems:'center',gap:4,cursor:'pointer',
-                        padding:'4px 10px',borderRadius:20,userSelect:'none',
-                        background: isChk ? '#2E75B6' : '#f0f4f8',
-                        color: isChk ? '#fff' : '#333',
-                        border: '1.5px solid '+(isChk?'#2E75B6':'#d0d8e4'),
-                        fontSize:12,fontWeight: isChk?700:400,transition:'.12s'}}>
-                      <input type="checkbox" checked={isChk}
-                        onChange={()=>toggleName(org,name)}
-                        style={{display:'none'}}/>
-                      {isChk && <span style={{fontSize:10}}>✓</span>}
-                      {name}
-                    </label>
+                    <button key={name} onClick={()=>toggleName(org,name)}
+                      style={{padding:'6px 14px',borderRadius:20,cursor:'pointer',
+                        fontSize:13,fontWeight:isChk?700:400,transition:'.1s',
+                        background: isChk ? '#2E75B6' : '#fff',
+                        color: isChk ? '#fff' : '#555',
+                        border: '1.5px solid '+(isChk?'#2E75B6':'#ccd')}}>
+                      {isChk ? `✓ ${name}` : name}
+                    </button>
                   );
                 })}
               </div>
@@ -4810,7 +4804,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v54</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v55</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
