@@ -4134,9 +4134,11 @@ ${pasteText}
               </button>
             </>
           )}
-          <button onClick={()=>setShowOrgAttMaster(true)} className="btn-form-sub">
-            ✏️ 手入力出席者マスター
-          </button>
+          {entryMode==='manual' && (
+            <button onClick={()=>setShowOrgAttMaster(true)} className="btn-form-sub">
+              ✏️ 手入力出席者マスター
+            </button>
+          )}
         </div>
       </div>
 
@@ -4976,7 +4978,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v66</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v67</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
