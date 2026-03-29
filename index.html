@@ -2914,6 +2914,8 @@ function OrgAttendeeMasterModal({ onClose }) {
     });
     setMaster(next); saveOrgAttMaster(next);
     setBulkInput('');
+    // 登録後に組織名欄にフォーカスを戻す
+    setTimeout(()=>document.getElementById('org-input-field')?.focus(), 50);
     if (dups.length > 0) {
       setQueue(dups); setQueueIdx(0); setRenameVal(dups[0].name);
     }
@@ -3009,21 +3011,78 @@ function OrgAttendeeMasterModal({ onClose }) {
           </div>
         )}
 
-        {/* 一括入力 */}
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:11,color:'#718096',marginBottom:6}}>
-            💡 「<strong>組織名　田中、山田、山下</strong>」形式で入力（複数行可）。Enterで改行して別組織を追加できます。
+        {/* 組織名・氏名分離入力 */}
+        {queue.length === 0 && (
+        <div style={{background:'#f8fafc',border:'1.5px solid #d0d8e4',borderRadius:10,padding:14,marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:'#1F3864',marginBottom:10}}>＋ メンバーを登録</div>
+          <div style={{display:'flex',gap:8,marginBottom:8}}>
+            <div style={{flex:'0 0 140px'}}>
+              <div style={{fontSize:11,color:'#718096',marginBottom:4}}>組織名</div>
+              <input
+                value={bulkInput.split('\n')[0]?.split(/[\s　]/)[0]||''}
+                onChange={e=>{
+                  // bulkInputの先頭行の組織名部分だけ更新
+                  const lines = bulkInput.split('\n');
+                  const rest = (lines[0]||'').replace(/^[^\s　]*/, '');
+                  lines[0] = e.target.value + rest;
+                  setBulkInput(lines.join('\n'));
+                }}
+                id="org-input-field"
+                list="existing-orgs-list"
+                placeholder="KE"
+                style={{width:'100%',padding:'8px 10px',border:'1.5px solid #d0d8e4',
+                  borderRadius:6,fontSize:13,boxSizing:'border-box'}}
+                onKeyDown={e=>{
+                  if(e.key==='Tab'){e.preventDefault();document.getElementById('names-input-field')?.focus();}
+                }}
+              />
+              <datalist id="existing-orgs-list">
+                {Object.keys(master).sort().map(o=><option key={o} value={o}/>)}
+              </datalist>
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:11,color:'#718096',marginBottom:4}}>
+                氏名（カンマ区切りで複数入力可）
+              </div>
+              <input
+                id="names-input-field"
+                value={(()=>{
+                  const line = bulkInput.split('\n')[0]||'';
+                  const m = line.match(/^[^\s　]*([\s　]+.*)$/);
+                  return m ? m[1].trimStart() : '';
+                })()}
+                onChange={e=>{
+                  const lines = bulkInput.split('\n');
+                  const org = (lines[0]||'').split(/[\s　]/)[0];
+                  lines[0] = org + (e.target.value ? '　' + e.target.value : '');
+                  setBulkInput(lines.join('\n'));
+                }}
+                placeholder="田中、山田、山下"
+                style={{width:'100%',padding:'8px 10px',border:'1.5px solid #d0d8e4',
+                  borderRadius:6,fontSize:13,boxSizing:'border-box'}}
+                onKeyDown={e=>{
+                  if(e.key==='Enter'){e.preventDefault();handleBulkRegister();}
+                }}
+              />
+            </div>
           </div>
-          <textarea value={bulkInput} onChange={e=>setBulkInput(e.target.value)}
-            placeholder={'KE　田中、山田、山下\nIBM　長田、寿円、筒井'}
-            style={{width:'100%',minHeight:72,padding:'8px 10px',border:'1.5px solid #d0d8e4',
-              borderRadius:6,fontSize:13,fontFamily:'inherit',resize:'vertical',boxSizing:'border-box'}}/>
-          <button onClick={handleBulkRegister}
-            style={{marginTop:6,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,
-              padding:'7px 18px',cursor:'pointer',fontSize:13,fontWeight:700,width:'100%'}}>
-            ＋ 登録する
-          </button>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            <button onClick={handleBulkRegister}
+              style={{flex:1,background:'#1F3864',color:'#fff',border:'none',borderRadius:6,
+                padding:'9px 0',cursor:'pointer',fontSize:13,fontWeight:700}}>
+              ＋ 登録する
+            </button>
+            <button onClick={()=>setBulkInput('')}
+              style={{background:'none',border:'1px solid #ccc',borderRadius:6,
+                padding:'9px 12px',cursor:'pointer',fontSize:12,color:'#888'}}>
+              クリア
+            </button>
+          </div>
+          <div style={{fontSize:10,color:'#a0aec0',marginTop:6,textAlign:'center'}}>
+            Tab で氏名欄へ移動 ／ Enter で登録
+          </div>
         </div>
+        )}
 
         {/* 登録済み一覧 */}
         <div style={{fontSize:12,color:'#555',marginBottom:6,fontWeight:700}}>登録済み一覧</div>
@@ -4773,7 +4832,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v62</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v63</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
