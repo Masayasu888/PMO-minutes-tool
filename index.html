@@ -2550,7 +2550,7 @@ function AttendeesInput({ value, onChange, onOpenPersonMaster }){
         style={{marginTop:4,background:'#1F3864',border:'none',color:'#fff',
           borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:700,
           width:'100%',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-        ＋ 組織別マスターから選択して追加
+        ＋ 手入力出席者マスターから選択して追加
       </button>
       {showPicker && (
         <AttendeePickerModal
@@ -2601,8 +2601,8 @@ function AttendeePickerModal({ current, onAdd, onClose }) {
         <div className="modal" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}>
           <div className="modal-title">👥 出席者を選択</div>
           <div style={{padding:'20px 0',textAlign:'center',color:'#888',fontSize:13}}>
-            組織別マスターに登録がありません。<br/>
-            「🏢 組織別マスター」からメンバーを登録してください。
+            手入力出席者マスターに登録がありません。<br/>
+            「✏️ 手入力出席者マスター」からメンバーを登録してください。
           </div>
           <div className="btn-row" style={{justifyContent:'flex-end'}}>
             <button className="btn btn-primary" onClick={onClose}>閉じる</button>
@@ -3036,7 +3036,7 @@ function OrgAttendeeMasterModal({ onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
-        <div className="modal-title">🏢 組織別出席者マスター</div>
+        <div className="modal-title">✏️ 手入力出席者マスター</div>
 
         {/* 重複確認ダイアログ */}
         {queue.length > 0 && queueIdx < queue.length && (
@@ -3150,7 +3150,7 @@ function PersonMasterModal({ onClose }) {
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{maxWidth:560}} onClick={e=>e.stopPropagation()}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
-          <div className="modal-title" style={{margin:0}}>👥 出席者マスター</div>
+          <div className="modal-title" style={{margin:0}}>👥 ICS出席者マスター</div>
           <button onClick={()=>{if(window.confirm('出席者マスターを全件削除しますか？\nICS再取込時に再登録できます。')){{savePersonMaster([]);setList([]);}}} }
             style={{background:'none',border:'1px solid #e53e3e',color:'#e53e3e',borderRadius:4,padding:'3px 10px',cursor:'pointer',fontSize:11}}>
             🗑 全件削除
@@ -3971,15 +3971,15 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
           {entryMode==='ics' ? (
             <>
               <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('person'); }} className="btn-form-sub">
-                👥 出席者マスター
+                👥 ICS出席者マスター
               </button>
               <button onClick={()=>{ if(onOpenPersonMaster) onOpenPersonMaster('domain'); }} className="btn-form-sub">
-                🌐 組織マスター
+                🌐 ICS組織マスター
               </button>
             </>
           ) : (
             <button onClick={()=>setShowOrgAttMaster(true)} className="btn-form-sub">
-              🏢 組織別マスター
+              ✏️ 手入力出席者マスター
             </button>
           )}
         </div>
@@ -4006,7 +4006,7 @@ function Step1({data,setData,onNext,onOpenPersonMaster}){
               style={{marginTop:8,background:'#1F3864',border:'none',color:'#fff',
                 borderRadius:6,padding:'8px 14px',cursor:'pointer',fontSize:12,fontWeight:700,width:'100%',
                 display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-              <span>📂</span> 組織別マスターから全員を読み込む
+              <span>📂</span> 手入力出席者マスターから全員を読み込む
             </button>
           )}
         </>
@@ -4662,7 +4662,7 @@ function HeaderMenu({ apiKey, onOpenKey, onOpenPerson, onOpenDomain }) {
           <div className="header-gear-sep"/>
           <div className="header-gear-label">マスター管理</div>
           <button className="header-gear-item" onClick={()=>click(onOpenPerson)}>
-            <span style={{fontSize:14}}>👥</span><span>出席者マスター</span>
+            <span style={{fontSize:14}}>👥</span><span>ICS出席者マスター</span>
           </button>
           <button className="header-gear-item" onClick={()=>click(onOpenDomain)}>
             <span style={{fontSize:14}}>🌐</span><span>ドメイン設定</span>
@@ -4840,7 +4840,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v59</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v60</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
