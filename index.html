@@ -1457,6 +1457,10 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={},
   役員・経営層が「〜をやってほしい」と指示し、PMO・担当者が受けた場合
   → 受けた側（PMO・担当者）が担当者
 
+■ ルール6「配布資料との照合」
+  配布資料（スライド）が添付されている場合、スライドに「担当：〇〇」「期限：〇〇」が
+  明記されているToDoについては資料の記載を優先すること
+
 ■ 不明な場合のみ「要確認」とする。プロジェクトオーナー・PMO全体の責任者を
   デフォルト担当者として自動割り当てることは絶対に禁止する。
 
@@ -1474,6 +1478,9 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={},
 - 「1つ目は〜、2つ目は〜」「①〜、②〜」等の連番・枝番表現
 - 「変革」「取り組み」「テーマ」等に続く列挙
 → 列挙の途中で省略せず全件を議事内容に記録すること。「等」「以下同様」は使用禁止。
+→ 特に「N個の変革を実施」と述べられた場合は、第1変革〜第N変革をすべて個別に記録すること。
+→ 各列挙項目の記録形式：「N番目の変革/取り組み：〔内容の詳細〕」として改行して記録。
+→ 配布資料が添付されている場合は資料のスライドを参照して列挙が完全かを確認すること。
 
 【議事詳細の記録精度ルール（最重要）】
 minutes_by_agenda の content において、以下を絶対に省略しないこと：
@@ -1599,6 +1606,37 @@ minutes_by_agenda の content は以下の基準で作成すること：
 
   // ── Pass 1: メイン抽出 ──────────────────────────────────────
   onLog('🤖 [1/2] 文字起こしを解析・照合中（高精度モード）...');
+
+  // 配布資料のファイルをAPIに添付（PDF・画像のみ）
+  const materialContent = [];
+  const matFiles = (basicInfo.materials||[]).filter(m=>m.blobUrl && m.name);
+  if (matFiles.length > 0) {
+    onLog('📎 配布資料を読み込み中...');
+    for (const mat of matFiles) {
+      const ext = mat.name.split('.').pop().toLowerCase();
+      try {
+        if (ext === 'pdf') {
+          const b64 = await blobUrlToBase64(mat.blobUrl);
+          materialContent.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } });
+          materialContent.push({ type:'text', text:`↑ 配布資料: ${mat.name}` });
+        } else if (['png','jpg','jpeg','webp'].includes(ext)) {
+          const b64 = await blobUrlToBase64(mat.blobUrl);
+          const mt = {png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'}[ext];
+          materialContent.push({ type:'image', source:{ type:'base64', media_type:mt, data:b64 } });
+          materialContent.push({ type:'text', text:`↑ 配布資料（画像）: ${mat.name}` });
+        } else if (ext === 'pptx') {
+          const text = await extractPptxText(mat.blobUrl);
+          if (text.trim()) materialContent.push({ type:'text', text:`【スライドテキスト（${mat.name}）】\n${text}` });
+        }
+      } catch(e) { onLog(`⚠️ ${mat.name} 読み込みスキップ`); }
+    }
+    if (materialContent.length > 0) onLog(`✅ ${matFiles.length}件の資料を読み込みました`);
+  }
+
+  const messageContent = materialContent.length > 0
+    ? [...materialContent, { type:'text', text:`【重要】上記の配布資料の内容を参照して解析の精度を高めてください。固有名詞・数値・アジェンダ構造は資料の記載を正とします。\n\n${prompt}` }]
+    : prompt;
+
   const res = await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -1607,7 +1645,7 @@ minutes_by_agenda の content は以下の基準で作成すること：
       max_tokens:10000,
       temperature:0,
       system:SYSTEM_PROMPT,
-      messages:[{role:'user',content:prompt}]
+      messages:[{role:'user', content: messageContent}]
     }),
     signal: signal || undefined
   });
@@ -2052,6 +2090,92 @@ function saveAttendeeHistory(org, names){
 }
 
 // ── タグ入力コンポーネント ─────────────────────────────────
+
+// ── 資料解析・辞書自動生成ユーティリティ ──────────────────
+async function blobUrlToBase64(blobUrl) {
+  const res = await fetch(blobUrl);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+async function extractPptxText(blobUrl) {
+  try {
+    const res = await fetch(blobUrl);
+    const ab = await res.arrayBuffer();
+    const zip = await JSZip.loadAsync(ab);
+    const slideKeys = Object.keys(zip.files)
+      .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
+      .sort((a,b) => {
+        const na = parseInt(a.match(/\d+/)[0]);
+        const nb = parseInt(b.match(/\d+/)[0]);
+        return na - nb;
+      });
+    let text = '';
+    for (const sk of slideKeys) {
+      const xml = await zip.files[sk].async('string');
+      const matches = xml.match(/<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>/g) || [];
+      const slideText = matches.map(m => m.replace(/<[^>]+>/g,'')).filter(Boolean).join(' ');
+      if (slideText.trim()) text += slideText.trim() + '\n---\n';
+    }
+    return text;
+  } catch(e) { return ''; }
+}
+
+async function autoGenerateGlossary(materials, apiKey) {
+  const targets = (materials||[]).filter(m => m.blobUrl && m.name);
+  if (!targets.length) return { candidates:[], error:'添付ファイルがありません。配布・投影資料にファイルを添付してください。' };
+
+  const content = [];
+  let hasContent = false;
+
+  for (const mat of targets) {
+    const ext = mat.name.split('.').pop().toLowerCase();
+    try {
+      if (ext === 'pdf') {
+        const b64 = await blobUrlToBase64(mat.blobUrl);
+        content.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } });
+        content.push({ type:'text', text:`↑ファイル名: ${mat.name}` });
+        hasContent = true;
+      } else if (['png','jpg','jpeg','webp','gif'].includes(ext)) {
+        const b64 = await blobUrlToBase64(mat.blobUrl);
+        const mt = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', webp:'image/webp', gif:'image/gif' }[ext];
+        content.push({ type:'image', source:{ type:'base64', media_type:mt, data:b64 } });
+        content.push({ type:'text', text:`↑ファイル名: ${mat.name}` });
+        hasContent = true;
+      } else if (ext === 'pptx') {
+        const text = await extractPptxText(mat.blobUrl);
+        if (text.trim()) {
+          content.push({ type:'text', text:`【スライドテキスト抽出（${mat.name}）】\n${text}` });
+          hasContent = true;
+        }
+      }
+    } catch(e) { console.warn('スキップ:', mat.name, e); }
+  }
+
+  if (!hasContent) return { candidates:[], error:'PDF・画像・PPTXファイルのみ自動生成に対応しています。' };
+
+  content.push({ type:'text', text:`上記の資料に含まれる固有名詞・システム名・製品名・略語・専門用語から、会議の音声認識で誤記・誤変換されやすい項目を抽出してください。
+
+各項目について「音声認識される読み方または誤記 → 正しい表記（補足）」の形式で列挙してください。
+マークダウンや説明文は不要です。JSONのみ返答してください：
+{"glossary":["ガラス → Aras（PLMパッケージ）","KDX → OKDX（プロジェクト名）"]}` });
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', 'x-api-key':apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+    body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:2000, temperature:0, messages:[{role:'user',content}] })
+  });
+  if (!res.ok) throw new Error(`API Error ${res.status}`);
+  const data = await res.json();
+  const raw = data.content[0].text.trim().replace(/^```json\s*/,'').replace(/\s*```$/,'');
+  const parsed = JSON.parse(raw);
+  return { candidates: parsed.glossary || [], error:null };
+}
 
 // ── 配布資料リンク入力コンポーネント ──────────────────────
 // materials: [{name:'', url:'', blobUrl:'', isLocal:false}]
@@ -3872,6 +3996,117 @@ function parseIcs(text) {
 }
 
 // ── Step 1 ─────────────────────────────────────────────────
+// ── 辞書自動生成ボタン＋確認UI ────────────────────────────
+function AutoGlossaryButton({ materials, apiKey, currentGlossary, onApply }) {
+  const [state, setState] = React.useState('idle'); // idle|loading|confirm|error
+  const [candidates, setCandidates] = React.useState([]);
+  const [checks, setChecks] = React.useState({});
+  const [errMsg, setErrMsg] = React.useState('');
+
+  const hasFiles = (materials||[]).some(m => m.blobUrl && m.name);
+
+  const handleGenerate = async () => {
+    if (!apiKey) { alert('APIキーを設定してください（右上メニュー）'); return; }
+    setState('loading');
+    try {
+      const result = await autoGenerateGlossary(materials, apiKey);
+      if (result.error) { setErrMsg(result.error); setState('error'); return; }
+      if (!result.candidates.length) { setErrMsg('固有名詞候補が見つかりませんでした。'); setState('error'); return; }
+      const init = {};
+      result.candidates.forEach((c,i) => { init[i] = true; });
+      setCandidates(result.candidates);
+      setChecks(init);
+      setState('confirm');
+    } catch(e) {
+      setErrMsg('解析エラー: ' + e.message);
+      setState('error');
+    }
+  };
+
+  const handleApply = () => {
+    const selected = candidates.filter((_,i) => checks[i]);
+    if (!selected.length) { setState('idle'); return; }
+    const existing = (currentGlossary||'').trim();
+    const toAdd = selected.filter(c => !existing.includes(c));
+    const merged = [existing, ...toAdd].filter(Boolean).join('\n');
+    onApply(merged);
+    setState('idle');
+    setCandidates([]);
+  };
+
+  if (!hasFiles) return (
+    <span style={{fontSize:10,color:'#a0aec0',fontStyle:'italic'}}>
+      ↑ 配布資料にファイルを添付すると自動生成できます
+    </span>
+  );
+
+  return (
+    <div style={{width:'100%'}}>
+      {state === 'idle' && (
+        <button onClick={handleGenerate}
+          style={{background:'#1F7A4D',color:'#fff',border:'none',borderRadius:6,
+            padding:'5px 14px',fontSize:11,fontWeight:700,cursor:'pointer',
+            display:'flex',alignItems:'center',gap:5}}>
+          🔤 資料から辞書を自動生成
+        </button>
+      )}
+      {state === 'loading' && (
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'4px 0',fontSize:12,color:'#1F7A4D',fontWeight:600}}>
+          <div style={{width:14,height:14,border:'2px solid #9AE6B4',borderTopColor:'#1F7A4D',
+            borderRadius:'50%',animation:'spin 0.8s linear infinite',flexShrink:0}}/>
+          資料を解析中…
+        </div>
+      )}
+      {state === 'error' && (
+        <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+          <span style={{fontSize:11,color:'#c53030'}}>{errMsg}</span>
+          <button onClick={()=>setState('idle')} style={{fontSize:11,background:'none',border:'1px solid #ccc',borderRadius:4,padding:'2px 8px',cursor:'pointer',color:'#666'}}>閉じる</button>
+        </div>
+      )}
+      {state === 'confirm' && (
+        <div style={{background:'#F0FFF4',border:'1.5px solid #9AE6B4',borderRadius:8,
+          padding:'12px 14px',marginTop:8,width:'100%'}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8,flexWrap:'wrap',gap:6}}>
+            <span style={{fontSize:12,fontWeight:700,color:'#276749'}}>
+              ✅ {candidates.length}件の候補が検出されました。追加する項目を選択してください
+            </span>
+            <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+              <button onClick={()=>{const a={};candidates.forEach((_,i)=>{a[i]=true;});setChecks(a);}}
+                style={{fontSize:10,background:'#fff',border:'1px solid #9AE6B4',borderRadius:4,padding:'3px 8px',cursor:'pointer',color:'#276749',fontWeight:600}}>全選択</button>
+              <button onClick={()=>setChecks({})}
+                style={{fontSize:10,background:'#fff',border:'1px solid #ccc',borderRadius:4,padding:'3px 8px',cursor:'pointer',color:'#666'}}>全解除</button>
+            </div>
+          </div>
+          <div style={{maxHeight:160,overflowY:'auto',marginBottom:10,display:'flex',flexDirection:'column',gap:3}}>
+            {candidates.map((c,i)=>(
+              <label key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'4px 6px',
+                background:checks[i]?'#C6F6D5':'#fff',borderRadius:4,cursor:'pointer',
+                border:'1px solid '+(checks[i]?'#68D391':'#e2e8f0'),transition:'.1s'}}>
+                <input type="checkbox" checked={!!checks[i]}
+                  onChange={e=>setChecks({...checks,[i]:e.target.checked})}
+                  style={{marginTop:3,flexShrink:0}}/>
+                <span style={{fontSize:12,fontFamily:'monospace',lineHeight:1.5,wordBreak:'break-all'}}>{c}</span>
+              </label>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={handleApply}
+              style={{background:'#1F7A4D',color:'#fff',border:'none',borderRadius:6,
+                padding:'7px 18px',fontSize:12,fontWeight:700,cursor:'pointer'}}>
+              ✓ 選択した項目を辞書に追加
+            </button>
+            <button onClick={()=>setState('idle')}
+              style={{background:'none',border:'1px solid #ccc',borderRadius:6,
+                padding:'7px 12px',fontSize:12,cursor:'pointer',color:'#666'}}>
+              キャンセル
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Step1({data,setData,onNext,onOpenPersonMaster,apiKey}){
   const upd=(k,v)=>setData(p=>({...p,[k]:v}));
   const [showMaster, setShowMaster] = useState(false);
@@ -4457,16 +4692,6 @@ ${pasteText}
           style={{minHeight:90,fontSize:13,resize:'vertical'}}/>
       </div>
 
-      <div className="section-divider">🔤 固有名詞・補正辞書</div>
-      <div style={{marginBottom:12}}>
-        <div style={{fontSize:11,color:'#718096',marginBottom:4}}>
-          💡 音声認識で誤記されやすい固有名詞を登録してください。「誤記 → 正しい表記」形式で1行1件。AI解析時に自動補正されます。
-        </div>
-        <textarea value={data.glossary||''} onChange={e=>upd('glossary',e.target.value)}
-          placeholder={'例：\nガラス → Aras（PLMパッケージ）\nあらす → Aras\nアクセプタンス → アクセプタンステスト\nKDX → OKDX'}
-          style={{minHeight:80,fontSize:12,resize:'vertical',fontFamily:'monospace'}}/>
-      </div>
-
       <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <span>出席者</span>
         <div style={{display:'flex',gap:6,alignItems:'center'}}>
@@ -4496,9 +4721,33 @@ ${pasteText}
         masterSource={entryMode==='ics' ? 'ics' : 'org'}
       />
       {showOrgAttMaster && <OrgAttendeeMasterModal onClose={()=>setShowOrgAttMaster(false)}/>}
-      <div className="form-row-1" style={{marginTop:8}}>
-        <label style={{marginBottom:6}}>配布・投影資料</label>
+
+      {/* ── 配布・投影資料 ── */}
+      <div className="section-divider">📎 配布・投影資料</div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:'#718096',marginBottom:6}}>
+          💡 PDF・画像・PPTXを添付すると、下の辞書を自動生成できます。
+        </div>
         <MaterialsInput value={data.materials} onChange={v=>upd('materials',v)}/>
+      </div>
+
+      {/* ── 固有名詞・補正辞書（自動生成ボタン付き） ── */}
+      <div className="section-divider" style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:6}}>
+        <span>🔤 固有名詞・補正辞書</span>
+        <AutoGlossaryButton
+          materials={data.materials}
+          apiKey={apiKey}
+          currentGlossary={data.glossary||''}
+          onApply={newGlossary=>upd('glossary',newGlossary)}
+        />
+      </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:'#718096',marginBottom:4}}>
+          「誤記 → 正しい表記」形式で1行1件。AI解析時に自動補正されます。
+        </div>
+        <textarea value={data.glossary||''} onChange={e=>upd('glossary',e.target.value)}
+          placeholder={'例：\nガラス → Aras（PLMパッケージ）\nあらす → Aras\nKDX → OKDX'}
+          style={{minHeight:80,fontSize:12,resize:'vertical',fontFamily:'monospace'}}/>
       </div>
       <div className="btn-row">
         <button className="btn btn-primary"
@@ -5326,7 +5575,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v73</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v74</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
