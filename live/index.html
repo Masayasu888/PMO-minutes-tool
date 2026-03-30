@@ -827,6 +827,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
   const [analysis, setAnalysis]       = useState(null);
   const [analysisHistory, setAnalysisHistory] = useState([]); // 全履歴（新しい順）
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisError, setAnalysisError] = useState(''); // エラーメッセージ表示用
   const [analysisCount, setAnalysisCount] = useState(0);
 
   // AIアシストパネル フレームワーク設定
@@ -1487,12 +1488,14 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     setInterimText('');
   };
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (isManual = false) => {
     const lines = transcriptRef.current;
     if (!lines.length || !apiKey) return;
     const fullText = lines.map(l => `[${l.time}] ${l.text}`).join('\n');
     const newText  = lines.slice(analyzedLenRef.current).map(l => `[${l.time}] ${l.text}`).join('\n');
-    if (!newText.trim()) return;
+    // 手動実行の場合は新規発言がなくても全文で分析する（自動のみスキップ）
+    if (!isManual && !newText.trim()) return;
+    const analysisTarget = newText.trim() ? newText : fullText;
 
     const refText = refFilesRef.current.length > 0
       ? refFilesRef.current.map(f => `=== ${f.name} ===\n${f.text}`).join('\n\n')
@@ -1508,6 +1511,7 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     ).join(',\n');
 
     setIsAnalyzing(true);
+    setAnalysisError('');
     const analysisTime = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1539,7 +1543,7 @@ ${refUrlText ? `\n【参考URL】\n${refUrlText}` : ''}
 ${fullText}
 
 【最新の新規発言（前回分析以降）】
-${newText}
+${analysisTarget}
 
 ━━ 分析カテゴリと観点 ━━
 ${enabledCats.map(c=>`${c.id} ${c.icon} ${c.name}：${c.prompt}`).join('\n')}
@@ -1556,6 +1560,12 @@ ${catJsonDef}
           }]
         })
       });
+      // HTTPエラー（401: APIキー不正、429: 上限超過など）を明示的にチェック
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        const msg = errBody?.error?.message || `HTTPステータス ${res.status}`;
+        throw new Error(msg);
+      }
       const data = await res.json();
       const text = (data.content?.[0]?.text || '').replace(/```json\n?|\n?```/g,'').trim();
       const thisCost = calcCost(data.usage);
@@ -1573,8 +1583,14 @@ ${catJsonDef}
           inp: data.usage?.input_tokens||0, out: data.usage?.output_tokens||0,
         }]);
         if (analysisPanelRef.current) analysisPanelRef.current.scrollTop = 0;
-      } catch(e) { console.error('Parse error:', e, text); }
-    } catch(e) { console.error('Analysis error:', e); }
+      } catch(e) {
+        console.error('JSON Parse error:', e, '\nRaw:', text);
+        setAnalysisError(`⚠️ 応答の解析に失敗しました（${analysisTime}）\n${text.slice(0,100)}…`);
+      }
+    } catch(e) {
+      console.error('Analysis error:', e);
+      setAnalysisError(`❌ AI分析エラー（${analysisTime}）: ${e.message}`);
+    }
     setIsAnalyzing(false);
   };
 
@@ -1624,7 +1640,7 @@ ${catJsonDef}
               ? <button className="live-btn live-btn-green" onClick={startRecording}>▶ 録音開始</button>
               : <button className="live-btn live-btn-gray"  onClick={stopRecording}>⏸ 一時停止</button>
           )}
-          <button className="live-btn live-btn-blue" onClick={runAnalysis} disabled={isAnalyzing || !transcript.length}>
+          <button className="live-btn live-btn-blue" onClick={()=>runAnalysis(true)} disabled={isAnalyzing || !transcript.length}>
             {isAnalyzing ? '⏳ 分析中...' : '🤖 今すぐ分析'}
           </button>
           <button className="live-btn live-btn-gray" onClick={()=>setShowSettings(s=>!s)}>
@@ -2302,6 +2318,17 @@ ${catJsonDef}
                 <span style={{fontSize:11}}>または「今すぐ分析」ボタンを押してください</span>
               </div>
             )}
+            {/* エラー表示 */}
+            {analysisError && (
+              <div style={{margin:'10px 12px',padding:'10px 14px',background:'#FFF5F5',
+                border:'1.5px solid #E53E3E',borderRadius:8,fontSize:11,color:'#742a2a',
+                whiteSpace:'pre-wrap',lineHeight:1.7}}>
+                {analysisError}
+                <div style={{marginTop:6,fontSize:10,color:'#a0aec0'}}>
+                  ヒント：APIキーの設定を確認してください（ヘッダーの🔑ボタン）
+                </div>
+              </div>
+            )}
 
             {/* 全履歴を新しい順で表示（各エントリは折りたたみ可能） */}
             {analysisHistory.map((entry, ei) => (
@@ -2553,7 +2580,7 @@ function App(){
               display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🔴</div>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>会議中支援ツール</div>
-              <div style={{fontSize:9,color:'#718096',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#4A5568'}}>v1.1</span></div>
+              <div style={{fontSize:9,color:'#718096',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#4A5568'}}>v1.2</span></div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 auto'}}>
