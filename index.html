@@ -1659,29 +1659,61 @@ minutes_by_agenda の content は以下の基準で作成すること：
   onLog('🤖 [1/2] 文字起こしを解析・照合中（高精度モード）...');
 
   // 配布資料のファイルをAPIに添付（PDF・画像のみ）
+  // ── サイズ上限：1ファイル5MB、合計8MB ──
+  const FILE_MAX_BYTES  = 5 * 1024 * 1024;   // 5MB per file
+  const TOTAL_MAX_BYTES = 8 * 1024 * 1024;   // 8MB total
   const materialContent = [];
   const matFiles = (basicInfo.materials||[]).filter(m=>m.blobUrl && m.name);
+  let totalMatBytes = 0;
+
   if (matFiles.length > 0) {
     onLog('📎 配布資料を読み込み中...');
     for (const mat of matFiles) {
       const ext = mat.name.split('.').pop().toLowerCase();
       try {
+        // ファイルサイズ取得
+        const resp = await fetch(mat.blobUrl);
+        const blob = await resp.blob();
+        const fileSizeBytes = blob.size;
+
+        if (fileSizeBytes > FILE_MAX_BYTES) {
+          onLog(`⚠️ ${mat.name}（${(fileSizeBytes/1024/1024).toFixed(1)}MB）はサイズ上限（5MB）を超えるためスキップします`);
+          continue;
+        }
+        if (totalMatBytes + fileSizeBytes > TOTAL_MAX_BYTES) {
+          onLog(`⚠️ 資料の合計サイズ上限（8MB）に達したため ${mat.name} 以降をスキップします`);
+          break;
+        }
+
+        // Base64変換
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result.split(',')[1]);
+          r.onerror = reject;
+          r.readAsDataURL(blob);
+        });
+
         if (ext === 'pdf') {
-          const b64 = await blobUrlToBase64(mat.blobUrl);
           materialContent.push({ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } });
           materialContent.push({ type:'text', text:`↑ 配布資料: ${mat.name}` });
+          totalMatBytes += fileSizeBytes;
         } else if (['png','jpg','jpeg','webp'].includes(ext)) {
-          const b64 = await blobUrlToBase64(mat.blobUrl);
           const mt = {png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp'}[ext];
           materialContent.push({ type:'image', source:{ type:'base64', media_type:mt, data:b64 } });
           materialContent.push({ type:'text', text:`↑ 配布資料（画像）: ${mat.name}` });
+          totalMatBytes += fileSizeBytes;
         } else if (ext === 'pptx') {
           const text = await extractPptxText(mat.blobUrl);
-          if (text.trim()) materialContent.push({ type:'text', text:`【スライドテキスト（${mat.name}）】\n${text}` });
+          if (text.trim()) {
+            materialContent.push({ type:'text', text:`【スライドテキスト（${mat.name}）】\n${text}` });
+            totalMatBytes += new Blob([text]).size;
+          }
         }
-      } catch(e) { onLog(`⚠️ ${mat.name} 読み込みスキップ`); }
+      } catch(e) { onLog(`⚠️ ${mat.name} 読み込みスキップ: ${e.message}`); }
     }
-    if (materialContent.length > 0) onLog(`✅ ${matFiles.length}件の資料を読み込みました`);
+    if (materialContent.length > 0) {
+      onLog(`✅ 資料読み込み完了（合計 ${(totalMatBytes/1024/1024).toFixed(1)}MB）`);
+    }
   }
 
   const messageContent = materialContent.length > 0
@@ -5803,6 +5835,10 @@ function App(){
     }catch(e){
       if(e.name==='AbortError'||e.message?.includes('abort')){
         // 中断は正常終了扱い（エラー表示しない）
+      } else if(e.message==='Failed to fetch' || e.message?.includes('Failed to fetch')){
+        setError('通信エラー（Failed to fetch）\n\n考えられる原因：\n① 配布資料のファイルサイズが大きすぎます（PDFを軽量化するか、資料添付をなしにして再試行してください）\n② ネットワーク接続を確認してください\n③ しばらく待ってから「再試行」してください');
+      } else if(e.message?.includes('API Error 529')||e.message?.includes('API Error 503')){
+        setError('APIが混雑しています（' + e.message + '）\nしばらく待ってから「再試行」してください');
       } else {
         setError(e.message);
       }
@@ -5819,7 +5855,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v77</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v78</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
