@@ -1335,6 +1335,18 @@ async function fetchOrgUsage(adminKey) {
   return { todayCost, monthCost, fetchedAt: now };
 }
 
+// ── 検証パス結果のマージ ────────────────────────────────────
+function mergeVerification(base, additional){
+  if(!additional || additional.no_additional) return base;
+  const merged = {...base};
+  ['decisions','todos','risks','issues','exec_report','manager_report','pending'].forEach(key=>{
+    if(Array.isArray(additional[key]) && additional[key].length > 0){
+      merged[key] = [...(base[key]||[]), ...additional[key]];
+    }
+  });
+  return merged;
+}
+
 async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={}, signal=null){
   onLog('📡 Claude APIに接続中...');
   const attendees = (basicInfo.attendees||[]).map(o=>{
@@ -1384,6 +1396,24 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={},
 - 情報は必ず文字起こしの根拠に基づくこと。推測・補完は最小限にとどめる。
 - 文章はビジネス文書として読みやすく整形すること（体言止め多用NG・主語述語を明確に）。
 - 抽出は網羅的に行うこと。「小さな懸念」「曖昧な発言」も含めて漏れなく拾うこと。
+
+【期日記載の絶対ルール（todos・risks・issues・exec_report・manager_report すべてに適用）】
+- 発言中に「○月○日」「○○までに」など具体的な日付・期限が明示されている場合のみ期日を記載する
+- 「なるべく早く」「できるだけ早めに」「次回まで」「早急に」等の曖昧な表現 → 期日欄は「要確認」と記載
+- 会議日・前後の文脈・プロジェクト計画等からの推測・補完は一切禁止
+- 期日への言及が全くない場合 → 「未定」と記載
+- この規則は絶対であり、いかなる場合も推測による日付の補完は行わないこと
+
+【網羅的抽出チェックリスト（抽出前に必ず確認）】
+以下のすべてのパターンを文字起こし全体で漏れなく確認すること：
+(a) 「〜してください」「〜をお願いします」「〜を確認してください」→ ToDo
+(b) 「〜することにしました」「〜で決定」「〜とします」「〜に決まりました」→ 決定事項
+(c) 「〜になる恐れがある」「〜リスクがある」「〜が懸念される」「〜に注意が必要」→ リスク
+(d) 「〜ができていない」「〜が未解決」「〜で詰まっている」「〜が遅れている」→ 課題
+(e) 「持ち越し」「次回確認」「検討継続」「〜待ち」「別途調整」→ 保留
+(f) 「役員に報告する必要がある」「上申が必要」「経営判断が必要」→ 役員報告
+(g) 「室長に共有する」「部長に確認を取る」→ 室長報告
+1件でも該当する発言があれば必ずリストに含めること。「過剰抽出」を恐れず、疑わしければ含める。
 
 【リスク・課題・保留の定義（必ずこの定義に従って分類すること）】
 ■ リスク（risks）: まだ顕在化していない将来の潜在的な問題・脅威。
@@ -1483,37 +1513,109 @@ minutes_by_agenda の content は以下の基準で作成すること：
 - 【課題の記載と番号付け】issues 配列の各課題は、それが議論された議題の content に必ず記載すること。記載する際は該当の文の末尾に「課N」（Nは issues 配列の1始まりのインデックス番号）を付けること。例：issues[0]→「課1」、issues[1]→「課2」。
 
 以下のJSON構造で出力してください（マークダウン不要、JSONのみ）:
-{"agenda_items":["議題1","議題2"],"minutes_by_agenda":[{"title":"議題名","content":"発言者名: ビジネス文書体に整形した発言内容の記録。発言の流れを維持し、決定経緯・懸念点・条件も含める。"}],"decisions":[{"content":"決定内容（主語+述語で明確に）","decided_by":"決定者","scope":"影響範囲・対象システム/フェーズ","importance":"高","priority":"高"}],"todos":[{"content":"アクション内容（何を・誰が・いつまでに、が明確になるよう記載）","assignee":"担当者（実名）","due":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗・対応状況（なければ空文字）","match_reason":"同一・類似と判定した具体的根拠（新規の場合は空文字）"}],"pending":[{"content":"保留事項（具体的に）","reason":"保留理由","next_action":"次回の扱い・期限"}],"risks":[{"content":"リスク内容（影響・発生条件を含めて記述）","category":"スケジュール","impact":"高","probability":"中","response":"対応方針（具体的なアクションを含む）","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容（何が問題か・現状を明確に記述）","category":"設計・要件","owner":"担当者","due":"YYYY/MM/DD","resolution":"解決策・対応内容（未定の場合は「調査中」等）","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"役員への報告内容（背景含む・経営判断が必要な理由を明確に）","decision_needed":"要","background":"背景・経緯","recipient":"報告先役員名","deadline":"YYYY/MM/DD","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"室長への報告内容（対応の方向性を含む）","action_needed":"要","background":"背景・経緯","recipient":"担当室長名","deadline":"YYYY/MM/DD","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
+{"agenda_items":["議題1","議題2"],"minutes_by_agenda":[{"title":"議題名","content":"発言者名: ビジネス文書体に整形した発言内容の記録。発言の流れを維持し、決定経緯・懸念点・条件も含める。"}],"decisions":[{"content":"決定内容（主語+述語で明確に）","decided_by":"決定者","scope":"影響範囲・対象システム/フェーズ","importance":"高","priority":"高"}],"todos":[{"content":"アクション内容（何を・誰が・いつまでに、が明確になるよう記載）","assignee":"担当者（実名）","due":"YYYY/MM/DD または 未定 または 要確認","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"今回の文字起こしから読み取れる進捗・対応状況（なければ空文字）","match_reason":"同一・類似と判定した具体的根拠（新規の場合は空文字）"}],"pending":[{"content":"保留事項（具体的に）","reason":"保留理由","next_action":"次回の扱い・期限"}],"risks":[{"content":"リスク内容（影響・発生条件を含めて記述）","category":"スケジュール","impact":"高","probability":"中","response":"対応方針（具体的なアクションを含む）","owner":"担当者","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"issues":[{"content":"課題内容（何が問題か・現状を明確に記述）","category":"設計・要件","owner":"担当者","due":"YYYY/MM/DD または 未定 または 要確認","resolution":"解決策・対応内容（未定の場合は「調査中」等）","importance":"中","priority":"中","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"exec_report":[{"content":"役員への報告内容（背景含む・経営判断が必要な理由を明確に）","decision_needed":"要","background":"背景・経緯","recipient":"報告先役員名","deadline":"YYYY/MM/DD または 未定 または 要確認","importance":"緊急","priority":"緊急","match_type":"new","existing_no":null,"progress":"","match_reason":""}],"manager_report":[{"content":"室長への報告内容（対応の方向性を含む）","action_needed":"要","background":"背景・経緯","recipient":"担当室長名","deadline":"YYYY/MM/DD または 未定 または 要確認","importance":"高","priority":"高","match_type":"new","existing_no":null,"progress":"","match_reason":""}]}`;
 
-  onLog('🤖 文字起こしを解析・照合中（高精度モード）...');
+  // ── Pass 1: メイン抽出 ──────────────────────────────────────
+  onLog('🤖 [1/2] 文字起こしを解析・照合中（高精度モード）...');
   const res = await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:10000,system:SYSTEM_PROMPT,messages:[{role:'user',content:prompt}]}),
+    body: JSON.stringify({
+      model:'claude-sonnet-4-20250514',
+      max_tokens:10000,
+      temperature:0,
+      system:SYSTEM_PROMPT,
+      messages:[{role:'user',content:prompt}]
+    }),
     signal: signal || undefined
   });
   if(!res.ok) throw new Error(`API Error ${res.status}: ${await res.text()}`);
   const data = await res.json();
-  onLog('✅ 解析・照合完了！データを処理中...');
   const text = data.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
-  const cost = calcCost(data.usage);
-  const usage = data.usage;
+  let totalCost = calcCost(data.usage);
+  let totalUsage = {...(data.usage||{})};
+  let pass1Result;
   try {
-    const parsed = JSON.parse(text);
-    parsed._cost  = cost;
-    parsed._usage = usage;
-    return parsed;
+    pass1Result = JSON.parse(text);
+  } catch(e) {
+    const m = text.match(/\{[\s\S]+\}/);
+    if(m) pass1Result = JSON.parse(m[0]);
+    else throw new Error('JSON解析失敗（Pass1）: '+e.message);
   }
-  catch(e){
-    const m=text.match(/\{[\s\S]+\}/);
-    if(m){
-      const parsed = JSON.parse(m[0]);
-      parsed._cost  = cost;
-      parsed._usage = usage;
-      return parsed;
+
+  // ── Pass 2: 漏れ確認パス ────────────────────────────────────
+  onLog('🔍 [2/2] 漏れ確認パス実行中...');
+  const summaryForVerify = [
+    pass1Result.decisions?.length  ? `【抽出済み決定事項】\n`+pass1Result.decisions.map((d,i)=>`${i+1}. ${d.content}`).join('\n') : '',
+    pass1Result.todos?.length       ? `【抽出済みToDo】\n`+pass1Result.todos.map((t,i)=>`${i+1}. ${t.content}（担当:${t.assignee}　期日:${t.due||'未定'}）`).join('\n') : '',
+    pass1Result.risks?.length       ? `【抽出済みリスク】\n`+pass1Result.risks.map((r,i)=>`${i+1}. ${r.content}`).join('\n') : '',
+    pass1Result.issues?.length      ? `【抽出済み課題】\n`+pass1Result.issues.map((r,i)=>`${i+1}. ${r.content}`).join('\n') : '',
+    pass1Result.pending?.length     ? `【抽出済み保留】\n`+pass1Result.pending.map((r,i)=>`${i+1}. ${r.content}`).join('\n') : '',
+    pass1Result.exec_report?.length ? `【抽出済み役員報告】\n`+pass1Result.exec_report.map((r,i)=>`${i+1}. ${r.content}`).join('\n') : '',
+  ].filter(Boolean).join('\n\n');
+
+  const verifyPrompt = `以下の文字起こしから、すでに抽出済みの項目リストを提示します。
+文字起こし全体を最初から最後まで再精読し、リストに含まれていない「決定事項」「ToDo」「リスク」「課題」「保留」「役員報告」が1件でもないか確認してください。
+
+${summaryForVerify}
+
+【文字起こし（再確認対象）】
+${transcript}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+【確認観点】
+- 上記リストに含まれていない「〜してください」「〜をお願いします」発言はないか
+- 上記リストに含まれていない決定・合意・方針確定の発言はないか
+- 上記リストに含まれていない懸念・問題・課題の発言はないか
+- 上記リストに含まれていない保留・継続審議事項はないか
+
+【期日ルール（Pass1と同じ）】
+- 発言中に明示された日付のみ記載。推測・補完禁止。未言及は「未定」。
+
+漏れが見つかった場合のみ、以下のJSON形式で追記分だけを出力してください（マークダウン不要）。
+漏れが全くない場合は {"no_additional":true} とだけ出力してください。
+
+{"no_additional":false,"decisions":[...],"todos":[...],"risks":[...],"issues":[...],"pending":[...],"exec_report":[...],"manager_report":[...]}
+
+※ 各配列の要素のフォーマットはPass1と同じ形式を使用すること。追記がないカテゴリは空配列[]でよい。`;
+
+  try {
+    const res2 = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:4000,
+        temperature:0,
+        system:SYSTEM_PROMPT,
+        messages:[{role:'user',content:verifyPrompt}]
+      }),
+      signal: signal || undefined
+    });
+    if(res2.ok){
+      const data2 = await res2.json();
+      totalCost += calcCost(data2.usage);
+      if(data2.usage){
+        totalUsage.input_tokens  = (totalUsage.input_tokens||0)  + (data2.usage.input_tokens||0);
+        totalUsage.output_tokens = (totalUsage.output_tokens||0) + (data2.usage.output_tokens||0);
+      }
+      const text2 = data2.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
+      try {
+        const additional = JSON.parse(text2);
+        const addedCounts = ['decisions','todos','risks','issues','pending','exec_report','manager_report']
+          .filter(k=>Array.isArray(additional[k])&&additional[k].length>0)
+          .map(k=>`${k}:+${additional[k].length}`).join(' ');
+        if(addedCounts) onLog(`✅ 漏れ確認完了 — 追記あり（${addedCounts}）`);
+        else onLog('✅ 漏れ確認完了 — 追記なし');
+        pass1Result = mergeVerification(pass1Result, additional);
+      } catch(e2){ onLog('⚠️ 漏れ確認パース失敗（Pass1結果を使用）'); }
     }
-    throw new Error('JSON解析失敗: '+e.message);
-  }
+  } catch(e){ onLog('⚠️ 漏れ確認パス失敗（Pass1結果を使用）'); }
+
+  onLog('📊 データを整理中...');
+  pass1Result._cost  = totalCost;
+  pass1Result._usage = totalUsage;
+  return pass1Result;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -4967,8 +5069,8 @@ function App(){
         }catch(e){addLog('⚠️ 既存ファイル読み込みエラー（無視して続行）');}
       }
       const r=await callClaude(apiKey,basicInfo,transcript,addLog,existingData,controller.signal);
-      addLog('📊 データを整理・照合中...');
-      if(r._cost!==undefined){addLog('💰 APIコスト: '+formatCost(r._cost)+'（'+formatTokens(r._usage)+'）');setLastCost({usd:r._cost,usage:r._usage});}
+      if(r._cost!==undefined){addLog('💰 APIコスト（2Pass合計）: '+formatCost(r._cost)+'（'+formatTokens(r._usage)+'）');setLastCost({usd:r._cost,usage:r._usage});}
+      addLog('🎉 完了！結果を確認してください。');
       setResult({...EMPTY,...r,_existingData:existingData});
       goTo(4);
     }catch(e){
@@ -4990,7 +5092,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v69</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v70</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
