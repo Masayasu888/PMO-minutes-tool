@@ -5378,8 +5378,35 @@ function Step4({result,setResult,onNext,onBack,onReanalyze,transcript,attendees}
 }
 
 // ── Step 5 ─────────────────────────────────────────────────
-function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,onBack,docVersion,setDocVersion}){
+function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,onBack,docVersion,setDocVersion,onGlossaryChange}){
   const [downloading,setDownloading]=useState('');
+
+  // ── 辞書パネル state ──
+  const parseGlossary = (raw) =>
+    (raw||'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const [glossaryLines, setGlossaryLines] = useState(()=>parseGlossary(basicInfo.glossary));
+  const [editIdx, setEditIdx] = useState(null);
+  const [editVal, setEditVal] = useState('');
+  const [addVal, setAddVal] = useState('');
+
+  const saveGlossary = (lines) => {
+    setGlossaryLines(lines);
+    if(onGlossaryChange) onGlossaryChange(lines.join('\n'));
+  };
+  const startEdit = (i) => { setEditIdx(i); setEditVal(glossaryLines[i]); };
+  const commitEdit = () => {
+    if(editIdx===null) return;
+    const v = editVal.trim();
+    const next = glossaryLines.map((l,i)=>i===editIdx?(v||l):l).filter(Boolean);
+    saveGlossary(next); setEditIdx(null); setEditVal('');
+  };
+  const delLine = (i) => saveGlossary(glossaryLines.filter((_,idx)=>idx!==i));
+  const addLine = () => {
+    const v = addVal.trim();
+    if(!v) return;
+    saveGlossary([...glossaryLines, v]);
+    setAddVal('');
+  };
 
   // ── ダウンロード前エラーチェック ──────────────────────────
   const getErrors = () => {
@@ -5416,6 +5443,22 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
     ['役員報告',(result.exec_report && result.exec_report.length)||0,'#C55A11'],
     ['室長報告',(result.manager_report && result.manager_report.length)||0,'#375623'],
   ];
+
+  // 辞書エントリを矢印で分割して色付け表示
+  const renderEntry = (line) => {
+    const idx = line.indexOf('→');
+    if(idx === -1) return <span style={{fontSize:12,fontFamily:'monospace'}}>{line}</span>;
+    const before = line.slice(0, idx).trim();
+    const after  = line.slice(idx+1).trim();
+    return (
+      <span style={{fontSize:12,fontFamily:'monospace'}}>
+        <span style={{color:'#c53030',fontWeight:600}}>{before}</span>
+        <span style={{color:'#718096',margin:'0 5px'}}>→</span>
+        <span style={{color:'#276749',fontWeight:600}}>{after}</span>
+      </span>
+    );
+  };
+
   return(
     <div className="card">
       <div className="card-title">⬇️ Step 5 ― ダウンロード</div>
@@ -5427,6 +5470,8 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
       ) : (
         <div className="notice notice-ok" style={{marginBottom:16}}>✅ 解析完了！ファイルはダウンロードフォルダに保存されます（既存ファイルは上書きされません）。</div>
       )}
+
+      {/* 抽出サマリー */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:20}}>
         {stats.map(([label,count,color])=>(
           <div key={label} style={{textAlign:'center',background:'#f8fafc',borderRadius:8,padding:'10px 4px',border:`2px solid ${color}22`}}>
@@ -5435,6 +5480,111 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
           </div>
         ))}
       </div>
+
+      {/* ── 補正辞書パネル ── */}
+      <div style={{
+        background:'linear-gradient(135deg,#f0fff4 0%,#f7fff7 100%)',
+        border:'1.5px solid #9AE6B4',borderRadius:10,padding:'14px 16px',marginBottom:20
+      }}>
+        {/* ヘッダー */}
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexWrap:'wrap',gap:6}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <span style={{fontSize:15}}>🔤</span>
+            <span style={{fontSize:13,fontWeight:700,color:'#276749'}}>今回の解析に使用した補正辞書</span>
+            <span style={{
+              background: glossaryLines.length > 0 ? '#276749' : '#a0aec0',
+              color:'#fff',borderRadius:12,padding:'1px 9px',
+              fontSize:11,fontWeight:700,minWidth:22,textAlign:'center'
+            }}>{glossaryLines.length}</span>
+          </div>
+          {glossaryLines.length > 0 && (
+            <span style={{fontSize:10,color:'#68a68a'}}>
+              ※ 修正した内容は次回の解析（Step1の辞書欄）にも反映されます
+            </span>
+          )}
+        </div>
+
+        {/* 辞書エントリ一覧 */}
+        {glossaryLines.length === 0 ? (
+          <div style={{textAlign:'center',padding:'12px 0',color:'#a0aec0',fontSize:12}}>
+            補正辞書は使用されていません
+          </div>
+        ) : (
+          <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:10}}>
+            {glossaryLines.map((line, i) => (
+              <div key={i} style={{
+                display:'flex',alignItems:'center',gap:8,
+                background:'#fff',borderRadius:6,padding:'6px 10px',
+                border:'1px solid '+(editIdx===i?'#2E75B6':'#C6F6D5'),
+                transition:'.15s'
+              }}>
+                {editIdx === i ? (
+                  <>
+                    <input value={editVal} onChange={e=>setEditVal(e.target.value)}
+                      onKeyDown={e=>{if(e.key==='Enter')commitEdit();if(e.key==='Escape'){setEditIdx(null);}}}
+                      autoFocus
+                      style={{flex:1,padding:'3px 8px',fontSize:12,fontFamily:'monospace',
+                        border:'1.5px solid #2E75B6',borderRadius:4,outline:'none'}}/>
+                    <button onClick={commitEdit}
+                      style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,
+                        padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>
+                      保存
+                    </button>
+                    <button onClick={()=>setEditIdx(null)}
+                      style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,
+                        padding:'4px 8px',cursor:'pointer',fontSize:11,color:'#888'}}>
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span style={{flex:1,lineHeight:1.5}}>{renderEntry(line)}</span>
+                    <button onClick={()=>startEdit(i)}
+                      title="編集"
+                      style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,
+                        padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#555',
+                        flexShrink:0,transition:'.12s'}}
+                      onMouseOver={e=>e.currentTarget.style.borderColor='#2E75B6'}
+                      onMouseOut={e=>e.currentTarget.style.borderColor='#d0d8e4'}>
+                      ✏️
+                    </button>
+                    <button onClick={()=>delLine(i)}
+                      title="削除"
+                      style={{background:'none',border:'1px solid #fed7d7',borderRadius:4,
+                        padding:'3px 8px',cursor:'pointer',fontSize:11,color:'#c53030',
+                        flexShrink:0,transition:'.12s'}}
+                      onMouseOver={e=>e.currentTarget.style.background='#fff5f5'}
+                      onMouseOut={e=>e.currentTarget.style.background='none'}>
+                      🗑
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 追加フォーム */}
+        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+          <input value={addVal} onChange={e=>setAddVal(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&addLine()}
+            placeholder="例：ガラス → Aras（PLMパッケージ）"
+            style={{flex:1,padding:'6px 10px',fontSize:12,fontFamily:'monospace',
+              border:'1.5px dashed #9AE6B4',borderRadius:6,outline:'none',background:'#fff',
+              color:'#333'}}/>
+          <button onClick={addLine} disabled={!addVal.trim()}
+            style={{background: addVal.trim()?'#1F7A4D':'#a0aec0',color:'#fff',border:'none',
+              borderRadius:6,padding:'6px 14px',cursor:addVal.trim()?'pointer':'not-allowed',
+              fontSize:12,fontWeight:700,whiteSpace:'nowrap',transition:'.15s'}}>
+            ＋ 追加
+          </button>
+        </div>
+        <div style={{fontSize:10,color:'#68a68a',marginTop:5}}>
+          「誤記 → 正しい表記（補足）」形式で入力 ／ Enter で追加
+        </div>
+      </div>
+
+      {/* ダウンロードカード */}
       <div className="dl-card">
         <div className="dl-info">
           <div className="dl-name">📄 議事録 .docx</div>
@@ -5669,7 +5819,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v76</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v77</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
@@ -5739,7 +5889,8 @@ function App(){
       {step===5&&(result
         ?<Step5 basicInfo={basicInfo} result={result} docxTemplateFile={docxTemplateFile}
           xlsxTemplateFile={xlsxTemplateFile} xlsxDataFile={xlsxDataFile}
-          onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}/>
+          onBack={()=>goTo(4)} docVersion={docVersion} setDocVersion={setDocVersion}
+          onGlossaryChange={v=>setBasicInfo(p=>({...p,glossary:v}))}/>
         :<div className="card"><div className="notice notice-warn" style={{marginBottom:12}}>⚠️ まだAI解析が完了していません。Step 3でAI解析を実行してください。</div><div className="btn-row"><button className="btn btn-gray" onClick={()=>goTo(3)}>← Step3 AI解析へ</button></div></div>)}
 
       {showKeyModal&&<ApiKeyModal current={apiKey} onSave={(k)=>saveApiKey(k,adminKey)} onClose={()=>setShowKeyModal(false)} currentAdmin={adminKey} onSaveAdmin={(a)=>saveApiKey(apiKey,a)}/>}
