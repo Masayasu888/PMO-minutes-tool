@@ -4656,6 +4656,17 @@ ${pasteText}
             <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
           </div>
           <input list="author-list" value={data.author} onChange={e=>upd('author',e.target.value)}
+            onBlur={e=>{
+              const v=e.target.value.trim();
+              if(v){
+                const cur=loadAuthorMaster();
+                if(!cur.includes(v)){
+                  const next=[...cur,v];
+                  saveAuthorMaster(next);
+                  setAuthorList(next);
+                }
+              }
+            }}
             placeholder="作成者名を入力（マスターから選択も可）"/>
           <datalist id="author-list">
             {authorList.map((v,i)=><option key={i} value={v}/>)}
@@ -4664,17 +4675,47 @@ ${pasteText}
       </div>
       <div className="form-row">
         <div>
-          <label>確認者</label>
-          <input list="reviewer-list" value={data.reviewer||''} onChange={e=>upd('reviewer',e.target.value)}
-            placeholder="確認者名を入力"/>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+            <label style={{margin:0}}>確認者</label>
+            <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+          </div>
+          <input list="reviewer-list" value={data.reviewer||''}
+            onChange={e=>upd('reviewer',e.target.value)}
+            onBlur={e=>{
+              const v=e.target.value.trim();
+              if(v){
+                const cur=loadAuthorMaster();
+                if(!cur.includes(v)){
+                  const next=[...cur,v];
+                  saveAuthorMaster(next);
+                  setAuthorList(next);
+                }
+              }
+            }}
+            placeholder="確認者名を入力（プルダウンまたは手入力）"/>
           <datalist id="reviewer-list">
             {authorList.map((v,i)=><option key={i} value={v}/>)}
           </datalist>
         </div>
         <div>
-          <label>承認者</label>
-          <input list="approver-list" value={data.approver||''} onChange={e=>upd('approver',e.target.value)}
-            placeholder="承認者名を入力"/>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+            <label style={{margin:0}}>承認者</label>
+            <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+          </div>
+          <input list="approver-list" value={data.approver||''}
+            onChange={e=>upd('approver',e.target.value)}
+            onBlur={e=>{
+              const v=e.target.value.trim();
+              if(v){
+                const cur=loadAuthorMaster();
+                if(!cur.includes(v)){
+                  const next=[...cur,v];
+                  saveAuthorMaster(next);
+                  setAuthorList(next);
+                }
+              }
+            }}
+            placeholder="承認者名を入力（プルダウンまたは手入力）"/>
           <datalist id="approver-list">
             {authorList.map((v,i)=><option key={i} value={v}/>)}
           </datalist>
@@ -5575,7 +5616,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v74</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v75</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
