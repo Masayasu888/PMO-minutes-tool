@@ -10,6 +10,7 @@
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 <script src="exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Meiryo UI','Meiryo',sans-serif;background:#F0F4F8;color:#1a202c;min-height:100vh}
@@ -5496,11 +5497,11 @@ ${pasteText}
         </div>
         <div>
           <label style={{fontSize:12,fontWeight:600,color:'#4a5568',marginBottom:4,display:'block'}}>ファシリテーター<span style={{fontSize:10,color:'#a0aec0',marginLeft:6}}>（任意）</span></label>
-          <input list="facilitator-list" value={data.facilitator||''} onChange={e=>upd('facilitator',e.target.value)}
-            placeholder="川鍋" style={{padding:'7px 10px',fontSize:13}}/>
-          <datalist id="facilitator-list">
-            {(data.attendees||[]).flatMap(o=>Array.isArray(o.names)?o.names:[]).map((n,i)=><option key={i} value={n}/>)}
-          </datalist>
+          <select value={data.facilitator||''} onChange={e=>upd('facilitator',e.target.value)}
+            style={{width:'100%',padding:'7px 10px',fontSize:13,border:'1.5px solid #d0d8e4',borderRadius:6,background:'#fff',color:data.facilitator?'#2d3748':'#a0aec0'}}>
+            <option value=''>（未選択）</option>
+            {(data.attendees||[]).flatMap(o=>Array.isArray(o.names)?o.names:[]).map((n,i)=><option key={i} value={n} style={{color:'#2d3748'}}>{n}</option>)}
+          </select>
         </div>
       </div>
 
@@ -5752,7 +5753,7 @@ function Step2({transcript,setTranscript,prevMinutesFile,setPrevMinutesFile,prev
             <button onClick={()=>{setPrevMinutesFile(null);setPrevMinutesText('');}}>✕</button>
           </div>
         ) : (
-          <div className="upload-area" onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='.docx';i.onchange=async e=>{const f=e.target.files[0];if(!f)return;setPrevMinutesFile(f);try{const ab=await f.arrayBuffer();const mammoth=(await import('https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js')).default;const res=await mammoth.extractRawValue({arrayBuffer:ab});setPrevMinutesText(res.value||'');}catch(err){alert('前回議事録の読み込みに失敗しました: '+err.message);}};i.click();}}>
+          <div className="upload-area" onClick={()=>{const i=document.createElement('input');i.type='file';i.accept='.docx';i.onchange=async e=>{const f=e.target.files[0];if(!f)return;setPrevMinutesFile(f);try{const ab=await f.arrayBuffer();if(!window.mammoth)throw new Error('mammoth.jsが読み込まれていません');const res=await window.mammoth.extractRawValue({arrayBuffer:ab});setPrevMinutesText(res.value||'');}catch(err){alert('前回議事録の読み込みに失敗しました: '+err.message);}};i.click();}}>
             <div className="upload-icon">📄</div>
             <div style={{fontSize:13,color:'#444'}}>前回の議事録をアップロード（.docx）</div>
             <div className="upload-hint">クリックしてファイルを選択</div>
