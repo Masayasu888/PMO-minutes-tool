@@ -350,14 +350,13 @@ async function generateDocx(basicInfo, result, templateFile){
 
   // ── 議事内容：★N / 保N / リN / 課N を解析して色付きアンダーラインに変換 ──
   function buildMinutesParasXml(content){
-    const BLUE   = '2E75B6'; // ToDo：青
-    const GREEN  = '375623'; // 保留・継続：緑（保留テーブルヘッダーと同色）
-    const BROWN  = '843C0C'; // リスク：茶色（リスクテーブルヘッダーと同色）
-    const PURPLE = '7030A0'; // 課題：紫（課題テーブルヘッダーと同色）
+    const BLUE   = '2E75B6';
+    const GREEN  = '375623';
+    const BROWN  = '843C0C';
+    const PURPLE = '7030A0';
     const NML    = '000000';
+    const GRAY   = '555555'; // Q&A 回答行
 
-    // タグパターンと対応する色・ラベル
-    // AIが 保1 / 保・継1 / 保 1 / リ1 / リスク1 / 課1 / 課題1 など様々な形式で出力することに対応
     const TAG_DEFS = [
       { re: /★\s*(\d+)/,           clean: /★\s*\d+/g,              color: BLUE,   label: n => `（${n}★）` },
       { re: /保[・継\s]*(\d+)/,     clean: /保[・継\s]*\d+/g,        color: GREEN,  label: n => `（保・継${n}）` },
@@ -365,37 +364,103 @@ async function generateDocx(basicInfo, result, templateFile){
       { re: /課(?:題)?\s*(\d+)/,    clean: /課(?:題)?\s*\d+/g,      color: PURPLE, label: n => `（課題${n}）` },
     ];
 
-    const rPr = (color, underline=false) =>
+    const rPr = (color, underline=false, bold=false, italic=false) =>
       `<w:rPr>${FONT}<w:sz w:val="22"/><w:szCs w:val="22"/>`
+      +(bold?`<w:b/><w:bCs/>`:'')
+      +(italic?`<w:i/><w:iCs/>`:'')
       +(color!==NML?`<w:color w:val="${color}"/>`:'')
       +(underline?`<w:u w:val="single"/>`:'')
       +`</w:rPr>`;
 
     return (content||'（記録なし）').split('\n').filter(line => line.trim() !== '').map(line => {
-      // どのタグが含まれるか確認
+
+      // ── 行の種類を判定 ──────────────────────────────
+      // A: アジェンダ見出し行  "1. タイトル"
+      const isSectionTitle = /^[1-9]\d*\.\s/.test(line);
+      // B: Q&A 回答行  "　→" or "　　→" で始まる
+      const isQAResponse   = /^　+→/.test(line);
+      // C: 通常コンテンツ行   "　" で始まりB以外
+      const isContentLine  = /^　/.test(line) && !isQAResponse;
+
+      // タグ検出
       let matchedDef = null, matchedNum = null;
       for (const def of TAG_DEFS) {
         const m = line.match(def.re);
         if (m) { matchedDef = def; matchedNum = parseInt(m[1], 10); break; }
       }
 
+      // ── A: アジェンダ見出し ──────────────────────────
+      if (isSectionTitle) {
+        return `<w:p><w:pPr><w:spacing w:before="200" w:after="60"/></w:pPr>`
+          +`<w:r>${rPr(NML,false,true)}<w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`;
+      }
+
+      // ── B: Q&A 回答行（→ 付き） ──────────────────────
+      if (isQAResponse) {
+        // 先頭の全角スペース・→・半角スペースを除去
+        const lineText = line.replace(/^　+→\s*/, '');
+        let textToShow = '→ ' + lineText;
+
+        if (!matchedDef) {
+          return `<w:p><w:pPr>`
+            +`<w:spacing w:before="0" w:after="40"/>`
+            +`<w:ind w:left="440" w:hanging="0"/>`
+            +`</w:pPr>`
+            +`<w:r>${rPr(GRAY)}<w:t xml:space="preserve">${esc(textToShow)}</w:t></w:r></w:p>`;
+        }
+
+        // タグあり（Q&A回答でToDo等が発生している場合）
+        let lineBody = lineText;
+        for (const def of TAG_DEFS) lineBody = lineBody.replace(def.clean, '');
+        lineBody = lineBody.replace(/（[\d★保継・リスク課題\s]+）/g, '').trimEnd();
+        const { color, label } = matchedDef;
+        return `<w:p><w:pPr>`
+          +`<w:spacing w:before="0" w:after="40"/>`
+          +`<w:ind w:left="440" w:hanging="0"/>`
+          +`</w:pPr>`
+          +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">→ ${esc(lineBody)}</w:t></w:r>`
+          +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(label(matchedNum))}</w:t></w:r>`
+          +`</w:p>`;
+      }
+
+      // ── C: 通常コンテンツ行（・箇条書き） ──────────────
+      if (isContentLine) {
+        // 先頭の全角スペースを除去して・を付与
+        const lineText = line.replace(/^　/, '');
+
+        if (!matchedDef) {
+          return `<w:p><w:pPr>`
+            +`<w:spacing w:before="0" w:after="40"/>`
+            +`<w:ind w:left="220" w:hanging="220"/>`
+            +`</w:pPr>`
+            +`<w:r>${rPr(NML)}<w:t xml:space="preserve">・${esc(lineText)}</w:t></w:r></w:p>`;
+        }
+
+        // タグあり（★・保・リ・課）
+        let lineBody = lineText;
+        for (const def of TAG_DEFS) lineBody = lineBody.replace(def.clean, '');
+        lineBody = lineBody.replace(/（[\d★保継・リスク課題\s]+）/g, '').trimEnd();
+        const { color, label } = matchedDef;
+        return `<w:p><w:pPr>`
+          +`<w:spacing w:before="0" w:after="40"/>`
+          +`<w:ind w:left="220" w:hanging="220"/>`
+          +`</w:pPr>`
+          +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">・${esc(lineBody)}</w:t></w:r>`
+          +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(label(matchedNum))}</w:t></w:r>`
+          +`</w:p>`;
+      }
+
+      // ── D: その他（フォールバック） ────────────────────
       if (!matchedDef) {
-        // タグなし：通常行
         return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
           +`<w:r>${rPr(NML)}<w:t xml:space="preserve">${esc(line)}</w:t></w:r></w:p>`;
       }
-
-      // タグあり：行全体を色付きアンダーライン＋末尾ラベル
-      // タグ記号を除去した本文（各def固有のcleanパターンで除去）
-      let lineText = line;
-      for (const def of TAG_DEFS) lineText = lineText.replace(def.clean, '');
-      lineText = lineText.replace(/（[^）]*）/g, s => {
-        // 既存の（N★）（保・継N）等のラベルだけ除去（括弧内が数字+記号のみ）
-        return /^（[\d★保継・リスク課題\s]+）$/.test(s) ? '' : s;
-      }).trimEnd();
+      let lineBody = line;
+      for (const def of TAG_DEFS) lineBody = lineBody.replace(def.clean, '');
+      lineBody = lineBody.replace(/（[\d★保継・リスク課題\s]+）/g, '').trimEnd();
       const { color, label } = matchedDef;
       return `<w:p><w:pPr><w:spacing w:before="0" w:after="40"/></w:pPr>`
-        +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(lineText)}</w:t></w:r>`
+        +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(lineBody)}</w:t></w:r>`
         +`<w:r>${rPr(color,true)}<w:t xml:space="preserve">${esc(label(matchedNum))}</w:t></w:r>`
         +`</w:p>`;
     }).join('');
@@ -1495,6 +1560,10 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={},
 ■ ルール2「回答・対応表明者が担当者」
   「→（Bさん）承知した」「（Bさん）確認します」「（Bさん）〜する予定」等
   → 発言したBさんが担当者
+  【重要】「承知いたしました」「承知しております」「わかりました」等の受任表明も同様に扱う。
+  誰かが「〜をお願いします」と依頼し、Bさんが「承知いたしました」と答えた場合 → Bさんが担当者。
+  その後に別の人（Cさん）が「Bさんと連携して進める」と言っても、
+  主担当はBさんであり、Cさんを担当者にしてはならない。
 
 ■ ルール3「依頼→受任パターン」
   「（Aさん）〜をお願いします / してください」「（Bさん）承知しました / 了解です」
@@ -1599,6 +1668,15 @@ ${existingSection ? existingSection + '\n' : ''}
 - 姓のみでの一致でも採用する（例：「宮守さん」→「宮守」）
 - 名前が特定できない場合のみ「話者A」「話者B」形式を使用（番号ではなくアルファベット）
 - 担当者・決定者は可能な限り実名で記載すること
+- 【自己紹介の照合ルール（最重要）】文字起こし中で「〇〇です」「〇〇でございます」等の
+  自己紹介が出現した場合、フルネーム・肩書きを含む全文字列を出席者リストと照合すること。
+  フルネームの中に出席者リストの名前が部分的に含まれていれば照合成立とする。
+  （例：「大政弥永です」→ 出席者リスト内「弥永」と照合成立 → 発言者は「弥永」として記録）
+  （例：「山田太郎です」→ 出席者リスト内「山田」と照合成立 → 発言者は「山田」として記録）
+  この照合は出席者リストの単純な読み仮名一致より優先する
+- 【音声認識による人名誤変換への対処】発言者名が音声認識で別の語句に変換されることがある。
+  文字起こし中の発言者名が出席者リストに見当たらない場合、音声的・字形的に類似した
+  出席者名で照合を再試行すること。文脈も考慮して最も確からしい発言者名を採用する。
 
 【STEP 3: 重要度・優先度の判定基準（4段階）】
 - 緊急: プロジェクト継続・マイルストーンに即時影響。当日〜3営業日以内に対応必要
@@ -1643,8 +1721,8 @@ minutes_by_agenda の content は以下の基準で作成すること：
 - 1議題あたり5〜15行程度を目安とし、議論の流れが伝わるよう構成する
 - 決定に至る経緯・反対意見・条件なども記載する
 - 【Q&Aの記録形式：最重要】質疑応答は以下の形式で1ブロックとして記録すること：
-  「（質問者名）: 質問内容
-   → （回答者名）: 回答内容・対応方針（★N）」
+  「（質問者名）: 質問内容\n　→ （回答者名）: 回答内容・対応方針（★N）」
+  ※ 回答行の先頭は必ず全角スペース＋「→ 」で始めること（インデント表示のため）
   ToDoがある場合、★Nは回答行末尾にのみ付ける。質問行に★を付けることは禁止。
   同一Q&Aから質問ToDo・回答ToDo を2件生成することは絶対禁止。回答側から1件のみ生成。
 - 【ToDoの記載と番号付け：最重要】todos 配列の各アクションは、それが議論された議題の content に必ず記載すること。記載する際は、該当の文の末尾に「★N」（Nは todos 配列の1始まりのインデックス番号）を付けること。例：todos[0]（1番目）のToDo→「★1」、todos[1]（2番目）→「★2」。ToDoの記載行は必ず独立した1行とし、話者名から始めること。全てのToDoについて漏れなく★N付きで記載すること。★なしでToDoの内容が議事内容に含まれることは絶対に不可。
@@ -5855,7 +5933,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v78</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v81</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
