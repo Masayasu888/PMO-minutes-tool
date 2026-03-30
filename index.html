@@ -2435,8 +2435,62 @@ function ManualAttendeesInput({ value, onChange, masterSource='org' }) {
   const [checked, setChecked] = React.useState(() => toChecked(value));
   const [expandedOrgs, setExpandedOrgs] = React.useState({});
 
-  // checkedからattendees配列を再構築してonChange
-  const buildAndNotify = (newChecked) => {
+  // ── インライン直接登録フォーム ──
+  const [quickOrg,  setQuickOrg]  = React.useState('');
+  const [quickName, setQuickName] = React.useState('');
+  const [quickMsg,  setQuickMsg]  = React.useState(''); // "登録済み" flash
+  const quickOrgRef  = React.useRef(null);
+  const quickNameRef = React.useRef(null);
+
+  const handleQuickAdd = () => {
+    const org  = quickOrg.trim();
+    const name = quickName.trim();
+    if (!org || !name) return;
+    if (masterSource !== 'org') return; // OrgAttMasterのみ対応
+
+    // 名前をカンマ区切りで複数受け付ける
+    const names = name.split(/[、,，]+/).map(n=>n.trim()).filter(Boolean);
+
+    // OrgAttMasterに保存
+    const cur = loadOrgAttMaster();
+    const next = {...cur};
+    if (!next[org]) next[org] = [];
+    const added = [];
+    names.forEach(n => {
+      if (!next[org].includes(n)) { next[org].push(n); added.push(n); }
+    });
+    saveOrgAttMaster(next);
+
+    // masterDataを更新（アコーディオンに即反映）
+    const newMaster = loadMasterForSource(); // 再読み込み
+    setMasterData(newMaster);
+
+    // 登録した名前を自動チェック
+    const newChecked = {...checked};
+    names.forEach(n => { newChecked[`${org}::${n}`] = true; });
+    setChecked(newChecked);
+
+    // 組織アコーディオンを自動展開
+    setExpandedOrgs(p => ({...p, [org]: true}));
+
+    // onChange通知
+    buildAndNotifyWith(newChecked, newMaster);
+
+    // フラッシュメッセージ
+    const addedMsg = added.length > 0
+      ? `✓ ${org}：${added.join('、')} を登録しました`
+      : `⚠️ ${names.join('、')} はすでに登録済みです`;
+    setQuickMsg(addedMsg);
+    setTimeout(() => setQuickMsg(''), 2500);
+
+    // 氏名欄をクリアし、組織欄はそのまま（連続登録しやすく）
+    setQuickName('');
+    setTimeout(() => quickNameRef.current?.focus(), 30);
+  };
+
+  // checkedからattendees配列を再構築してonChange（masterData引数を取れる版）
+  const buildAndNotifyWith = (newChecked, mData) => {
+    const md = mData || masterData;
     const map = {};
     Object.entries(newChecked).forEach(([key, v]) => {
       if (!v) return;
@@ -2446,9 +2500,14 @@ function ManualAttendeesInput({ value, onChange, masterSource='org' }) {
       if (!map[org]) map[org] = [];
       map[org].push(name);
     });
-    const masterOrgs = Object.keys(masterData).sort();
+    const masterOrgs = Object.keys(md).sort();
     const allOrgs = [...new Set([...masterOrgs, ...Object.keys(map)])];
     onChange(allOrgs.filter(o => map[o]?.length > 0).map(o => ({ org: o, names: map[o] })));
+  };
+
+  // checkedからattendees配列を再構築してonChange
+  const buildAndNotify = (newChecked) => {
+    buildAndNotifyWith(newChecked, masterData);
   };
 
   const toggleName = (org, name) => {
@@ -2470,12 +2529,70 @@ function ManualAttendeesInput({ value, onChange, masterSource='org' }) {
   const selectedCount = Object.values(checked).filter(Boolean).length;
   const orgs = Object.keys(masterData).sort();
 
+  // インライン登録フォーム（常に表示）
+  const quickAddForm = masterSource === 'org' && (
+    <div style={{marginTop:10,background:'#F0FFF4',border:'1.5px solid #9AE6B4',
+      borderRadius:8,padding:'10px 12px'}}>
+      <div style={{fontSize:11,fontWeight:700,color:'#276749',marginBottom:7,display:'flex',alignItems:'center',gap:5}}>
+        <span>＋</span><span>出席者を直接追加</span>
+        <span style={{fontWeight:400,color:'#68D391',fontSize:10}}>（マスターに保存＆即選択）</span>
+      </div>
+      <div style={{display:'flex',gap:7,alignItems:'center',flexWrap:'wrap'}}>
+        <input
+          ref={quickOrgRef}
+          value={quickOrg}
+          onChange={e=>setQuickOrg(e.target.value)}
+          onKeyDown={e=>{
+            if(e.key==='Tab'){e.preventDefault();quickNameRef.current?.focus();}
+            if(e.key==='Enter'){quickNameRef.current?.focus();}
+          }}
+          list="quick-orgs-datalist"
+          placeholder="組織名　例：KE"
+          style={{width:120,padding:'7px 10px',border:'1.5px solid #9AE6B4',borderRadius:6,
+            fontSize:13,fontFamily:'inherit',outline:'none',background:'#fff',boxSizing:'border-box'}}
+        />
+        <datalist id="quick-orgs-datalist">
+          {Object.keys(masterData).sort().map(o=><option key={o} value={o}/>)}
+        </datalist>
+        <input
+          ref={quickNameRef}
+          value={quickName}
+          onChange={e=>setQuickName(e.target.value)}
+          onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();handleQuickAdd();}}}
+          placeholder="氏名　例：田中、山田"
+          style={{flex:1,minWidth:130,padding:'7px 10px',border:'1.5px solid #9AE6B4',borderRadius:6,
+            fontSize:13,fontFamily:'inherit',outline:'none',background:'#fff',boxSizing:'border-box'}}
+        />
+        <button
+          onClick={handleQuickAdd}
+          disabled={!quickOrg.trim()||!quickName.trim()}
+          style={{padding:'7px 16px',background: (quickOrg.trim()&&quickName.trim()) ? '#1F7A4D':'#a0aec0',
+            color:'#fff',border:'none',borderRadius:6,cursor:(quickOrg.trim()&&quickName.trim())?'pointer':'not-allowed',
+            fontSize:13,fontWeight:700,whiteSpace:'nowrap',transition:'.15s'}}>
+          追加
+        </button>
+      </div>
+      {quickMsg && (
+        <div style={{marginTop:6,fontSize:11,color:quickMsg.startsWith('✓')?'#276749':'#C05621',
+          fontWeight:600,animation:'fadeIn .2s'}}>
+          {quickMsg}
+        </div>
+      )}
+      <div style={{fontSize:10,color:'#68D391',marginTop:5}}>
+        Tab で氏名欄へ移動 ／ Enter で追加 ／ 氏名はカンマ区切りで複数入力可
+      </div>
+    </div>
+  );
+
   if (orgs.length === 0) {
     return (
-      <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'12px 14px',fontSize:12,color:'#1a4a7a'}}>
-        {masterSource === 'ics'
-          ? '💡 ICSファイルを取り込むと出席者が登録されます。取り込み後にここで選択できるようになります。'
-          : '💡 右上の「✏️ 手入力出席者マスター」からメンバーを登録すると、ここで選択できるようになります。'}
+      <div>
+        <div style={{background:'#EBF3FB',border:'1.5px solid #2E75B6',borderRadius:8,padding:'12px 14px',fontSize:12,color:'#1a4a7a',marginBottom:8}}>
+          {masterSource === 'ics'
+            ? '💡 ICSファイルを取り込むと出席者が登録されます。取り込み後にここで選択できるようになります。'
+            : '💡 下のフォームから組織名・氏名を入力して直接追加できます。'}
+        </div>
+        {quickAddForm}
       </div>
     );
   }
@@ -2565,11 +2682,14 @@ function ManualAttendeesInput({ value, onChange, masterSource='org' }) {
         })}
       </div>
 
+      {/* インライン直接追加フォーム */}
+      {quickAddForm}
+
       {/* 下部ヒント：masterSourceに応じてメッセージを変える */}
-      <div style={{marginTop:8,fontSize:11,color:'#aaa',textAlign:'center'}}>
+      <div style={{marginTop:6,fontSize:11,color:'#aaa',textAlign:'center'}}>
         {masterSource === 'ics'
           ? '出席者を追加するには「📋 予定本文を貼り付けて解析」または「👥 ICS出席者マスター」をご利用ください'
-          : '出席者を追加するには右上の「✏️ 手入力出席者マスター」から登録してください'}
+          : '登録済みメンバーの管理は右上の「✏️ 手入力出席者マスター」からできます'}
       </div>
     </div>
   );
@@ -5092,7 +5212,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v70</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v71</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
