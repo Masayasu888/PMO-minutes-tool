@@ -1253,16 +1253,26 @@ function downloadBlob(blob, filename){
   setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
-function makeDocxFilename(meetingName, date, version=1){
+function makeAiTimestamp(){
+  const now = new Date();
+  const ymd = now.getFullYear().toString()
+    + String(now.getMonth()+1).padStart(2,'0')
+    + String(now.getDate()).padStart(2,'0');
+  const hm = String(now.getHours()).padStart(2,'0')
+    + String(now.getMinutes()).padStart(2,'0');
+  return `${ymd}_${hm}`;
+}
+function makeDocxFilename(meetingName, date){
   const safe = (meetingName||'会議').replace(/[\\/:*?"<>|]/g,'');
   const d = (date||'').replace(/-/g,'');
-  const v = version > 1 ? `_v${version}` : '';
-  return `議事録_${safe}_${d}${v}.docx`;
+  const ts = makeAiTimestamp();
+  return `議事録_${safe}_${d}_${ts}_AI.docx`;
 }
-function makeXlsxFilename(date){
+function makeXlsxFilename(meetingName, date){
+  const safe = (meetingName||'会議').replace(/[\\/:*?"<>|]/g,'');
   const d = (date||'').replace(/-/g,'');
-  const ts = new Date().toTimeString().slice(0,5).replace(':','');
-  return `会議管理台帳_${d}_${ts}.xlsx`;
+  const ts = makeAiTimestamp();
+  return `管理台帳_${safe}_${d}_${ts}_AI.xlsx`;
 }
 
 // ── Claude API ────────────────────────────────────────────
@@ -4705,7 +4715,7 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
   const dlWord=async()=>{
     if(validationErrors.length) return;
     setDownloading('word');
-    try{const blob=await generateDocx(basicInfo,result,docxTemplateFile);downloadBlob(blob,makeDocxFilename(basicInfo.meetingName,basicInfo.date,docVersion));setDocVersion(v=>v+1);}
+    try{const blob=await generateDocx(basicInfo,result,docxTemplateFile);downloadBlob(blob,makeDocxFilename(basicInfo.meetingName,basicInfo.date));}
     catch(e){alert('Word生成エラー: '+e.message);}
     setDownloading('');
   };
@@ -4714,7 +4724,7 @@ function Step5({basicInfo,result,docxTemplateFile,xlsxTemplateFile,xlsxDataFile,
     setDownloading('excel');
     try{
       const blob=await generateXlsx(basicInfo,result,xlsxTemplateFile,xlsxDataFile);
-      downloadBlob(blob,makeXlsxFilename(basicInfo.date));
+      downloadBlob(blob,makeXlsxFilename(basicInfo.meetingName,basicInfo.date));
     }catch(e){alert('Excel生成エラー: '+e.message); console.error(e);}
     setDownloading('');
   };
@@ -4980,7 +4990,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v68</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v69</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
