@@ -1361,6 +1361,56 @@ function mergeVerification(base, additional){
   return merged;
 }
 
+// ── JSON 自動修復ユーティリティ ───────────────────────────
+function repairAndParseJSON(raw) {
+  // 1. マークダウンコードブロックを除去
+  let s = raw.trim()
+    .replace(/^```json\s*/i,'').replace(/^```\s*/i,'').replace(/\s*```$/i,'');
+
+  // 2. そのままパースできれば即返す
+  try { return JSON.parse(s); } catch(e) {}
+
+  // 3. 最大 JSON オブジェクトを抽出
+  const m = s.match(/\{[\s\S]+\}/);
+  if (m) s = m[0];
+  try { return JSON.parse(s); } catch(e) {}
+
+  // 4. 文字列内の literal 改行を \n にエスケープ
+  //    （LLM がたまに JSON 文字列中で改行を直接出力する）
+  s = s.replace(/"((?:[^"\\]|\\.)*)"/g, (match) => {
+    // 文字列値内の生改行を \\n に変換、タブも同様
+    return match.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+  });
+  try { return JSON.parse(s); } catch(e) {}
+
+  // 5. 末尾カンマを除去して再試行
+  s = s.replace(/,(\s*[}\]])/g, '$1');
+  try { return JSON.parse(s); } catch(e) {}
+
+  // 6. 切り捨てられた JSON を閉じる（max_tokens 打ち切り対策）
+  s = s.trimEnd().replace(/,\s*$/, '');
+  let inStr = false, esc = false;
+  const stack = [];
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (esc)         { esc = false; continue; }
+    if (c==='\\' && inStr) { esc = true; continue; }
+    if (c==='"')     { inStr = !inStr; continue; }
+    if (inStr)       continue;
+    if (c==='{')     stack.push('}');
+    else if (c==='[') stack.push(']');
+    else if ((c==='}'||c===']') && stack.length)
+      if (stack[stack.length-1]===c) stack.pop();
+  }
+  if (inStr) s += '"';           // 文字列が途中で切れた場合
+  s = s.replace(/,(\s*[}\]])/g, '$1');
+  while (stack.length) s += stack.pop();
+
+  try { return JSON.parse(s); } catch(e) {
+    throw new Error('JSON修復失敗: ' + e.message + '\n先頭200文字: ' + s.slice(0,200));
+  }
+}
+
 async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={}, signal=null){
   onLog('📡 Claude APIに接続中...');
   const attendees = (basicInfo.attendees||[]).map(o=>{
@@ -1410,6 +1460,7 @@ async function callClaude(apiKey, basicInfo, transcript, onLog, existingData={},
 - 情報は必ず文字起こしの根拠に基づくこと。推測・補完は最小限にとどめる。
 - 文章はビジネス文書として読みやすく整形すること（体言止め多用NG・主語述語を明確に）。
 - 抽出は網羅的に行うこと。「小さな懸念」「曖昧な発言」も含めて漏れなく拾うこと。
+- 【JSON安全出力ルール（最重要）】JSON文字列値の中で改行が必要な場合は必ず \\n と記述すること。絶対に literal な改行（実際のEnterキー）をJSON文字列内に入れてはならない。同様に、文字列内のダブルクォートは \\\" とエスケープすること。
 
 【期日記載の絶対ルール（todos・risks・issues・exec_report・manager_report すべてに適用）】
 - 発言中に「○月○日」「○○までに」「○月末」「○/○○」など具体的な日付・期限が明示されている場合のみ期日を記載する
@@ -1642,7 +1693,7 @@ minutes_by_agenda の content は以下の基準で作成すること：
     headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
     body: JSON.stringify({
       model:'claude-sonnet-4-20250514',
-      max_tokens:10000,
+      max_tokens:16000,
       temperature:0,
       system:SYSTEM_PROMPT,
       messages:[{role:'user', content: messageContent}]
@@ -1651,16 +1702,18 @@ minutes_by_agenda の content は以下の基準で作成すること：
   });
   if(!res.ok) throw new Error(`API Error ${res.status}: ${await res.text()}`);
   const data = await res.json();
-  const text = data.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
+
+  // stop_reason チェック：max_tokens で打ち切られた場合はログに警告
+  if(data.stop_reason === 'max_tokens') onLog('⚠️ 出力が上限に達しました。結果が不完全な場合は文字起こしを短くしてお試しください。');
+
+  const text = data.content[0].text;
   let totalCost = calcCost(data.usage);
   let totalUsage = {...(data.usage||{})};
   let pass1Result;
   try {
-    pass1Result = JSON.parse(text);
+    pass1Result = repairAndParseJSON(text);
   } catch(e) {
-    const m = text.match(/\{[\s\S]+\}/);
-    if(m) pass1Result = JSON.parse(m[0]);
-    else throw new Error('JSON解析失敗（Pass1）: '+e.message);
+    throw new Error('JSON解析失敗（Pass1）: ' + e.message);
   }
 
   // ── Pass 2: 漏れ確認パス ────────────────────────────────────
@@ -1721,9 +1774,9 @@ ${transcript}
         totalUsage.input_tokens  = (totalUsage.input_tokens||0)  + (data2.usage.input_tokens||0);
         totalUsage.output_tokens = (totalUsage.output_tokens||0) + (data2.usage.output_tokens||0);
       }
-      const text2 = data2.content[0].text.trim().replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'');
+      const text2 = data2.content[0].text;
       try {
-        const additional = JSON.parse(text2);
+        const additional = repairAndParseJSON(text2);
         const addedCounts = ['decisions','todos','risks','issues','pending','exec_report','manager_report','investment_contracts']
           .filter(k=>Array.isArray(additional[k])&&additional[k].length>0)
           .map(k=>`${k}:+${additional[k].length}`).join(' ');
@@ -5616,7 +5669,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v75</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v76</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
