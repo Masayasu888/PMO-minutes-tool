@@ -444,7 +444,10 @@ async function generateDocx(basicInfo, result, templateFile){
   // ── ToDo：番号付き、★は末尾。担当者が不確かな場合は[?]マーカーを付与 ──
   const todoLines = result.todos.length
     ? result.todos.map((t,i) => {
-        const assignee = t.assignee_uncertain ? `[?]${t.assignee||''}` : (t.assignee||'');
+        // [?]は具体的な人名にのみ付与。「要確認」等の非人名には付与しない
+        const assigneeVal = (t.assignee||'').trim();
+        const isNonPerson = !assigneeVal || NON_PERSON.has(assigneeVal);
+        const assignee = (t.assignee_uncertain && !isNonPerson) ? `[?]${assigneeVal}` : assigneeVal;
         return `${i+1}．${t.content||''}（${assignee}、${t.due||''}）★`;
       }).join('\n')
     : 'なし';
@@ -2016,7 +2019,11 @@ ${existingSection ? existingSection + '\n' : ''}
 (f) 「〜N個」「〜N件」「〜N点」「〜N変革」「〜N取り組み」等の列挙表現（後続の全項目を確認）
 (g) Q&Aペア（質問＋回答が一対になっている発言）
 (g)の場合、回答側の対応表明からのみToDoを生成すること（質問単体からはToDoを生成しない）
-このリストを元に、STEP 2の各項目を漏れなく抽出すること。
+
+【STEP 1 重要制約：ToDo生成の根拠】
+このSTEP 1でリストアップしたToDoの根拠はすべて文字起こしの発言であること。
+配布資料（スライド）にのみ記載されていて、文字起こしで発言されていない項目はリストアップしない。
+「スライドのアクション欄に書いてあった」だけでは不十分。発言者が受任した発言を根拠とすること。
 
 【STEP 2: 発言者の特定ルール】
 - 【話者対応表が適用済みの場合（最優先）】文字起こし冒頭に「【話者ラベル置換済み】」の記載がある場合、
@@ -2233,7 +2240,8 @@ Pass1で due が「要確認」「未定」になっているToDoについて、
 【確認観点③：ToDo品質フィルタ】
 Pass1で生成された以下のようなToDoは除外（no_additionalに追記しないこと）：
 - 方針・意向の表明のみで成果物が不明（「〜と連携して進める」「〜を活用して効率化していく」等）
-- 他のToDoと内容が7割以上重複するもの
+- 他のToDoと内容が7割以上重複するもの（同一プロジェクト・同一担当者・同一目的）
+- 配布資料（スライド）にのみ根拠があり、文字起こしの発言で受任されていないもの
 
 【期日ルール（Pass1と同じ5段階）】
 - 明示された日付のみ記載。段階：①YYYY/MM/DD ②○月末 ③YYYY年○月以降 ④要確認 ⑤未定
@@ -6636,7 +6644,7 @@ function App(){
             display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>📋</div>
           <div>
             <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>議事録・管理台帳 自動生成</div>
-            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v96</span></div>
+            <div style={{fontSize:9,color:'#7099B0',marginTop:1}}>自動生成ツール　<span style={{color:'#8FA8C0',fontWeight:700,letterSpacing:.5}}>v97</span></div>
           </div>
         </div>
         <div style={{flex:1,display:'flex',justifyContent:'center',alignItems:'center',padding:'0 16px'}}>
