@@ -1564,13 +1564,35 @@ async function fetchOrgUsage(adminKey) {
 }
 
 // ── 検証パス結果のマージ ────────────────────────────────────
+// ── テキスト類似度（簡易）
+// 両文字列を正規化し、bigram Jaccard係数で類似度を返す（0〜1）
+function _textSimilarity(a, b){
+  if(!a || !b) return 0;
+  const norm = s => s.replace(/[\s　。、・「」『』【】（）()]/g,'').toLowerCase();
+  const na = norm(a), nb = norm(b);
+  if(na === nb) return 1;
+  if(na.length === 0 || nb.length === 0) return 0;
+  if(na.includes(nb) || nb.includes(na)) return 0.9;
+  const bigrams = s => { const set=new Set(); for(let i=0;i<s.length-1;i++) set.add(s.slice(i,i+2)); return set; };
+  const ba = bigrams(na), bb = bigrams(nb);
+  let inter = 0; ba.forEach(g=>{ if(bb.has(g)) inter++; });
+  return inter / (ba.size + bb.size - inter);
+}
+
+// ── 検証パス結果のマージ（重複除去付き）
 function mergeVerification(base, additional){
   if(!additional || additional.no_additional) return base;
   const merged = {...base};
+  const DEDUP_THRESHOLD = 0.70;
   ['decisions','todos','risks','issues','exec_report','manager_report','pending','investment_contracts'].forEach(key=>{
-    if(Array.isArray(additional[key]) && additional[key].length > 0){
-      merged[key] = [...(base[key]||[]), ...additional[key]];
-    }
+    if(!Array.isArray(additional[key]) || additional[key].length === 0) return;
+    const existing = base[key] || [];
+    const toAdd = additional[key].filter(newItem => {
+      const nc = (newItem.content || '').trim();
+      if(!nc) return false;
+      return !existing.some(ex => _textSimilarity(nc, (ex.content||'').trim()) >= DEDUP_THRESHOLD);
+    });
+    if(toAdd.length > 0) merged[key] = [...existing, ...toAdd];
   });
   return merged;
 }
@@ -2816,6 +2838,21 @@ function loadFacilitatorMaster(){ try{ const v=localStorage.getItem(FACILITATOR_
 function saveFacilitatorMasterName(name){ if(!name||!name.trim())return; const list=loadFacilitatorMaster(); const n=name.trim(); if(!list.includes(n)){ list.unshift(n); localStorage.setItem(FACILITATOR_MASTER_KEY,JSON.stringify(list.slice(0,50))); } }
 function removeFacilitatorMasterName(name){ const list=loadFacilitatorMaster().filter(n=>n!==name); localStorage.setItem(FACILITATOR_MASTER_KEY,JSON.stringify(list)); }
 
+// 確認者マスター
+const REVIEWER_MASTER_KEY = 'reviewerMaster_v1';
+function loadReviewerMaster(){ try{ const v=localStorage.getItem(REVIEWER_MASTER_KEY); return v?JSON.parse(v):[]; }catch(e){ return []; } }
+function saveReviewerMaster(list){ localStorage.setItem(REVIEWER_MASTER_KEY, JSON.stringify(list)); }
+
+// 承認者マスター
+const APPROVER_MASTER_KEY = 'approverMaster_v1';
+function loadApproverMaster(){ try{ const v=localStorage.getItem(APPROVER_MASTER_KEY); return v?JSON.parse(v):[]; }catch(e){ return []; } }
+function saveApproverMaster(list){ localStorage.setItem(APPROVER_MASTER_KEY, JSON.stringify(list)); }
+
+// 記録者マスター
+const RECORDER_MASTER_KEY = 'recorderMaster_v1';
+function loadRecorderMaster(){ try{ const v=localStorage.getItem(RECORDER_MASTER_KEY); return v?JSON.parse(v):[]; }catch(e){ return []; } }
+function saveRecorderMaster(list){ localStorage.setItem(RECORDER_MASTER_KEY, JSON.stringify(list)); }
+
 // ベンダーマスター: [{name:'IBM', type:'SIベンダー'}, ...]
 const VENDOR_MASTER_KEY = 'vendorMaster_v1';
 function loadVendorMaster(){ try{ const v=localStorage.getItem(VENDOR_MASTER_KEY); return v?JSON.parse(v):[]; }catch(e){ return []; } }
@@ -2866,6 +2903,132 @@ function AuthorMasterModal({onClose}){
                   <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'#555'}}>✏️</button>
                   <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button>
                 </>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 確認者マスター管理モーダル ───────────────────────────
+function ReviewerMasterModal({onClose}){
+  const [list, setList] = React.useState(()=>loadReviewerMaster());
+  const [input, setInput] = React.useState('');
+  const [editIdx, setEditIdx] = React.useState(null);
+  const [editVal, setEditVal] = React.useState('');
+  const add = () => { const v=input.trim(); if(!v||list.includes(v))return; const next=[...list,v]; setList(next); saveReviewerMaster(next); setInput(''); };
+  const del = (i) => { const next=list.filter((_,idx)=>idx!==i); setList(next); saveReviewerMaster(next); };
+  const startEdit = (i) => { setEditIdx(i); setEditVal(list[i]); };
+  const saveEdit = () => { if(editVal.trim()&&editIdx!==null){ const next=[...list]; next[editIdx]=editVal.trim(); setList(next); saveReviewerMaster(next); } setEditIdx(null); setEditVal(''); };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">✅ 確認者マスター管理</div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="確認者名を入力してEnterまたは追加" style={{flex:1}}/>
+          <button className="btn btn-blue" style={{padding:'9px 14px',fontSize:13}} onClick={add}>追加</button>
+        </div>
+        <div style={{maxHeight:300,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {list.length===0 && <div style={{padding:12,color:'#888',fontSize:13,textAlign:'center'}}>登録された確認者はありません</div>}
+          {list.map((name,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'8px 12px',borderBottom:'1px solid #f0f0f0',gap:6}}>
+              {editIdx===i ? (
+                <><input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveEdit()} style={{flex:1,padding:'4px 8px',fontSize:13,border:'1.5px solid #2E75B6',borderRadius:4}}/>
+                <button onClick={saveEdit} style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>保存</button>
+                <button onClick={()=>setEditIdx(null)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:12}}>✕</button></>
+              ) : (
+                <><span style={{flex:1,fontSize:13}}>{name}</span>
+                <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'#555'}}>✏️</button>
+                <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button></>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 承認者マスター管理モーダル ───────────────────────────
+function ApproverMasterModal({onClose}){
+  const [list, setList] = React.useState(()=>loadApproverMaster());
+  const [input, setInput] = React.useState('');
+  const [editIdx, setEditIdx] = React.useState(null);
+  const [editVal, setEditVal] = React.useState('');
+  const add = () => { const v=input.trim(); if(!v||list.includes(v))return; const next=[...list,v]; setList(next); saveApproverMaster(next); setInput(''); };
+  const del = (i) => { const next=list.filter((_,idx)=>idx!==i); setList(next); saveApproverMaster(next); };
+  const startEdit = (i) => { setEditIdx(i); setEditVal(list[i]); };
+  const saveEdit = () => { if(editVal.trim()&&editIdx!==null){ const next=[...list]; next[editIdx]=editVal.trim(); setList(next); saveApproverMaster(next); } setEditIdx(null); setEditVal(''); };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">🔏 承認者マスター管理</div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="承認者名を入力してEnterまたは追加" style={{flex:1}}/>
+          <button className="btn btn-blue" style={{padding:'9px 14px',fontSize:13}} onClick={add}>追加</button>
+        </div>
+        <div style={{maxHeight:300,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {list.length===0 && <div style={{padding:12,color:'#888',fontSize:13,textAlign:'center'}}>登録された承認者はありません</div>}
+          {list.map((name,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'8px 12px',borderBottom:'1px solid #f0f0f0',gap:6}}>
+              {editIdx===i ? (
+                <><input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveEdit()} style={{flex:1,padding:'4px 8px',fontSize:13,border:'1.5px solid #2E75B6',borderRadius:4}}/>
+                <button onClick={saveEdit} style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>保存</button>
+                <button onClick={()=>setEditIdx(null)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:12}}>✕</button></>
+              ) : (
+                <><span style={{flex:1,fontSize:13}}>{name}</span>
+                <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'#555'}}>✏️</button>
+                <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button></>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="btn-row" style={{marginTop:16,justifyContent:'flex-end'}}>
+          <button className="btn btn-primary" onClick={onClose}>閉じる</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── 記録者マスター管理モーダル ───────────────────────────
+function RecorderMasterModal({onClose}){
+  const [list, setList] = React.useState(()=>loadRecorderMaster());
+  const [input, setInput] = React.useState('');
+  const [editIdx, setEditIdx] = React.useState(null);
+  const [editVal, setEditVal] = React.useState('');
+  const add = () => { const v=input.trim(); if(!v||list.includes(v))return; const next=[...list,v]; setList(next); saveRecorderMaster(next); setInput(''); };
+  const del = (i) => { const next=list.filter((_,idx)=>idx!==i); setList(next); saveRecorderMaster(next); };
+  const startEdit = (i) => { setEditIdx(i); setEditVal(list[i]); };
+  const saveEdit = () => { if(editVal.trim()&&editIdx!==null){ const next=[...list]; next[editIdx]=editVal.trim(); setList(next); saveRecorderMaster(next); } setEditIdx(null); setEditVal(''); };
+  return(
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{maxWidth:480}} onClick={e=>e.stopPropagation()}>
+        <div className="modal-title">📝 記録者マスター管理</div>
+        <div style={{display:'flex',gap:8,marginBottom:12}}>
+          <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&add()} placeholder="記録者名を入力してEnterまたは追加" style={{flex:1}}/>
+          <button className="btn btn-blue" style={{padding:'9px 14px',fontSize:13}} onClick={add}>追加</button>
+        </div>
+        <div style={{maxHeight:300,overflowY:'auto',border:'1px solid #e2e8f0',borderRadius:6}}>
+          {list.length===0 && <div style={{padding:12,color:'#888',fontSize:13,textAlign:'center'}}>登録された記録者はありません</div>}
+          {list.map((name,i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',padding:'8px 12px',borderBottom:'1px solid #f0f0f0',gap:6}}>
+              {editIdx===i ? (
+                <><input value={editVal} onChange={e=>setEditVal(e.target.value)} onKeyDown={e=>e.key==='Enter'&&saveEdit()} style={{flex:1,padding:'4px 8px',fontSize:13,border:'1.5px solid #2E75B6',borderRadius:4}}/>
+                <button onClick={saveEdit} style={{background:'#2E75B6',color:'#fff',border:'none',borderRadius:4,padding:'4px 10px',cursor:'pointer',fontSize:12}}>保存</button>
+                <button onClick={()=>setEditIdx(null)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'4px 8px',cursor:'pointer',fontSize:12}}>✕</button></>
+              ) : (
+                <><span style={{flex:1,fontSize:13}}>{name}</span>
+                <button onClick={()=>startEdit(i)} style={{background:'none',border:'1px solid #d0d8e4',borderRadius:4,padding:'3px 8px',cursor:'pointer',fontSize:12,color:'#555'}}>✏️</button>
+                <button onClick={()=>del(i)} style={{background:'none',border:'none',cursor:'pointer',color:'#e53e3e',fontSize:16,lineHeight:1}}>🗑</button></>
               )}
             </div>
           ))}
@@ -5241,6 +5404,12 @@ function Step1({data,setData,onNext,onOpenPersonMaster,apiKey,transcript}){
   const [locationList, setLocationList] = useState(()=>loadLocationMaster());
   const [showAuthorMaster, setShowAuthorMaster] = useState(false);
   const [authorList, setAuthorList] = useState(()=>loadAuthorMaster());
+  const [showReviewerMaster, setShowReviewerMaster] = useState(false);
+  const [reviewerList, setReviewerList] = useState(()=>loadReviewerMaster());
+  const [showApproverMaster, setShowApproverMaster] = useState(false);
+  const [approverList, setApproverList] = useState(()=>loadApproverMaster());
+  const [showRecorderMaster, setShowRecorderMaster] = useState(false);
+  const [recorderList, setRecorderList] = useState(()=>loadRecorderMaster());
   const [showExecMaster, setShowExecMaster] = useState(false);
   const [showVendorMaster, setShowVendorMaster] = useState(false);
   const [showOrgAttMaster, setShowOrgAttMaster] = useState(false);
@@ -5249,6 +5418,9 @@ function Step1({data,setData,onNext,onOpenPersonMaster,apiKey,transcript}){
   // モーダルが閉じるたびにリストを再読み込み
   useEffect(()=>{ if(!showLocationMaster) setLocationList(loadLocationMaster()); },[showLocationMaster]);
   useEffect(()=>{ if(!showAuthorMaster)   setAuthorList(loadAuthorMaster());    },[showAuthorMaster]);
+  useEffect(()=>{ if(!showReviewerMaster) setReviewerList(loadReviewerMaster()); },[showReviewerMaster]);
+  useEffect(()=>{ if(!showApproverMaster) setApproverList(loadApproverMaster()); },[showApproverMaster]);
+  useEffect(()=>{ if(!showRecorderMaster) setRecorderList(loadRecorderMaster()); },[showRecorderMaster]);
   const icsRef = useRef();
   const [icsLoaded, setIcsLoaded] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
@@ -5803,70 +5975,68 @@ ${pasteText}
         <div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
             <label style={{margin:0}}>確認者</label>
-            <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+            <button onClick={()=>setShowReviewerMaster(true)} className="btn-form-sub">＋ マスター管理</button>
           </div>
           <input list="reviewer-list" value={data.reviewer||''}
             onChange={e=>upd('reviewer',e.target.value)}
             onBlur={e=>{
               const v=e.target.value.trim();
               if(v){
-                const cur=loadAuthorMaster();
-                if(!cur.includes(v)){
-                  const next=[...cur,v];
-                  saveAuthorMaster(next);
-                  setAuthorList(next);
-                }
+                const cur=loadReviewerMaster();
+                if(!cur.includes(v)){ const next=[...cur,v]; saveReviewerMaster(next); setReviewerList(next); }
               }
             }}
             placeholder="確認者名を入力（プルダウンまたは手入力）"/>
           <datalist id="reviewer-list">
-            {authorList.map((v,i)=><option key={i} value={v}/>)}
+            {reviewerList.map((v,i)=><option key={i} value={v}/>)}
           </datalist>
         </div>
         <div>
           <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
             <label style={{margin:0}}>承認者</label>
-            <button onClick={()=>setShowAuthorMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+            <button onClick={()=>setShowApproverMaster(true)} className="btn-form-sub">＋ マスター管理</button>
           </div>
           <input list="approver-list" value={data.approver||''}
             onChange={e=>upd('approver',e.target.value)}
             onBlur={e=>{
               const v=e.target.value.trim();
               if(v){
-                const cur=loadAuthorMaster();
-                if(!cur.includes(v)){
-                  const next=[...cur,v];
-                  saveAuthorMaster(next);
-                  setAuthorList(next);
-                }
+                const cur=loadApproverMaster();
+                if(!cur.includes(v)){ const next=[...cur,v]; saveApproverMaster(next); setApproverList(next); }
               }
             }}
             placeholder="承認者名を入力（プルダウンまたは手入力）"/>
           <datalist id="approver-list">
-            {authorList.map((v,i)=><option key={i} value={v}/>)}
+            {approverList.map((v,i)=><option key={i} value={v}/>)}
           </datalist>
         </div>
       </div>
-      {showLocationMaster && <LocationMasterModal onClose={()=>{setShowLocationMaster(false);setLocationList(loadLocationMaster());}}/>}
-      {showAuthorMaster  && <AuthorMasterModal   onClose={()=>{setShowAuthorMaster(false); setAuthorList(loadAuthorMaster()); }}/>}
+      {showLocationMaster  && <LocationMasterModal  onClose={()=>{setShowLocationMaster(false);setLocationList(loadLocationMaster());}}/>}
+      {showAuthorMaster    && <AuthorMasterModal    onClose={()=>{setShowAuthorMaster(false);   setAuthorList(loadAuthorMaster());    }}/>}
+      {showReviewerMaster  && <ReviewerMasterModal  onClose={()=>{setShowReviewerMaster(false); setReviewerList(loadReviewerMaster());}}/>}
+      {showApproverMaster  && <ApproverMasterModal  onClose={()=>{setShowApproverMaster(false); setApproverList(loadApproverMaster());}}/>}
+      {showRecorderMaster  && <RecorderMasterModal  onClose={()=>{setShowRecorderMaster(false); setRecorderList(loadRecorderMaster());}}/>}
       {showExecMaster    && <ExecMasterModal     onClose={()=>setShowExecMaster(false)}/>}
       {showVendorMaster  && <VendorMasterModal   onClose={()=>setShowVendorMaster(false)}/>}
 
       {/* 記録者（任意） */}
       <div style={{marginBottom:12}}>
-        <label style={{fontSize:12,fontWeight:600,color:'#4a5568',marginBottom:4,display:'block'}}>記録者<span style={{fontSize:10,color:'#a0aec0',marginLeft:6}}>（任意）</span></label>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+          <label style={{margin:0,fontSize:12,fontWeight:600,color:'#4a5568'}}>記録者<span style={{fontSize:10,color:'#a0aec0',marginLeft:6}}>（任意）</span></label>
+          <button onClick={()=>setShowRecorderMaster(true)} className="btn-form-sub">＋ マスター管理</button>
+        </div>
         <input list="recorder-list" value={data.recorder||''}
           onChange={e=>upd('recorder',e.target.value)}
           onBlur={e=>{
             const v=e.target.value.trim();
             if(v){
-              const cur=loadAuthorMaster();
-              if(!cur.includes(v)){saveAuthorMaster([...cur,v]);setAuthorList([...cur,v]);}
+              const cur=loadRecorderMaster();
+              if(!cur.includes(v)){ const next=[...cur,v]; saveRecorderMaster(next); setRecorderList(next); }
             }
           }}
           placeholder="記録者名（例：水野、川鍋）"/>
         <datalist id="recorder-list">
-          {authorList.map((v,i)=><option key={i} value={v}/>)}
+          {recorderList.map((v,i)=><option key={i} value={v}/>)}
         </datalist>
       </div>
       <div className="section-divider">🎯 会議設定</div>
