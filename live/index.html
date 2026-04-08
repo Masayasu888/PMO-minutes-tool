@@ -894,6 +894,76 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     }
     setOrgUsageLoading(false);
   };
+  // ── 質問提案機能 ──────────────────────────────────────────
+  const [questionSuggestions, setQuestionSuggestions] = useState(null);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [questionError, setQuestionError] = useState('');
+  const [showQuestionsPanel, setShowQuestionsPanel] = useState(true);
+
+  const runQuestionSuggestion = async () => {
+    const lines = transcriptRef.current;
+    if (!lines.length || !apiKey) return;
+    const fullText = lines.map(l => `[${l.time}] ${l.text}`).join('\n');
+    setIsGeneratingQuestions(true);
+    setQuestionError('');
+    const now = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1500,
+          messages: [{
+            role: 'user',
+            content: `あなたは会議のファシリテーター支援AIです。以下の会議の文字起こしを読んで、参加者が話者に対して今すぐ確認・深掘りすべき質問を考えてください。
+
+【会議文字起こし】
+${fullText}
+
+${briefing ? `【会議の背景・注目ポイント】\n${briefing}\n` : ''}
+以下のJSON形式のみで回答してください（説明文・マークダウン不要）：
+{
+  "summary": "気になったポイントの要約（2〜3行）",
+  "questions": [
+    {
+      "target": "質問すべき話者または対象（例：IBMチーム、山田さん、全体）",
+      "question": "具体的な質問文（日本語・丁寧語）",
+      "reason": "この質問をすべき理由・背景（1行）",
+      "priority": "高/中/低"
+    }
+  ]
+}`
+          }]
+        })
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error?.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const text = (data.content?.[0]?.text || '').replace(/\`\`\`json\n?|\n?\`\`\`/g,'').trim();
+      const parsed = JSON.parse(text);
+      const thisCost = calcCost(data.usage);
+      setQuestionSuggestions({ ...parsed, _time: now });
+      setShowQuestionsPanel(true);
+      setLiveCostTotal(prev => prev + thisCost);
+      setLiveCostLog(prev => [...prev, {
+        count: prev.length + 1, cost: thisCost,
+        tokens: (data.usage?.input_tokens||0) + (data.usage?.output_tokens||0),
+        inp: data.usage?.input_tokens||0, out: data.usage?.output_tokens||0,
+      }]);
+    } catch(e) {
+      setQuestionError(`❌ 質問生成エラー（${now}）: ${e.message}`);
+    }
+    setIsGeneratingQuestions(false);
+  };
+
   const [showSettings, setShowSettings]   = useState(true);
   const [azureKeyLocked, setAzureKeyLocked] = useState(()=>!!(localStorage.getItem('azure_speech_key')));
   const [micDevices, setMicDevices]       = useState([]);
@@ -1408,19 +1478,21 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
       saveAzureSettings();
 
       // デバイスIDを解決
-      const vbDevice   = micDevices.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio'));
+      const vbDevice   = micDevices.find(d => d.label.toLowerCase().includes('cable output') || d.label.toLowerCase().includes('vb-audio'));
       const physDevice = micDevices.find(d => d.label.includes('マイク配列') || d.label.toLowerCase().includes('array'));
       const vbId   = vbDevice   ? vbDevice.deviceId   : null;
+      // physId: 設定パネルで明示選択されたデバイスを最優先（AnkerなどBTマイク対応）
       const physId = (selectedMicId && selectedMicId !== 'default')
         ? selectedMicId : (physDevice ? physDevice.deviceId : null);
 
       if (micMode === 'dual') {
-        // ── デュアルモード：物理マイク＋VB-Cable ──
-        if (!vbId) { alert('VB-Cable（CABLE Output）デバイスが見つかりません。\nデバイスを接続してから再試行してください。'); return; }
+        // ── デュアルモード：物理マイク(Anker等)＋VB-Cable(Loopback) ──
+        if (!vbId) { alert('VB-Cable（CABLE Output）デバイスが見つかりません。\nVB-Cableをインストールして再試行してください。'); return; }
+        if (!physId) { alert('物理マイクが見つかりません。\n設定パネルのデバイス指定でAnker PowerConfを選択してください。'); return; }
         const rec1 = createRecognizer(physId);
         const rec2 = createRecognizer(vbId);
-        makeHandlers(rec1, null);
-        makeHandlers(rec2, 'Teams');
+        makeHandlers(rec1, null);        // Anker マイク → ラベルなし（対面）
+        makeHandlers(rec2, 'Teams');     // VB-Cable → [Teams] ラベル付き
         rec1.startContinuousRecognitionAsync(
           () => {
             rec2.startContinuousRecognitionAsync(
@@ -1644,6 +1716,9 @@ ${catJsonDef}
               ? <button className="live-btn live-btn-green" onClick={startRecording}>▶ 録音開始</button>
               : <button className="live-btn live-btn-gray"  onClick={stopRecording}>⏸ 一時停止</button>
           )}
+          <button className="live-btn live-btn-blue" onClick={()=>runQuestionSuggestion()} disabled={isGeneratingQuestions || !transcript.length}>
+            {isGeneratingQuestions ? '⏳ 生成中...' : '💬 質問を考える'}
+          </button>
           <button className="live-btn live-btn-blue" onClick={()=>runAnalysis(true)} disabled={isAnalyzing || !transcript.length}>
             {isAnalyzing ? '⏳ 分析中...' : '🤖 今すぐ分析'}
           </button>
@@ -1902,6 +1977,67 @@ ${catJsonDef}
                     </button>
                     {vbSetupDone && <span style={{fontSize:10,color:'#38A169'}}>✓ 初回設定済み</span>}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* デュアルモード ガイドカード */}
+            {micMode === 'dual' && (
+              <div style={{border:'2px solid #38A169',borderRadius:8,overflow:'hidden',fontSize:11,boxShadow:'0 0 0 3px rgba(56,161,105,.12)'}}>
+                <div style={{background:'linear-gradient(135deg,#276749,#38A169)',color:'#fff',padding:'5px 10px',fontWeight:700,fontSize:11,display:'flex',alignItems:'center',gap:6}}>
+                  🎤🔁 全員同時取得モード（Anker + VB-Cable）
+                  <span style={{marginLeft:'auto',background:'rgba(255,255,255,.25)',borderRadius:10,padding:'1px 8px',fontSize:10,fontWeight:900}}>推奨構成</span>
+                </div>
+                <div style={{background:'#F0FFF4',padding:'8px 10px',display:'flex',flexDirection:'column',gap:6}}>
+                  {/* 構成図 */}
+                  <div style={{background:'#fff',border:'1px solid #9AE6B4',borderRadius:6,padding:'8px 10px',fontSize:10,color:'#1B4332'}}>
+                    <div style={{fontWeight:700,marginBottom:6,color:'#276749'}}>📡 音声取得の構成</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{background:'#2E75B6',color:'#fff',borderRadius:4,padding:'2px 7px',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>ソース1</span>
+                        <span>🎤 <strong>Anker PowerConf マイク</strong>　→　同室の対面参加者の声</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:6}}>
+                        <span style={{background:'#C53030',color:'#fff',borderRadius:4,padding:'2px 7px',fontWeight:700,fontSize:10,whiteSpace:'nowrap'}}>ソース2</span>
+                        <span>🔁 <strong>VB-Cable（CABLE Output）</strong>　→　Teams参加者の声</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* 文字起こし対象 */}
+                  <div style={{color:'#1B4332'}}>
+                    <span style={{fontWeight:700}}>✅ 文字起こし対象（全員）</span><br/>
+                    <span style={{color:'#1B5E20'}}>
+                      　・同室の対面参加者の声（Ankerマイク経由）<br/>
+                      　・Teamsリモート参加者の声（VB-Cable Loopback経由）<br/>
+                      　・自分自身の声
+                    </span>
+                  </div>
+                  {/* Windows設定 */}
+                  <div style={{background:'#EBF3FB',border:'1px solid #bee3f8',borderRadius:5,padding:'6px 10px'}}>
+                    <div style={{fontWeight:700,color:'#1F3864',marginBottom:4}}>💻 必要なWindows設定</div>
+                    <div style={{display:'flex',flexDirection:'column',gap:3,color:'#2c5282'}}>
+                      <div>① 出力デバイス → <strong>CABLE Input (VB-Audio Virtual Cable)</strong></div>
+                      <div>② Chromeマイク → <strong>ヘッドセット (Anker PowerConf)</strong></div>
+                      <div>③ Teamsスピーカー → <strong>CABLE Input (VB-Audio Virtual Cable)</strong></div>
+                      <div>④ VB-Cable「聴く」設定 → <strong>Realtek スピーカー</strong>（耳で聞くため）</div>
+                    </div>
+                  </div>
+                  {/* デバイス指定 */}
+                  <div style={{background:'#FFF3CD',border:'1px solid #F6AD55',borderRadius:5,padding:'6px 10px'}}>
+                    <div style={{fontWeight:700,color:'#7D4E00',marginBottom:3}}>⚠️ アプリのデバイス指定</div>
+                    <div style={{color:'#7D4E00'}}>
+                      下の「デバイス指定」で <strong>ヘッドセット (Anker PowerConf)</strong> を選択してください。<br/>
+                      <span style={{fontSize:10}}>VB-Cable側は自動検出されます。</span>
+                    </div>
+                  </div>
+                  {/* 文字起こしのラベル */}
+                  <div style={{color:'#444'}}>
+                    📝 <strong>文字起こしのラベル：</strong><br/>
+                    　・対面の声 → ラベルなし（通常表示）<br/>
+                    　・Teams の声 → <strong>[Teams]</strong> ラベル付きで表示
+                  </div>
+                  <button className="live-btn live-btn-gray" style={{fontSize:10,padding:'3px 10px',alignSelf:'flex-start'}}
+                    onClick={()=>openSetupGuide('vbcable')}>📋 VB-Cable セットアップガイド</button>
                 </div>
               </div>
             )}
@@ -2316,6 +2452,99 @@ ${catJsonDef}
             </span>
           </div>
           <div className="live-panel-body" ref={analysisPanelRef} style={{padding:0}}>
+
+            {/* ── 質問提案パネル ── */}
+            {(questionSuggestions || isGeneratingQuestions || questionError) && (
+              <div style={{margin:'10px 12px',border:'2px solid #2E75B6',borderRadius:10,overflow:'hidden',boxShadow:'0 2px 8px rgba(46,117,182,.15)'}}>
+                {/* ヘッダー */}
+                <div style={{background:'linear-gradient(135deg,#1F3864,#2E75B6)',color:'#fff',
+                  padding:'8px 12px',display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{fontSize:14}}>💬</span>
+                  <span style={{fontWeight:700,fontSize:12}}>話者への質問提案</span>
+                  {questionSuggestions && <span style={{fontSize:10,color:'rgba(255,255,255,.6)',marginLeft:2}}>{questionSuggestions._time}</span>}
+                  <div style={{marginLeft:'auto',display:'flex',gap:6}}>
+                    {questionSuggestions && (
+                      <button style={{background:'none',border:'1px solid rgba(255,255,255,.3)',color:'rgba(255,255,255,.8)',
+                        borderRadius:4,padding:'1px 8px',fontSize:10,cursor:'pointer'}}
+                        onClick={()=>{
+                          const txt = questionSuggestions.questions.map((q,i)=>
+                            `Q${i+1}【${q.target}】${q.question}\n　理由: ${q.reason}`
+                          ).join('\n\n');
+                          navigator.clipboard.writeText(txt);
+                        }}>📋 コピー</button>
+                    )}
+                    <button style={{background:'none',border:'1px solid rgba(255,255,255,.3)',color:'rgba(255,255,255,.8)',
+                      borderRadius:4,padding:'1px 8px',fontSize:10,cursor:'pointer'}}
+                      onClick={()=>setShowQuestionsPanel(v=>!v)}>
+                      {showQuestionsPanel ? '▲ 折りたたむ' : '▼ 展開'}
+                    </button>
+                    <button style={{background:'none',border:'1px solid rgba(252,129,129,.4)',color:'rgba(252,129,129,.8)',
+                      borderRadius:4,padding:'1px 7px',fontSize:10,cursor:'pointer'}}
+                      onClick={()=>{ setQuestionSuggestions(null); setQuestionError(''); }}>✕</button>
+                  </div>
+                </div>
+
+                {/* エラー */}
+                {questionError && (
+                  <div style={{padding:'10px 12px',background:'#FFF5F5',fontSize:11,color:'#742a2a'}}>{questionError}</div>
+                )}
+
+                {/* ローディング */}
+                {isGeneratingQuestions && (
+                  <div style={{padding:'16px',textAlign:'center',background:'#EBF3FB'}}>
+                    <div style={{display:'inline-flex',alignItems:'center',gap:8,fontSize:12,color:'#2E75B6'}}>
+                      <span style={{display:'inline-block',width:14,height:14,border:'2px solid #bee3f8',borderTopColor:'#2E75B6',borderRadius:'50%',animation:'spin .7s linear infinite'}}/>
+                      会話から質問を生成中...
+                    </div>
+                  </div>
+                )}
+
+                {/* 質問一覧 */}
+                {showQuestionsPanel && questionSuggestions && !isGeneratingQuestions && (
+                  <div style={{background:'#fff',padding:'10px 12px',display:'flex',flexDirection:'column',gap:6}}>
+                    {/* サマリー */}
+                    {questionSuggestions.summary && (
+                      <div style={{background:'#EBF3FB',borderRadius:6,padding:'7px 10px',fontSize:11,color:'#1a4a7a',lineHeight:1.6,marginBottom:4}}>
+                        📌 {questionSuggestions.summary}
+                      </div>
+                    )}
+                    {/* 質問リスト */}
+                    {questionSuggestions.questions && questionSuggestions.questions.map((q, i) => {
+                      const priorityColor = q.priority === '高' ? '#E53E3E' : q.priority === '中' ? '#D69E2E' : '#718096';
+                      const priorityBg   = q.priority === '高' ? '#FFF5F5' : q.priority === '中' ? '#FFFBEB' : '#f8fafc';
+                      return (
+                        <div key={i} style={{border:`1.5px solid ${priorityColor}44`,borderRadius:8,overflow:'hidden'}}>
+                          {/* 質問ヘッダー */}
+                          <div style={{background:priorityBg,padding:'5px 10px',display:'flex',alignItems:'center',gap:6,borderBottom:`1px solid ${priorityColor}33`}}>
+                            <span style={{fontWeight:700,fontSize:11,color:priorityColor}}>Q{i+1}</span>
+                            <span style={{background:priorityColor,color:'#fff',borderRadius:8,padding:'1px 7px',fontSize:9,fontWeight:700}}>{q.priority}</span>
+                            <span style={{fontSize:11,color:'#444',fontWeight:600}}>👤 {q.target}</span>
+                            <button style={{marginLeft:'auto',background:'none',border:`1px solid ${priorityColor}66`,color:priorityColor,
+                              borderRadius:4,padding:'1px 7px',fontSize:9,cursor:'pointer'}}
+                              onClick={()=>navigator.clipboard.writeText(q.question)}>📋</button>
+                          </div>
+                          {/* 質問文 */}
+                          <div style={{padding:'7px 10px',background:'#fff'}}>
+                            <div style={{fontSize:12,color:'#1a202c',lineHeight:1.7,fontWeight:600,marginBottom:4}}>
+                              ❓ {q.question}
+                            </div>
+                            <div style={{fontSize:10,color:'#718096',lineHeight:1.5,borderTop:'1px solid #f0f0f0',paddingTop:4}}>
+                              💡 {q.reason}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {/* 再生成ボタン */}
+                    <button className="live-btn live-btn-blue" style={{fontSize:11,padding:'5px 14px',alignSelf:'flex-start',marginTop:2}}
+                      onClick={runQuestionSuggestion} disabled={isGeneratingQuestions}>
+                      🔄 再生成
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {analysisHistory.length === 0 && (
               <div style={{color:'#a0aec0',textAlign:'center',marginTop:40,fontSize:13,padding:16}}>
                 会議開始後30秒で自動分析されます<br/>
@@ -2584,7 +2813,7 @@ function App(){
               display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🔴</div>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>会議中支援ツール</div>
-              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v1.3</span></div>
+              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v1.5</span></div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 auto'}}>
