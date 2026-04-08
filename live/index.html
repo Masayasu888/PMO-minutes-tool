@@ -1244,20 +1244,25 @@ ${briefing ? `【会議の背景・注目ポイント】\n${briefing}\n` : ''}
 
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
 
-  // マイクデバイス一覧を取得
-  useEffect(() => {
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(() => {
-      navigator.mediaDevices.enumerateDevices().then(devices => {
+  // マイクデバイス一覧を取得（再取得可能な関数）
+  const fetchMicDevices = () => {
+    return navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(() => navigator.mediaDevices.enumerateDevices())
+      .then(devices => {
         const mics = devices.filter(d => d.kind === 'audioinput');
         setMicDevices(mics);
-        // VB-Cableを自動検出してmicModeに反映
-        const vb = mics.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio'));
-        if (vb && selectedMicId === 'default') {
-          // VB-Cableが存在する場合、IDだけ保持（モードは手動で切り替え）
+        // VB-Cableを自動でソース2に設定
+        const vb = mics.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio') || d.label.toLowerCase().includes('vb audio'));
+        if (vb && selectedMicId2 === 'default') {
+          setSelectedMicId2(vb.deviceId);
+          localStorage.setItem('azure_mic_id2', vb.deviceId);
         }
-      });
-    }).catch(() => {});
-  }, []);
+        return mics;
+      })
+      .catch(e => { alert('マイクへのアクセスが拒否されました。\nブラウザのアドレスバーのマイクアイコンから許可してください。\n\n' + e.message); });
+  };
+
+  useEffect(() => { fetchMicDevices(); }, []);
 
   // 自動スクロール（新しいものが上なのでtopに戻す）
   useEffect(() => {
@@ -2124,7 +2129,15 @@ ${catJsonDef}
             {micMode !== 'notta' && micMode !== 'browser' && (
               <div style={{background:'#f8fafc',border:'1.5px solid #d0d8e4',borderRadius:8,padding:'8px 10px',
                 opacity:isRecording?0.5:1,display:'flex',flexDirection:'column',gap:6}}>
-                <div style={{fontSize:10,fontWeight:700,color:'#444',marginBottom:2}}>🎛 録音デバイス指定</div>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:2}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#444'}}>🎛 録音デバイス指定</div>
+                  <button style={{background:'#EBF3FB',border:'1px solid #bee3f8',color:'#2E75B6',
+                    borderRadius:4,padding:'2px 8px',fontSize:10,cursor:'pointer',fontFamily:'inherit'}}
+                    onClick={fetchMicDevices}
+                    disabled={isRecording}>
+                    🔄 デバイスを再取得
+                  </button>
+                </div>
 
                 {/* ソース1 */}
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -2846,7 +2859,7 @@ function App(){
               display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🔴</div>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>会議中支援ツール</div>
-              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v1.9</span></div>
+              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v2.0</span></div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 auto'}}>
