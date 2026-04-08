@@ -894,7 +894,61 @@ function LiveMeetingMode({ apiKey, onEndMeeting, onOpenKeyModal }) {
     }
     setOrgUsageLoading(false);
   };
-  // ── 質問提案機能 ──────────────────────────────────────────
+  // ── 選択発言への質問生成 ──────────────────────────────────
+  const runLineQuestionSuggestion = async (lineText, lineTime) => {
+    if (!apiKey) { onOpenKeyModal(); return; }
+    const fullText = transcriptRef.current.map(l=>`[${l.time}] ${l.text}`).join('\n');
+    setIsGeneratingQuestions(true);
+    setQuestionError('');
+    setShowQuestionsPanel(true);
+    const now = new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-20250514', max_tokens:1200,
+          messages:[{ role:'user', content:
+`あなたは会議ファシリテーター支援AIです。以下の「気になる発言」に対して、今すぐ話者に確認すべき質問を考えてください。
+
+【気になる発言（${lineTime}）】
+「${lineText}」
+
+【会議の文脈（全文字起こし）】
+${fullText}
+
+${briefing?`【会議の背景】\n${briefing}\n`:''}
+以下のJSON形式のみで回答（説明文・マークダウン不要）：
+{
+  "summary": "この発言が気になる理由・背景（2行以内）",
+  "questions": [
+    {
+      "target": "質問すべき相手（例：発言者、チーム全体）",
+      "question": "具体的な質問文（日本語・丁寧語）",
+      "reason": "この質問をすべき理由（1行）",
+      "priority": "高/中/低"
+    }
+  ]
+}`
+          }]
+        })
+      });
+      if(!res.ok){ const e=await res.json().catch(()=>({})); throw new Error(e?.error?.message||`HTTP ${res.status}`); }
+      const data = await res.json();
+      const text = (data.content?.[0]?.text||'').replace(/```json\n?|\n?```/g,'').trim();
+      const parsed = JSON.parse(text);
+      const thisCost = calcCost(data.usage);
+      setQuestionSuggestions({...parsed, _time:now, _line:lineText});
+      setLiveCostTotal(prev=>prev+thisCost);
+      setLiveCostLog(prev=>[...prev,{count:prev.length+1,cost:thisCost,tokens:(data.usage?.input_tokens||0)+(data.usage?.output_tokens||0),inp:data.usage?.input_tokens||0,out:data.usage?.output_tokens||0}]);
+      if(analysisPanelRef.current) analysisPanelRef.current.scrollTop=0;
+    } catch(e) {
+      setQuestionError(`❌ 質問生成エラー（${now}）: ${e.message}`);
+    }
+    setIsGeneratingQuestions(false);
+  };
+
+
   const [questionSuggestions, setQuestionSuggestions] = useState(null);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [questionError, setQuestionError] = useState('');
@@ -2453,14 +2507,21 @@ ${catJsonDef}
                   const isAlert = flagged || questioned;
                   return (
                     <div key={i} className="live-transcript-line"
-                      style={isAlert ? {
-                        background:'#FFF5F5',
-                        borderLeft:'3px solid #E53E3E',
-                        paddingLeft:8,
-                      } : {}}>
-                      <span className="live-transcript-time" style={isAlert?{color:'#E53E3E'}:{}}>{line.time}</span>
-                      <span style={isAlert?{color:'#C53030',fontWeight:600}:{}}>{line.text}</span>
-                      {isAlert && <span style={{marginLeft:6,fontSize:10,color:'#E53E3E',flexShrink:0}}>⚠️</span>}
+                      style={{...(isAlert ? {background:'#FFF5F5',borderLeft:'3px solid #E53E3E',paddingLeft:8} : {}),
+                        display:'flex',alignItems:'flex-start',gap:4,position:'relative'}}
+                      onMouseEnter={e=>e.currentTarget.querySelector('.line-q-btn').style.opacity='1'}
+                      onMouseLeave={e=>e.currentTarget.querySelector('.line-q-btn').style.opacity='0'}>
+                      <span className="live-transcript-time" style={isAlert?{color:'#E53E3E',flexShrink:0}:{flexShrink:0}}>{line.time}</span>
+                      <span style={{...(isAlert?{color:'#C53030',fontWeight:600}:{}),flex:1}}>{line.text}</span>
+                      {isAlert && <span style={{fontSize:10,color:'#E53E3E',flexShrink:0}}>⚠️</span>}
+                      <button className="line-q-btn"
+                        style={{opacity:0,transition:'opacity .15s',background:'#2E75B6',color:'#fff',
+                          border:'none',borderRadius:4,padding:'1px 6px',fontSize:10,cursor:'pointer',
+                          flexShrink:0,whiteSpace:'nowrap',lineHeight:1.6}}
+                        onClick={()=>runLineQuestionSuggestion(line.text, line.time)}
+                        title="この発言について質問を考える">
+                        💬
+                      </button>
                     </div>
                   );
                 })}
@@ -2548,7 +2609,14 @@ ${catJsonDef}
                 {/* 質問一覧 */}
                 {showQuestionsPanel && questionSuggestions && !isGeneratingQuestions && (
                   <div style={{background:'#fff',padding:'10px 12px',display:'flex',flexDirection:'column',gap:6}}>
-                    {/* サマリー */}
+                    {/* 対象発言 */}
+                {questionSuggestions._line && (
+                  <div style={{background:'#1a202c',borderRadius:6,padding:'6px 10px',fontSize:11,
+                    color:'#a0aec0',lineHeight:1.6,marginBottom:4,borderLeft:'3px solid #2E75B6'}}>
+                    💬 <span style={{color:'#fff'}}>「{questionSuggestions._line}」</span>
+                  </div>
+                )}
+                {/* サマリー */}
                     {questionSuggestions.summary && (
                       <div style={{background:'#EBF3FB',borderRadius:6,padding:'7px 10px',fontSize:11,color:'#1a4a7a',lineHeight:1.6,marginBottom:4}}>
                         📌 {questionSuggestions.summary}
@@ -2859,7 +2927,7 @@ function App(){
               display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🔴</div>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>会議中支援ツール</div>
-              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v2.0</span></div>
+              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v2.1</span></div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 auto'}}>
