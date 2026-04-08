@@ -967,7 +967,8 @@ ${briefing ? `【会議の背景・注目ポイント】\n${briefing}\n` : ''}
   const [showSettings, setShowSettings]   = useState(true);
   const [azureKeyLocked, setAzureKeyLocked] = useState(()=>!!(localStorage.getItem('azure_speech_key')));
   const [micDevices, setMicDevices]       = useState([]);
-  const [selectedMicId, setSelectedMicId] = useState(()=>localStorage.getItem('azure_mic_id')||'default');
+  const [selectedMicId,  setSelectedMicId]  = useState(()=>localStorage.getItem('azure_mic_id') ||'default');
+  const [selectedMicId2, setSelectedMicId2] = useState(()=>localStorage.getItem('azure_mic_id2')||'default');
   const [micMode, setMicMode]             = useState(()=>localStorage.getItem('azure_mic_mode')||'physical');
   const [showVbSetupModal, setShowVbSetupModal] = useState(false);
   const [vbSetupDone, setVbSetupDone]     = useState(()=>localStorage.getItem('vbcable_setup_done')==='1');
@@ -1268,7 +1269,8 @@ ${briefing ? `【会議の背景・注目ポイント】\n${briefing}\n` : ''}
   const saveAzureSettings = () => {
     localStorage.setItem('azure_speech_key', azureKey);
     localStorage.setItem('azure_speech_region', azureRegion);
-    localStorage.setItem('azure_mic_id', selectedMicId);
+    localStorage.setItem('azure_mic_id',  selectedMicId);
+    localStorage.setItem('azure_mic_id2', selectedMicId2);
     localStorage.setItem('azure_mic_mode', micMode);
   };
 
@@ -1478,12 +1480,15 @@ ${briefing ? `【会議の背景・注目ポイント】\n${briefing}\n` : ''}
       saveAzureSettings();
 
       // デバイスIDを解決
-      const vbDevice   = micDevices.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio') || d.label.toLowerCase().includes('vb audio'));
+      // ソース1：selectedMicId（物理マイク・明示指定優先）
       const physDevice = micDevices.find(d => d.label.includes('マイク配列') || d.label.toLowerCase().includes('array'));
-      const vbId   = vbDevice   ? vbDevice.deviceId   : null;
-      // physId: 設定パネルで明示選択されたデバイスを最優先（AnkerなどBTマイク対応）
       const physId = (selectedMicId && selectedMicId !== 'default')
         ? selectedMicId : (physDevice ? physDevice.deviceId : null);
+
+      // ソース2：selectedMicId2（VB-Cable等・明示指定優先）
+      const vbDevice = micDevices.find(d => d.label.toLowerCase().includes('cable') || d.label.toLowerCase().includes('vb-audio') || d.label.toLowerCase().includes('vb audio'));
+      const vbId = (selectedMicId2 && selectedMicId2 !== 'default')
+        ? selectedMicId2 : (vbDevice ? vbDevice.deviceId : null);
 
       if (micMode === 'dual') {
         // ── デュアルモード：物理マイク(Anker等)＋VB-Cable(Loopback) ──
@@ -1515,7 +1520,7 @@ ${briefing ? `【会議の背景・注目ポイント】\n${briefing}\n` : ''}
         recognizerRef2.current = rec2;
 
       } else if (micMode === 'vbcable') {
-        const rec = createRecognizer(vbId || selectedMicId);
+        const rec = createRecognizer(vbId || selectedMicId2);
         makeHandlers(rec, 'Teams');
         rec.startContinuousRecognitionAsync(
           () => {
@@ -2026,27 +2031,6 @@ ${catJsonDef}
                       <div>④ VB-Cable「聴く」設定 → <strong>Realtek スピーカー</strong>（耳で聞くため）</div>
                     </div>
                   </div>
-                  {/* デバイス指定 ドロップダウン */}
-                  <div style={{background:'#FFF3CD',border:'1px solid #F6AD55',borderRadius:5,padding:'6px 10px'}}>
-                    <div style={{fontWeight:700,color:'#7D4E00',marginBottom:5}}>⚠️ アプリのデバイス指定（物理マイク）</div>
-                    <select style={{width:'100%',padding:'5px 8px',border:'1.5px solid #F6AD55',borderRadius:5,
-                      fontSize:11,fontFamily:'inherit',background:'#fff',
-                      cursor:isRecording?'not-allowed':'pointer',opacity:isRecording?0.5:1}}
-                      value={selectedMicId}
-                      onChange={e=>{ if(!isRecording){ setSelectedMicId(e.target.value); localStorage.setItem('azure_mic_id',e.target.value); }}}
-                      disabled={isRecording}>
-                      <option value="default">デフォルト（自動選択）</option>
-                      {micDevices.map(d=>(
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `マイク ${d.deviceId.slice(0,8)}`}
-                          {(d.label.toLowerCase().includes('cable')||d.label.toLowerCase().includes('vb')) ? ' 🔁' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <div style={{fontSize:9,color:'#92400E',marginTop:4}}>
-                      👆 Anker PowerConf（ヘッドセット）を選択 ／ VB-Cable側は自動検出
-                    </div>
-                  </div>
                   {/* 文字起こしのラベル */}
                   <div style={{color:'#444'}}>
                     📝 <strong>文字起こしのラベル：</strong><br/>
@@ -2136,23 +2120,54 @@ ${catJsonDef}
               </div>
             )}
 
-            {/* デバイス詳細選択 – dual以外・Notta・browser以外で表示（dualはガイドカード内に内蔵） */}
-            {micDevices.length > 0 && micMode !== 'notta' && micMode !== 'browser' && micMode !== 'dual' && (
-              <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2,opacity:isRecording?0.45:1,
-                background:'#f8fafc',border:'1.5px solid #e2e8f0',borderRadius:6,padding:'5px 8px'}}>
-                <span style={{fontSize:10,color:'#718096',whiteSpace:'nowrap',fontWeight:600}}>🎤 デバイス指定：</span>
-                <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #d0d8e4',borderRadius:6,fontSize:11,fontFamily:'inherit',
-                  cursor:isRecording?'not-allowed':'pointer',background:'#fff'}}
-                  value={selectedMicId} onChange={e=>{ if(!isRecording) setSelectedMicId(e.target.value); }}
-                  disabled={isRecording}>
-                  <option value="default">デフォルト（モードに従う）</option>
-                  {micDevices.map(d=>(
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `マイク ${d.deviceId.slice(0,8)}`}
-                      {(d.label.toLowerCase().includes('cable')||d.label.toLowerCase().includes('vb')) ? ' 🔁' : ''}
-                    </option>
-                  ))}
-                </select>
+            {/* ── デバイス指定（全モード共通・常時表示） ── */}
+            {micMode !== 'notta' && micMode !== 'browser' && (
+              <div style={{background:'#f8fafc',border:'1.5px solid #d0d8e4',borderRadius:8,padding:'8px 10px',
+                opacity:isRecording?0.5:1,display:'flex',flexDirection:'column',gap:6}}>
+                <div style={{fontSize:10,fontWeight:700,color:'#444',marginBottom:2}}>🎛 録音デバイス指定</div>
+
+                {/* ソース1 */}
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{background:'#2E75B6',color:'#fff',borderRadius:4,padding:'2px 7px',
+                    fontSize:10,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>ソース1</span>
+                  <span style={{fontSize:10,color:'#555',whiteSpace:'nowrap',flexShrink:0}}>🎤 マイク</span>
+                  <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #90CDF4',borderRadius:5,
+                    fontSize:11,fontFamily:'inherit',background:'#fff',cursor:isRecording?'not-allowed':'pointer'}}
+                    value={selectedMicId}
+                    onChange={e=>{ if(!isRecording){ setSelectedMicId(e.target.value); localStorage.setItem('azure_mic_id',e.target.value); }}}
+                    disabled={isRecording}>
+                    <option value="default">デフォルト（自動）</option>
+                    {micDevices.map(d=>(
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `マイク ${d.deviceId.slice(0,8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* ソース2 */}
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <span style={{background:'#C53030',color:'#fff',borderRadius:4,padding:'2px 7px',
+                    fontSize:10,fontWeight:700,whiteSpace:'nowrap',flexShrink:0}}>ソース2</span>
+                  <span style={{fontSize:10,color:'#555',whiteSpace:'nowrap',flexShrink:0}}>🔁 ループ</span>
+                  <select style={{flex:1,padding:'4px 8px',border:'1.5px solid #FEB2B2',borderRadius:5,
+                    fontSize:11,fontFamily:'inherit',background:'#fff',cursor:isRecording?'not-allowed':'pointer'}}
+                    value={selectedMicId2}
+                    onChange={e=>{ if(!isRecording){ setSelectedMicId2(e.target.value); localStorage.setItem('azure_mic_id2',e.target.value); }}}
+                    disabled={isRecording}>
+                    <option value="default">デフォルト（自動）</option>
+                    {micDevices.map(d=>(
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `マイク ${d.deviceId.slice(0,8)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{fontSize:9,color:'#a0aec0',lineHeight:1.5}}>
+                  ソース1：マイク（Anker等）　ソース2：VB-Cable Output（Teamsループバック）
+                  {micDevices.length === 0 && <span style={{color:'#E53E3E',marginLeft:4}}>⚠️ デバイス未取得（ページを再読み込みしてください）</span>}
+                </div>
               </div>
             )}
           </div>
@@ -2831,7 +2846,7 @@ function App(){
               display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🔴</div>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>会議中支援ツール</div>
-              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v1.8</span></div>
+              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v1.9</span></div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 auto'}}>
