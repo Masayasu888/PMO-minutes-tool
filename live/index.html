@@ -2446,6 +2446,14 @@ ${catJsonDef}
             <span style={{marginLeft:'auto',fontSize:10,color:'#a0aec0',display:'flex',gap:8,alignItems:'center'}}>
               {transcript.length > 0 && <span>🔼 新しい順</span>}
               <span>{transcript.length}行</span>
+              {transcript.length > 0 && (
+                <button style={{background:'rgba(229,62,62,.25)',border:'1px solid rgba(229,62,62,.4)',
+                  color:'rgba(252,129,129,.9)',borderRadius:4,padding:'1px 8px',fontSize:10,
+                  cursor:'pointer',fontFamily:'inherit'}}
+                  onClick={()=>{ if(window.confirm('文字起こしをクリアしますか？')) { setTranscript([]); transcriptRef.current=[]; setInterimText(''); analyzedLenRef.current=0; } }}>
+                  🗑 クリア
+                </button>
+              )}
             </span>
           </div>
           <div className="live-panel-body" ref={transcriptBodyRef}>
@@ -2927,7 +2935,7 @@ function App(){
               display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>🔴</div>
             <div>
               <div style={{fontSize:13,fontWeight:700,color:'#fff',letterSpacing:.3}}>会議中支援ツール</div>
-              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v2.2</span></div>
+              <div style={{fontSize:9,color:'#A0AEC0',marginTop:1}}>リアルタイム文字起こし＋AIアシスト　<span style={{color:'#CBD5E0'}}>v2.3</span></div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center',flex:'0 0 auto'}}>
